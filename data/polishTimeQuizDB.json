@@ -1,0 +1,20 @@
+[
+  {
+    "question": "Write this time in Polish: 15:21",
+    "time": "15:21",
+    "answer": {
+      "format": "HH:mm",
+      "informal": "piątnasta dwudzieścia jeden",
+      "comment": "Odpowiedź zawiera błąd w formie godzinnej. Należy użyć poprawnej formy żeńskiej liczby porządkowej. Zgodnie z zasadami, właściwy zapis czasu w formacie formalnym to 'piętnasta dwadzieścia jeden'. W przypadku formatu nieformalnego powinno być 'dwudziesta jedna po piętnastej'."
+    }
+  },
+  {
+    "question": "Write this time in Polish:",
+    "time": "15:21",
+    "answer": {
+      "formal": "piętnasta dwadzieścia jeden",
+      "informal": "dwudziesta jedna po piętnastej",
+      "comment": "Dobrze odpowiedziałeś! Twoja odpowiedź w formalnym formacie jest poprawna. Alternatywnie, odpowiedź mogłaby brzmieć: 'dwudziesta jedna po piętnastej' jako formie nieformalnej."
+    }
+  }
+]
