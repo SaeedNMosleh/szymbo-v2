@@ -54,7 +54,7 @@ export default function PolishTimeQuiz() {
     };
 
     try {
-      const response = await fetch("/api/addQuestion", {
+      const response = await fetch("/api/addTimeQuestion", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

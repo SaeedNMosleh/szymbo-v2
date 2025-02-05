@@ -1,5 +1,7 @@
 import PolishDateQuiz from "@/components/Features/datecheck/PolishDateQuiz";
-import PolishTimeQuiz from "@/components/Features/timecheck/PolioshTimeQuiz";
+import PolishTimeQuiz from "@/components/Features/timecheck/PolishTimeQuiz";
+import { Button } from "@/components/ui/button";
+import Link from "next/link";
 
 const Home = () => {
   return (
@@ -12,6 +14,16 @@ const Home = () => {
       <div className="flex flex-row justify-center">
         <PolishTimeQuiz />
         <PolishDateQuiz />
+        <Link href="/course">
+          <Button className="flex h-8 justify-center bg-orange-700">
+            Add Course
+          </Button>
+        </Link>
+        <Link href="/practice">
+          <Button className="flex h-8 justify-center bg-orange-700">
+            Practice Courses
+          </Button>
+        </Link>
       </div>
     </main>
   );

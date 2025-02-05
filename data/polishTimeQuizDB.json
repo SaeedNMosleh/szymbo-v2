@@ -16,5 +16,14 @@
       "informal": "dwudziesta jedna po piętnastej",
       "comment": "Dobrze odpowiedziałeś! Twoja odpowiedź w formalnym formacie jest poprawna. Alternatywnie, odpowiedź mogłaby brzmieć: 'dwudziesta jedna po piętnastej' jako formie nieformalnej."
     }
+  },
+  {
+    "question": "Write this time in Polish:",
+    "time": "15:30",
+    "answer": {
+      "formal": "piętnasta trzydzieści",
+      "informal": "wpół do czwartej",
+      "comment": "Brawo! Twoja odpowiedź jest poprawna w formacie nieformalnym 'wpół do czwartej'. Dla informacji, w formacie formalnym czas ten to 'piętnasta trzydzieści'."
+    }
   }
 ]

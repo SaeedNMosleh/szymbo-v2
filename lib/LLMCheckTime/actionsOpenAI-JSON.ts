@@ -1,8 +1,6 @@
 "use server";
 
 import OpenAI from "openai";
-import { zodResponseFormat } from "openai/helpers/zod";
-import { z } from "zod";
 
 import dotenv from "dotenv";
 
@@ -55,8 +53,8 @@ You are a Polish language expert validating time expressions. Your task is to ev
   - Example : Identifed foramt is formal and the answer is correct in formal format = "correct"
   - Example : Identifed foramt is formal and the answer is incorrect in formal format = "incorrect"
 4. Provide detailed feedback if there are errors.
-5. Respond with the correct answer in both format if user's answer is incorrect. 
-6. If the user's answers correct, put encouraging comment and add other format too as an additional information. 
+5. Respond with the correct answer in both format if user's answer from step 3 is incorrect. 
+6. If the user's answers correct, put encouraging comment and add other format too as an additional information. Please remember that correctness in one format eirther formal or informal is enough to be correct.
 
 ### RESPONSE FORMAT:
 Respond strictly in JSON.
@@ -65,7 +63,7 @@ Respond strictly in JSON.
   try {
     const completion = await openai.chat.completions.create({
       // model: "gpt-4o-2024-08-06",
-      model: "gpt-4o-mini",
+      model: "gpt-4o",
       messages: [
         {
           role: "system",
@@ -73,6 +71,11 @@ Respond strictly in JSON.
         },
         { role: "user", content: prompt },
       ],
+      temperature: 0.3,
+      max_tokens: 1000,
+      top_p: 0.9,
+      frequency_penalty: 0,
+      presence_penalty: 0,
       response_format: {
         type: "json_schema",
         json_schema: {
@@ -156,3 +159,4 @@ Respond strictly in JSON.
     };
   }
 }
+
