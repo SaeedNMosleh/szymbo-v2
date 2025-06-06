@@ -1,18 +1,16 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import {
-  generateQuestion,
-  validateAnswer,
-} from "@/lib/LLMPracticeValidation/practiceValidation";
+import { generateQuestion } from "@/lib/LLMPracticeValidation/generateQuestion";
+import { validateAnswer } from "@/lib/LLMPracticeValidation/validateAnswer";
 import type { ICourse } from "@/datamodels/course.model";
-import type {
-  IPracticeSession,
-  IInteraction,
-} from "@/datamodels/practice.model";
+import type { IPracticeSession } from "@/datamodels/practice.model";
+import type { IQuestionAnswer } from "@/datamodels/questionAnswer.model";
+import { PracticeSummary } from "@/components/Features/practiceSummary/PracticeSummary";
+import { QuestionLevel } from "@/lib/enum";
 
 export function Practice() {
   const [courses, setCourses] = useState<ICourse[]>([]);
@@ -25,6 +23,23 @@ export function Practice() {
   const [showAnswer, setShowAnswer] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [attempts, setAttempts] = useState<number>(0);
+  const [showSummary, setShowSummary] = useState<boolean>(false);
+  const [saveStatus, setSaveStatus] = useState<string | null>(null);
+
+  const generateNewQuestion = useCallback(async () => {
+    if (!selectedCourse) return;
+    const previousQuestions = practiceSession
+      ? practiceSession.questionAnswers.map((qa) => qa.question)
+      : [];
+    const question = await generateQuestion(selectedCourse, previousQuestions);
+    setCurrentQuestion(question);
+    setUserAnswer("");
+    setFeedback("");
+    setShowAnswer(false);
+    setAttempts(0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [practiceSession]);
 
   useEffect(() => {
     fetchCourses();
@@ -34,6 +49,7 @@ export function Practice() {
     if (selectedCourse) {
       generateNewQuestion();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedCourse]);
 
   const fetchCourses = async () => {
@@ -65,26 +81,15 @@ export function Practice() {
       courseId: course.courseId,
       startedAt: new Date(),
       completedAt: new Date(),
-      interactions: [],
+      questionAnswers: [],
       metrics: {
         vocabulary: { newWords: { attempted: 0, correct: 0, weakItems: [] } },
         grammar: { concepts: [] },
         accuracy: 0,
         avgResponseTime: 0,
       },
-      srsSchedule: { nextReviewDate: new Date(), easinessFactor: 2.5 },
     };
     setPracticeSession(newSession);
-  };
-
-  const generateNewQuestion = async () => {
-    console.log(selectedCourse);
-    if (!selectedCourse) return;
-    const question = await generateQuestion(selectedCourse);
-    setCurrentQuestion(question);
-    setUserAnswer("");
-    setFeedback("");
-    setShowAnswer(false);
   };
 
   const handleAnswerSubmit = async () => {
@@ -93,34 +98,55 @@ export function Practice() {
     const result = await validateAnswer(
       currentQuestion,
       userAnswer,
-      selectedCourse
+      selectedCourse,
+      attempts + 1
     );
     const endTime = Date.now();
 
-    const newInteraction: IInteraction = {
-      questionType: result.questionType,
+    const newQuestionAnswer: IQuestionAnswer = {
       question: currentQuestion,
-      userAnswer,
-      correctAnswer: result.correctAnswer,
-      responseTime: endTime - startTime,
-      confidenceLevel: result.confidenceLevel,
-      errorType: result.errorType,
+      correctAnswer: result.correctAnswer || "",
+      userAnswers: [
+        ...(practiceSession.questionAnswers.find(
+          (qa) => qa.question === currentQuestion
+        )?.userAnswers || []),
+        userAnswer,
+      ],
+      keywords: result.keywords || [],
+      category: result.category || "",
+      questionType: result.questionType!,
+      courseId: selectedCourse.courseId,
+      analysisDetails: {
+        mistakeType: result.analysisDetails?.mistakeType || null,
+        confidence: result.analysisDetails?.confidence || 0,
+        questionLevel:
+          result.analysisDetails?.questionLevel ?? QuestionLevel.A1,
+        responseTime: endTime - startTime,
+      },
+      isCorrect: result.isCorrect || false,
+      feedback: result.feedback || "",
     };
 
     setPracticeSession((prev) => {
       if (!prev) return null;
+      const updatedQuestionAnswers = [...prev.questionAnswers];
+      const existingIndex = updatedQuestionAnswers.findIndex(
+        (qa) => qa.question === currentQuestion
+      );
+      if (existingIndex !== -1) {
+        updatedQuestionAnswers[existingIndex] = newQuestionAnswer;
+      } else {
+        updatedQuestionAnswers.push(newQuestionAnswer);
+      }
       return {
         ...prev,
-        interactions: [...prev.interactions, newInteraction],
+        questionAnswers: updatedQuestionAnswers,
       };
     });
 
-    setFeedback(result.feedback);
-    if (!result.isCorrect) {
-      setShowAnswer(true);
-    } else {
-      await generateNewQuestion();
-    }
+    setFeedback(result.feedback || "");
+    setAttempts((prev) => prev + 1);
+    setShowAnswer(true);
   };
 
   const endPracticeSession = async () => {
@@ -129,36 +155,27 @@ export function Practice() {
       ...practiceSession,
       completedAt: new Date(),
     };
-    // Calculate metrics and update SRS schedule
-    const updatedSession = await calculateMetricsAndSchedule(completedSession);
-    // Save practice session to database
-    await savePracticeSession(updatedSession);
-    // Show summary
-    showPracticeSummary(updatedSession);
-    // Reset state
-    setSelectedCourse(null);
-    setPracticeSession(null);
-    setCurrentQuestion("");
-    setUserAnswer("");
-    setFeedback("");
-    setShowAnswer(false);
-    // Refresh courses to update next practice dates
-    await fetchCourses();
+    const updatedSession = await calculateMetrics(completedSession);
+    console.log("Updated session:", updatedSession);
+    const saveResult = await savePracticeSession(updatedSession);
+    setShowSummary(true);
+    setSaveStatus(
+      saveResult.success
+        ? "Practice session saved successfully!"
+        : "Failed to save practice session."
+    );
   };
 
-  const calculateMetricsAndSchedule = async (session: IPracticeSession) => {
-    // Implement metric calculation and SRS scheduling logic here
-    // This is a placeholder implementation
+  const calculateMetrics = async (session: IPracticeSession) => {
     const updatedSession = { ...session };
     updatedSession.metrics.accuracy =
-      session.interactions.filter((i) => i.userAnswer === i.correctAnswer)
-        .length / session.interactions.length;
+      session.questionAnswers.filter((qa) => qa.isCorrect).length /
+      session.questionAnswers.length;
     updatedSession.metrics.avgResponseTime =
-      session.interactions.reduce((sum, i) => sum + i.responseTime, 0) /
-      session.interactions.length;
-    updatedSession.srsSchedule.nextReviewDate = new Date(
-      Date.now() + 24 * 60 * 60 * 1000
-    ); // Next day for simplicity
+      session.questionAnswers.reduce(
+        (sum, qa) => sum + qa.analysisDetails.responseTime,
+        0
+      ) / session.questionAnswers.length;
     return updatedSession;
   };
 
@@ -175,18 +192,20 @@ export function Practice() {
       }
 
       const data = await response.json();
-
       console.log("Practice session saved:", data);
+      return { success: true };
     } catch (error) {
       console.error("Error saving practice session:", error);
+      return { success: false };
     }
   };
 
-  const showPracticeSummary = (session: IPracticeSession) => {
-    alert(`Practice session completed!
-    Accuracy: ${(session.metrics.accuracy * 100).toFixed(2)}%
-    Average response time: ${session.metrics.avgResponseTime.toFixed(2)}ms
-    Next review date: ${session.srsSchedule.nextReviewDate.toLocaleDateString()}`);
+  const goToCourses =async () => {
+    setSelectedCourse(null);
+    setPracticeSession(null);
+    setShowSummary(false);
+    setSaveStatus(null);
+    await fetchCourses();
   };
 
   return (
@@ -198,7 +217,17 @@ export function Practice() {
       </CardHeader>
       <CardContent>
         <ScrollArea className="h-[60vh] pr-4">
-          {isLoading ? (
+          {showSummary ? (
+            <>
+              <PracticeSummary session={practiceSession!} />
+              {saveStatus && (
+                <p className="mt-4 text-center font-bold">{saveStatus}</p>
+              )}
+              <Button onClick={goToCourses} className="mt-4 w-full">
+                Go to Courses
+              </Button>
+            </>
+          ) : isLoading ? (
             <div>Loading courses...</div>
           ) : error ? (
             <div className="text-red-500">{error}</div>
@@ -211,10 +240,9 @@ export function Practice() {
                   className="mb-2 w-full justify-start"
                 >
                   {course.courseType} -{" "}
-                  {new Date(course.date).toLocaleDateString()} - Next practice:{" "}
-                  {course.nextPracticeDate
-                    ? new Date(course.nextPracticeDate).toLocaleDateString()
-                    : "Not scheduled"}
+                  {new Date(course.date).toLocaleDateString()} - Course ID:{" "}
+                  {course.courseId} - Fluency: {course.fluency} - Practices:{" "}
+                  {course.numberOfPractices}
                 </Button>
               ))
             ) : (
@@ -224,7 +252,9 @@ export function Practice() {
             )
           ) : (
             <div className="space-y-4">
-              <div>{currentQuestion}</div>
+              <div className="my-4 rounded border border-blue-300 bg-blue-100 p-4 text-center text-2xl text-gray-800 shadow-md">
+                {currentQuestion}
+              </div>
               <textarea
                 value={userAnswer}
                 onChange={(e) => setUserAnswer(e.target.value)}
@@ -232,18 +262,22 @@ export function Practice() {
                 rows={4}
               />
               <div>{feedback}</div>
-              {showAnswer && (
+              <div>Attempts: {attempts}/3</div>
+              {showAnswer && attempts === 3 && (
                 <div>
                   <strong>Correct Answer:</strong>{" "}
                   {
-                    practiceSession?.interactions[
-                      practiceSession.interactions.length - 1
+                    practiceSession?.questionAnswers[
+                      practiceSession.questionAnswers.length - 1
                     ].correctAnswer
                   }
                 </div>
               )}
               <div className="flex justify-between">
-                <Button onClick={handleAnswerSubmit} disabled={!userAnswer}>
+                <Button
+                  onClick={handleAnswerSubmit}
+                  disabled={!userAnswer || attempts >= 3}
+                >
                   Submit Answer
                 </Button>
                 <Button onClick={generateNewQuestion}>Next Question</Button>
@@ -251,7 +285,7 @@ export function Practice() {
             </div>
           )}
         </ScrollArea>
-        {selectedCourse && (
+        {selectedCourse && !showSummary && (
           <Button onClick={endPracticeSession} className="mt-4 w-full">
             End Practice Session
           </Button>

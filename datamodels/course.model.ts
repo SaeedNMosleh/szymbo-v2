@@ -1,11 +1,12 @@
 import { Schema, model, models } from "mongoose";
+import { CourseType } from "@/lib/enum";
 
 export interface ICourse {
   courseId: number;
   date: Date;
   keywords: string[];
   mainSubjects?: string[];
-  courseType: string;
+  courseType: CourseType;
   newSubjects?: string[];
   reviewSubjects?: string[];
   weaknesses?: string[];
@@ -14,6 +15,11 @@ export interface ICourse {
   practice: string;
   homework?: string;
   nextPracticeDate?: Date;
+  newWords: string[];
+  practiceIds?: string[];
+  numberOfPractices?: number;
+  fluency?: number;
+  easinessFactor?: number;
 }
 
 const CourseSchema = new Schema<ICourse>(
@@ -24,8 +30,8 @@ const CourseSchema = new Schema<ICourse>(
     mainSubjects: { type: [String], required: false },
     courseType: {
       type: String,
+      enum: Object.values(CourseType),
       required: true,
-      enum: ["new", "review", "mixed"],
     },
     newSubjects: { type: [String], required: false },
     reviewSubjects: { type: [String], required: false },
@@ -34,12 +40,17 @@ const CourseSchema = new Schema<ICourse>(
     notes: { type: String, required: true },
     practice: { type: String, required: true },
     homework: { type: String, required: false },
-    nextPracticeDate: { type: Date, required: false },
+    newWords: { type: [String], required: true },
+    practiceIds: { type: [String], default: [] },
+    numberOfPractices: { type: Number, default: 0 },
+    fluency: { type: Number, min: 0, max: 10, default: 0 },
+    nextPracticeDate: { type: Date, default: null },
+    easinessFactor: { type: Number, default: 2.5, min: 1.3, max: 2.5 },
   },
   {
     timestamps: true,
-  }
-);
+  },
+)
 
 const Course = models?.Course || model<ICourse>("Course", CourseSchema);
 

@@ -12,7 +12,7 @@ const openai = new OpenAI({
 
 export async function validateAnswer(time: string, answer: string) {
   const prompt = `
-You are a Polish language expert validating time expressions. Your task is to evaluate a student's response to the question "Jaka jest godzina?" by ensuring it follows Polish formal or informal time formats.
+You are a Polish language expert validating time expressions. Your task is to evaluate a student's response to the question "Jaka jest godzina?" by ensuring it follows Polish formal or informal time formats. The answer should be correct in either format to be considered correct. So, first you have to identify the format of the answer and then validate it accordingly.
 
 ## INPUTS: 
 - Time: ${time}
@@ -85,7 +85,7 @@ Respond strictly in JSON.
             properties: {
               correct: {
                 type: "boolean",
-                description: "Indicates whether the input was correct.",
+                description: "Indicates whether the student answer was correct either in informal or formal format. Expectation is that answer should be correct in either format to be considered correct.",
               },
               correctForm: {
                 type: "object",
