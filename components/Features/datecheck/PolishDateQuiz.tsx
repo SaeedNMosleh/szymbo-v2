@@ -60,6 +60,8 @@ export default function PolishDateQuiz() {
   // Add question and answer to the JSON file
   const handleAddToDB = async () => {
     const date = currentQuestion?.date;
+    if (!date) return; // Guard clause to exit if date is undefined
+
     const [day, month] = date.split("/");
     const correctDay = polishDay[parseInt(day) - 1];
     const correctMonth = polishMonth[parseInt(month) - 1];

@@ -1,0 +1,13 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "type": "shell",
+      "label": "Vercel Build with Legacy Peer Deps",
+      "command": "npm install --legacy-peer-deps && npm run build",
+      "group": "build",
+      "isBackground": false,
+      "problemMatcher": ["$tsc"]
+    }
+  ]
+}

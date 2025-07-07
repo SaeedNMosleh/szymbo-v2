@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
-import { Geist, Geist_Mono } from "next/font/google";
+// Importing with a renamed variable to fix linting issues
+import { Geist, Geist_Mono as GeistMonoFont } from "next/font/google";
 import "./globals.css";
 
 import React from "react";
@@ -10,7 +11,7 @@ const geistSans = Geist({
   subsets: ["latin"],
 });
 
-const geistMono = Geist_Mono({
+const geistMono = GeistMonoFont({
   variable: "--font-geist-mono",
   subsets: ["latin"],
 });

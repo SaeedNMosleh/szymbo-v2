@@ -198,7 +198,12 @@ class QuestionBankService {
   /**
    * Get question statistics
    */
-  static async getQuestionStats(): Promise<any> {
+  static async getQuestionStats(): Promise<{
+    totalQuestions: number;
+    questionsWithAnswers: number;
+    averageSuccessRate: number;
+    answerPercentage: number;
+  }> {
     try {
       const stats = await QuestionBank.aggregate([
         { $match: { isActive: true } },
@@ -252,7 +257,12 @@ class QuestionBankService {
       );
     } catch (error) {
       console.error("Error getting question stats:", error);
-      return null;
+      return {
+        totalQuestions: 0,
+        questionsWithAnswers: 0,
+        averageSuccessRate: 0,
+        answerPercentage: 0,
+      };
     }
   }
 }
@@ -361,7 +371,16 @@ export async function GET(request: NextRequest) {
     }
 
     // Build query for multiple questions
-    const query: any = { isActive: true };
+    interface QuestionQuery {
+      isActive: boolean;
+      targetConcepts?: { $in: string[] };
+      questionType?: string;
+      difficulty?: string;
+      timesUsed?: { $gt: number };
+      successRate?: { $lt: number };
+    }
+
+    const query: QuestionQuery = { isActive: true };
 
     if (conceptIds) {
       const conceptIdArray = conceptIds.split(",").filter((id) => id.trim());
@@ -387,7 +406,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Build sort criteria
-    let sortCriteria: any = {};
+    let sortCriteria = {};
     if (mode === PracticeMode.PREVIOUS) {
       sortCriteria = { lastUsed: -1 }; // Most recently used first
     } else if (mode === PracticeMode.DRILL) {
@@ -580,7 +599,13 @@ export async function PUT(request: NextRequest) {
     ) {
       // Legacy way: direct field updates
       try {
-        const updateFields: any = {};
+        interface UpdateFields {
+          timesUsed?: number;
+          successRate?: number;
+          lastUsed?: Date;
+        }
+
+        const updateFields: UpdateFields = {};
         if (timesUsed !== undefined) updateFields.timesUsed = timesUsed;
         if (successRate !== undefined) updateFields.successRate = successRate;
         if (lastUsed !== undefined) updateFields.lastUsed = new Date(lastUsed);

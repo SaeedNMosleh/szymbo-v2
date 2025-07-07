@@ -49,17 +49,27 @@ export class ConceptLLMService {
       }
 
       // Map the response to ExtractedConcept objects
-      const concepts = result.concepts.map((concept: any) => ({
-        name: concept.name || "",
-        category: this.validateCategory(concept.category),
-        description: concept.description || "",
-        examples: Array.isArray(concept.examples) ? concept.examples : [],
-        sourceContent: concept.sourceContent || "",
-        confidence: this.validateConfidence(concept.confidence),
-        suggestedDifficulty: this.validateDifficulty(
-          concept.suggestedDifficulty
-        ),
-      }));
+      const concepts = result.concepts.map(
+        (concept: {
+          name?: string;
+          category?: string;
+          description?: string;
+          examples?: string[];
+          sourceContent?: string;
+          confidence?: number;
+          suggestedDifficulty?: string;
+        }) => ({
+          name: concept.name || "",
+          category: this.validateCategory(concept.category),
+          description: concept.description || "",
+          examples: Array.isArray(concept.examples) ? concept.examples : [],
+          sourceContent: concept.sourceContent || "",
+          confidence: this.validateConfidence(concept.confidence),
+          suggestedDifficulty: this.validateDifficulty(
+            concept.suggestedDifficulty
+          ),
+        })
+      );
 
       return concepts;
     } catch (error) {
@@ -103,13 +113,21 @@ export class ConceptLLMService {
       }
 
       // Map the response to SimilarityMatch objects
-      const matches = result.matches.map((match: any) => ({
-        conceptId: match.conceptId || "",
-        name: match.name || "",
-        similarity: this.validateConfidence(match.similarity),
-        category: this.validateCategory(match.category),
-        description: match.description || "",
-      }));
+      const matches = result.matches.map(
+        (match: {
+          conceptId?: string;
+          name?: string;
+          similarity?: number;
+          category?: string;
+          description?: string;
+        }) => ({
+          conceptId: match.conceptId || "",
+          name: match.name || "",
+          similarity: this.validateConfidence(match.similarity),
+          category: this.validateCategory(match.category),
+          description: match.description || "",
+        })
+      );
 
       // Sort by similarity score descending
       return matches.sort(
@@ -134,7 +152,7 @@ export class ConceptLLMService {
   private async makeOpenAIRequest(
     prompt: string,
     context: string
-  ): Promise<any> {
+  ): Promise<Record<string, unknown>> {
     let attempts = 0;
     let lastError: Error | null = null;
 
@@ -142,7 +160,7 @@ export class ConceptLLMService {
       attempts++;
       try {
         // Create a promise that will be rejected after the timeout
-        const timeoutPromise = new Promise<never>((_, reject) => {
+        const timeoutPromise = new Promise<never>((_resolve, reject) => {
           setTimeout(
             () =>
               reject(
@@ -184,7 +202,7 @@ export class ConceptLLMService {
 
         try {
           return JSON.parse(response);
-        } catch (parseError) {
+        } catch {
           throw new LLMServiceError(
             `Failed to parse LLM response as JSON: ${response.substring(0, 100)}...`
           );
@@ -212,7 +230,15 @@ export class ConceptLLMService {
    * @param courseContent The course content
    * @returns Formatted prompt string
    */
-  private buildExtractionPrompt(courseContent: any): string {
+  private buildExtractionPrompt(courseContent: {
+    keywords?: string[];
+    content?: string;
+    title?: string;
+    newWords?: string[];
+    notes?: string;
+    practice?: string;
+    homework?: string;
+  }): string {
     return `
 You are tasked with extracting language learning concepts from Polish language course materials.
 
@@ -347,7 +373,7 @@ Return only concepts with similarity score >= 0.3, limited to the top 3 most sim
    * @param category The category to validate
    * @returns Validated category
    */
-  private validateCategory(category: any): ConceptCategory {
+  private validateCategory(category: string | undefined): ConceptCategory {
     if (category === ConceptCategory.GRAMMAR || category === "grammar") {
       return ConceptCategory.GRAMMAR;
     }
@@ -363,7 +389,7 @@ Return only concepts with similarity score >= 0.3, limited to the top 3 most sim
    * @param confidence The confidence value to validate
    * @returns Validated confidence between 0 and 1
    */
-  private validateConfidence(confidence: any): number {
+  private validateConfidence(confidence: number | string | undefined): number {
     const num = Number(confidence);
     if (isNaN(num)) return 0.5; // Default to medium confidence
     return Math.max(0, Math.min(1, num)); // Clamp between 0 and 1
@@ -374,7 +400,7 @@ Return only concepts with similarity score >= 0.3, limited to the top 3 most sim
    * @param difficulty The difficulty to validate
    * @returns Validated difficulty level
    */
-  private validateDifficulty(difficulty: any): QuestionLevel {
+  private validateDifficulty(difficulty: string | undefined): QuestionLevel {
     const validLevels = Object.values(QuestionLevel);
     if (
       typeof difficulty === "string" &&

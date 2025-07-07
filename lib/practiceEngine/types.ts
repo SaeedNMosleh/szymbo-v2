@@ -1,7 +1,30 @@
 import { PracticeMode, QuestionLevel } from "@/lib/enum";
 import { IConcept } from "@/datamodels/concept.model";
-import { IConceptProgress } from "@/datamodels/conceptProgress.model";
-import { IQuestionBank } from "@/datamodels/questionBank.model";
+
+/**
+ * Lightweight concept summary for context building
+ */
+export interface ConceptSummary {
+  id: string;
+  name: string;
+  category: string;
+  keyExamples: string[];
+  difficultyLevel: QuestionLevel;
+}
+
+/**
+ * Individual question response
+ */
+export interface QuestionResponse {
+  questionId: string;
+  userAnswer: string;
+  isCorrect: boolean;
+  responseTime: number;
+  attempts: number;
+  conceptsTargeted: string[];
+  feedback: string;
+  timestamp: Date;
+}
 
 /**
  * Practice session configuration
@@ -49,17 +72,6 @@ export interface SmartContext {
 }
 
 /**
- * Lightweight concept summary for context building
- */
-export interface ConceptSummary {
-  id: string;
-  name: string;
-  category: string;
-  keyExamples: string[];
-  difficultyLevel: QuestionLevel;
-}
-
-/**
  * SRS calculation parameters
  */
 export interface SRSParameters {
@@ -93,20 +105,6 @@ export interface PracticeSessionState {
   responses: QuestionResponse[];
   startTime: Date;
   isCompleted: boolean;
-}
-
-/**
- * Individual question response
- */
-export interface QuestionResponse {
-  questionId: string;
-  userAnswer: string;
-  isCorrect: boolean;
-  responseTime: number;
-  attempts: number;
-  conceptsTargeted: string[];
-  feedback: string;
-  timestamp: Date;
 }
 
 /**

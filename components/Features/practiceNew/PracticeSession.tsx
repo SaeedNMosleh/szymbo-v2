@@ -5,15 +5,16 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
-import { PracticeMode, QuestionType, QuestionLevel } from "@/lib/enum";
+import {
+  PracticeMode,
+  QuestionType,
+  QuestionLevel,
+  CourseType,
+} from "@/lib/enum";
 import { validateAnswer } from "@/lib/LLMPracticeValidation/validateAnswer";
 import { IQuestionBank } from "@/datamodels/questionBank.model";
-import {
-  ArrowLeft,
-  CheckCircle,
-  XCircle,
-  AlertCircle,
-} from "lucide-react";
+import { ICourse } from "@/datamodels/course.model";
+import { ArrowLeft, CheckCircle, XCircle, AlertCircle } from "lucide-react";
 
 interface Question {
   id: string;
@@ -83,14 +84,19 @@ export function PracticeSession({
 
   // Enhanced Question Bank Service
   class QuestionBankService {
-    static async saveQuestion(questionData: Partial<IQuestionBank>): Promise<IQuestionBank | null> {
+    static async saveQuestion(
+      questionData: Partial<IQuestionBank>
+    ): Promise<IQuestionBank | null> {
       const maxRetries = 3;
       let lastError: Error | null = null;
 
       for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
-          console.log(`Saving question attempt ${attempt}:`, questionData.question?.substring(0, 50));
-          
+          console.log(
+            `Saving question attempt ${attempt}:`,
+            questionData.question?.substring(0, 50)
+          );
+
           const response = await fetch("/api/questions", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -111,19 +117,25 @@ export function PracticeSession({
         } catch (error) {
           lastError = error as Error;
           console.error(`❌ Save attempt ${attempt} failed:`, error);
-          
+
           if (attempt < maxRetries) {
             const delay = Math.pow(2, attempt) * 1000;
-            await new Promise(resolve => setTimeout(resolve, delay));
+            await new Promise((resolve) => setTimeout(resolve, delay));
           }
         }
       }
 
-      console.error(`Failed to save question after ${maxRetries} attempts:`, lastError);
+      console.error(
+        `Failed to save question after ${maxRetries} attempts:`,
+        lastError
+      );
       return null;
     }
 
-    static async updateQuestionAnswer(questionId: string, correctAnswer: string): Promise<boolean> {
+    static async updateQuestionAnswer(
+      questionId: string,
+      correctAnswer: string
+    ): Promise<boolean> {
       try {
         const response = await fetch("/api/questions", {
           method: "PUT",
@@ -147,7 +159,10 @@ export function PracticeSession({
       }
     }
 
-    static async updateQuestionPerformance(questionId: string, isCorrect: boolean): Promise<boolean> {
+    static async updateQuestionPerformance(
+      questionId: string,
+      isCorrect: boolean
+    ): Promise<boolean> {
       try {
         const response = await fetch("/api/questions", {
           method: "PUT",
@@ -160,7 +175,9 @@ export function PracticeSession({
         });
 
         if (!response.ok) {
-          console.error(`Failed to update question performance: ${response.status}`);
+          console.error(
+            `Failed to update question performance: ${response.status}`
+          );
           return false;
         }
 
@@ -227,8 +244,10 @@ export function PracticeSession({
     const responseTime = Date.now() - questionStartTime;
 
     try {
-      const mockCourse = {
+      const mockCourse: ICourse = {
         courseId: 0,
+        date: new Date(),
+        courseType: CourseType.NEW,
         notes: `Concepts: ${currentQuestion.targetConcepts.join(", ")}`,
         practice: currentQuestion.question,
         keywords: currentQuestion.targetConcepts,
@@ -254,8 +273,10 @@ export function PracticeSession({
       setQuestionResult(newResult);
 
       // Check if question exists and update accordingly
-      const questionExists = await QuestionBankService.questionExists(currentQuestion.id);
-      
+      const questionExists = await QuestionBankService.questionExists(
+        currentQuestion.id
+      );
+
       if (questionExists) {
         // Question exists in bank - update correct answer if we got one
         if (newResult.correctAnswer && newResult.correctAnswer.trim()) {
@@ -263,25 +284,32 @@ export function PracticeSession({
             currentQuestion.id,
             newResult.correctAnswer
           );
-          
+
           if (updateSuccess) {
-            console.log(`✅ Updated question ${currentQuestion.id} with correct answer`);
+            console.log(
+              `✅ Updated question ${currentQuestion.id} with correct answer`
+            );
           }
         }
-        
+
         // Update performance metrics
-        const perfUpdateSuccess = await QuestionBankService.updateQuestionPerformance(
-          currentQuestion.id,
-          newResult.isCorrect
-        );
-        
+        const perfUpdateSuccess =
+          await QuestionBankService.updateQuestionPerformance(
+            currentQuestion.id,
+            newResult.isCorrect
+          );
+
         if (perfUpdateSuccess) {
-          console.log(`✅ Updated performance for question ${currentQuestion.id}`);
+          console.log(
+            `✅ Updated performance for question ${currentQuestion.id}`
+          );
         }
       } else {
         // Question doesn't exist - this shouldn't happen but let's handle it
-        console.warn(`⚠️ Question ${currentQuestion.id} not found in bank during answer submission`);
-        
+        console.warn(
+          `⚠️ Question ${currentQuestion.id} not found in bank during answer submission`
+        );
+
         // Try to save it now
         const questionData: Partial<IQuestionBank> = {
           id: currentQuestion.id,
@@ -290,30 +318,39 @@ export function PracticeSession({
           questionType: currentQuestion.questionType as QuestionType,
           targetConcepts: currentQuestion.targetConcepts,
           difficulty: currentQuestion.difficulty as QuestionLevel,
-          source: "generated"
+          source: "generated",
         };
-        
+
         const saved = await QuestionBankService.saveQuestion(questionData);
         if (saved) {
-          console.log(`✅ Retroactively saved question ${currentQuestion.id} to bank`);
+          console.log(
+            `✅ Retroactively saved question ${currentQuestion.id} to bank`
+          );
         }
       }
 
       // Update concept progress
       for (const conceptId of currentQuestion.targetConcepts) {
         try {
-          await updateConceptProgress(conceptId, newResult.isCorrect, responseTime);
+          await updateConceptProgress(
+            conceptId,
+            newResult.isCorrect,
+            responseTime
+          );
         } catch (error) {
-          console.error(`❌ Failed to update progress for concept ${conceptId}:`, error);
+          console.error(
+            `❌ Failed to update progress for concept ${conceptId}:`,
+            error
+          );
         }
       }
-
     } catch (error) {
       console.error("❌ Error validating answer:", error);
       setValidationError("Failed to validate your answer. Please try again.");
       setQuestionResult({
         isCorrect: false,
-        feedback: "There was an error checking your answer. Please try submitting again.",
+        feedback:
+          "There was an error checking your answer. Please try submitting again.",
         correctAnswer: "",
         attempts: 1,
         responseTime,

@@ -64,16 +64,19 @@ export async function POST(request: NextRequest) {
     const { decisions } = batchReviewSchema.parse(body);
 
     if (decisions.length === 0) {
-      return NextResponse.json({
-        success: false,
-        error: "No decisions provided"
-      }, { status: 400 });
+      return NextResponse.json(
+        {
+          success: false,
+          error: "No decisions provided",
+        },
+        { status: 400 }
+      );
     }
 
     const courseId = decisions[0].courseId;
     const conceptManager = new ConceptManager();
     const extractor = new ConceptExtractor();
-    
+
     // Process all decisions and prepare for batch creation
     const approvedConcepts = [];
     const results = [];
@@ -81,8 +84,15 @@ export async function POST(request: NextRequest) {
     for (const decision of decisions) {
       try {
         if (decision.action === "approve") {
+          // Ensure suggestedDifficulty is always defined
+          const concept = {
+            ...decision.extractedConcept,
+            suggestedDifficulty:
+              decision.extractedConcept.suggestedDifficulty || QuestionLevel.A1,
+          };
+
           approvedConcepts.push({
-            concept: decision.extractedConcept,
+            concept,
             action: "create" as const,
           });
           results.push({
@@ -93,12 +103,21 @@ export async function POST(request: NextRequest) {
         } else if (decision.action === "edit") {
           const editedConcept = {
             ...decision.extractedConcept,
-            name: decision.editedConcept?.name || decision.extractedConcept.name,
-            description: decision.editedConcept?.description || decision.extractedConcept.description,
-            examples: decision.editedConcept?.examples || decision.extractedConcept.examples,
-            suggestedDifficulty: decision.editedConcept?.difficulty || decision.extractedConcept.suggestedDifficulty,
+            name:
+              decision.editedConcept?.name || decision.extractedConcept.name,
+            description:
+              decision.editedConcept?.description ||
+              decision.extractedConcept.description,
+            examples:
+              decision.editedConcept?.examples ||
+              decision.extractedConcept.examples,
+            // Always ensure we have a valid QuestionLevel by providing a default if both are undefined
+            suggestedDifficulty:
+              decision.editedConcept?.difficulty ||
+              decision.extractedConcept.suggestedDifficulty ||
+              QuestionLevel.A1,
           };
-          
+
           approvedConcepts.push({
             concept: editedConcept,
             action: "create" as const,
@@ -119,7 +138,9 @@ export async function POST(request: NextRequest) {
           }
 
           // Verify target concept exists
-          const targetConcept = await conceptManager.getConcept(decision.targetConceptId);
+          const targetConcept = await conceptManager.getConcept(
+            decision.targetConceptId
+          );
           if (!targetConcept) {
             results.push({
               success: false,
@@ -167,13 +188,13 @@ export async function POST(request: NextRequest) {
           courseId,
           approvedConcepts
         );
-        
+
         createdCount = creationResult.created + creationResult.merged;
-        
+
         if (creationResult.errors.length > 0) {
           console.error("Concept creation errors:", creationResult.errors);
           // Update results with any creation errors
-          creationResult.errors.forEach(error => {
+          creationResult.errors.forEach((error) => {
             results.push({
               success: false,
               conceptName: "Unknown",
@@ -183,39 +204,50 @@ export async function POST(request: NextRequest) {
         }
       } catch (error) {
         console.error("Batch concept creation failed:", error);
-        return NextResponse.json({
-          success: false,
-          error: "Failed to create approved concepts",
-          details: error instanceof Error ? error.message : "Unknown error"
-        }, { status: 500 });
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Failed to create approved concepts",
+            details: error instanceof Error ? error.message : "Unknown error",
+          },
+          { status: 500 }
+        );
       }
     }
 
-    const successCount = results.filter(r => r.success).length;
+    const successCount = results.filter((r) => r.success).length;
 
-    return NextResponse.json({
-      success: true,
-      processedCount: successCount,
-      createdCount,
-      totalDecisions: decisions.length,
-      results,
-      message: `Processed ${successCount} decisions, created ${createdCount} concepts`
-    }, { status: 200 });
-
+    return NextResponse.json(
+      {
+        success: true,
+        processedCount: successCount,
+        createdCount,
+        totalDecisions: decisions.length,
+        results,
+        message: `Processed ${successCount} decisions, created ${createdCount} concepts`,
+      },
+      { status: 200 }
+    );
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json({
-        success: false,
-        error: "Invalid review data",
-        details: error.errors,
-      }, { status: 400 });
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Invalid review data",
+          details: error.errors,
+        },
+        { status: 400 }
+      );
     }
 
     console.error("Review processing error:", error);
-    return NextResponse.json({
-      success: false,
-      error: "Failed to process review decisions",
-      details: error instanceof Error ? error.message : "Unknown error",
-    }, { status: 500 });
+    return NextResponse.json(
+      {
+        success: false,
+        error: "Failed to process review decisions",
+        details: error instanceof Error ? error.message : "Unknown error",
+      },
+      { status: 500 }
+    );
   }
 }

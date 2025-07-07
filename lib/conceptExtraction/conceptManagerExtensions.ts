@@ -1,8 +1,38 @@
-import { NextRequest, NextResponse } from "next/server";
-import { connectToDatabase } from "@/lib/dbConnect";
+// Import only what's needed
 import { ConceptManager } from "@/lib/conceptExtraction/conceptManager";
-import { z } from "zod";
 import { ConceptCategory } from "@/lib/enum";
+import ConceptModel, { IConcept } from "@/datamodels/concept.model";
+
+// Add type declaration to extend ConceptManager's prototype
+declare module "@/lib/conceptExtraction/conceptManager" {
+  interface ConceptManager {
+    getConceptsPaginated(options: {
+      page?: number;
+      limit?: number;
+      category?: ConceptCategory | null;
+      isActive?: boolean;
+    }): Promise<{
+      success: boolean;
+      data: IConcept[];
+      total: number;
+      error?: string;
+    }>;
+
+    getConceptCount(query: {
+      isActive?: boolean;
+      category?: ConceptCategory | null;
+    }): Promise<number>;
+
+    getConceptsWithQuery(
+      query: {
+        isActive?: boolean;
+        category?: ConceptCategory | null;
+      },
+      skip: number,
+      limit: number
+    ): Promise<IConcept[]>;
+  }
+}
 
 // This is a helper file that extends the ConceptManager with methods for pagination and filtering
 
@@ -17,7 +47,10 @@ ConceptManager.prototype.getConceptsPaginated = async function (options: {
 
   try {
     // Build query based on filters
-    const query: any = {};
+    const query: {
+      isActive?: boolean;
+      category?: ConceptCategory | null;
+    } = {};
 
     // Filter by active status
     if (isActive !== null) {
@@ -53,22 +86,26 @@ ConceptManager.prototype.getConceptsPaginated = async function (options: {
 };
 
 // Helper method to get count of concepts matching query
-ConceptManager.prototype.getConceptCount = async function (query: any) {
-  const Concept = require("@/datamodels/concept.model").default;
-  return await Concept.countDocuments(query);
+ConceptManager.prototype.getConceptCount = async function (query: {
+  isActive?: boolean;
+  category?: ConceptCategory | null;
+}) {
+  return await ConceptModel.countDocuments(query);
 };
 
 // Helper method to get concepts matching query with pagination
 ConceptManager.prototype.getConceptsWithQuery = async function (
-  query: any,
+  query: {
+    isActive?: boolean;
+    category?: ConceptCategory | null;
+  },
   skip: number,
   limit: number
 ) {
-  const Concept = require("@/datamodels/concept.model").default;
-  const concepts = await Concept.find(query)
+  const concepts = await ConceptModel.find(query)
     .sort({ name: 1 })
     .skip(skip)
     .limit(limit);
 
-  return concepts.map((concept: any) => concept.toObject());
+  return concepts.map((concept) => concept.toObject());
 };

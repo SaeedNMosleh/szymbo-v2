@@ -61,12 +61,14 @@ export class ConceptManager {
       const existingConcept = await Concept.findOne({
         name: new RegExp(`^${conceptData.name.trim()}$`, "i"),
         category: conceptData.category,
-        isActive: true
+        isActive: true,
       });
 
       if (existingConcept) {
         if (skipUniquenessCheck) {
-          console.log(`Concept "${conceptData.name}" already exists, returning existing concept`);
+          console.log(
+            `Concept "${conceptData.name}" already exists, returning existing concept`
+          );
           return existingConcept.toObject();
         } else {
           throw new ConceptValidationError(
@@ -110,10 +112,14 @@ export class ConceptManager {
 
       // Initialize concept progress for default user to make it available for practice
       try {
-        await SRSCalculator.initializeConceptProgress(savedConcept.id, "default");
-        console.log(`Initialized practice progress for concept: ${savedConcept.name}`);
-      } catch (progressError) {
-        console.warn(`Failed to initialize progress for concept ${savedConcept.id}:`, progressError);
+        await SRSCalculator.initializeConceptProgress(
+          savedConcept.id,
+          "default"
+        );
+        console.log(
+          `Initialized practice progress for concept: ${savedConcept.name}`
+        );
+      } catch {
         // Don't fail the concept creation if progress initialization fails
       }
 
@@ -142,12 +148,12 @@ export class ConceptManager {
       const existingConcept = await Concept.findOne({
         name: new RegExp(`^${conceptData.name?.trim()}$`, "i"),
         category: conceptData.category,
-        isActive: true
+        isActive: true,
       });
 
       if (existingConcept) {
         console.log(`Found existing concept: ${existingConcept.name}`);
-        
+
         // Update createdFrom if this course isn't already listed
         if (conceptData.createdFrom && conceptData.createdFrom.length > 0) {
           const newCourseId = conceptData.createdFrom[0];
@@ -160,8 +166,11 @@ export class ConceptManager {
 
         // Ensure progress is initialized
         try {
-          await SRSCalculator.initializeConceptProgress(existingConcept.id, "default");
-        } catch (progressError) {
+          await SRSCalculator.initializeConceptProgress(
+            existingConcept.id,
+            "default"
+          );
+        } catch {
           // Progress might already exist, which is fine
         }
 
@@ -171,7 +180,10 @@ export class ConceptManager {
       // Create new concept if not found
       return await this.createConcept(conceptData, true);
     } catch (error) {
-      console.error(`Error in createOrFindConcept for "${conceptData.name}":`, error);
+      console.error(
+        `Error in createOrFindConcept for "${conceptData.name}":`,
+        error
+      );
       throw error;
     }
   }
@@ -381,7 +393,9 @@ export class ConceptManager {
             },
           }
         );
-        console.log(`Updated link between concept ${conceptId} and course ${courseId}`);
+        console.log(
+          `Updated link between concept ${conceptId} and course ${courseId}`
+        );
       } else {
         // Create new link
         const courseConceptData: ICourseConcept = {
@@ -395,7 +409,9 @@ export class ConceptManager {
 
         const courseConcept = new CourseConcept(courseConceptData);
         await courseConcept.save();
-        console.log(`Created new link between concept ${conceptId} and course ${courseId}`);
+        console.log(
+          `Created new link between concept ${conceptId} and course ${courseId}`
+        );
       }
     } catch (error) {
       if (error instanceof ConceptValidationError) {
@@ -509,7 +525,7 @@ export class ConceptManager {
       const exactMatch = await Concept.findOne({
         name: new RegExp(`^${name.trim()}$`, "i"), // Case-insensitive exact match
         category,
-        isActive: true
+        isActive: true,
       });
 
       if (exactMatch) {
@@ -527,7 +543,7 @@ export class ConceptManager {
           "i"
         ),
         category,
-        isActive: true
+        isActive: true,
       });
 
       // If we find more than 3 words in common with an existing concept, consider it a duplicate
@@ -569,7 +585,10 @@ export class ConceptManager {
 
     try {
       // Build query based on filters
-      const query: Record<string, any> = {};
+      const query: {
+        isActive?: boolean;
+        category?: ConceptCategory;
+      } = {};
 
       // Filter by active status
       if (isActive !== null) {

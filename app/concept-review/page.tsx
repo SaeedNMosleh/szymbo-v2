@@ -1,7 +1,6 @@
 // app/concept-review/page.tsx
-"use client"; 
+"use client";
 
-import { useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { ConceptReview } from "@/components/Features/conceptReview/ConceptReview";
 

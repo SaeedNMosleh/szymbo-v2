@@ -4,10 +4,6 @@ import { ConceptManager } from "@/lib/conceptExtraction/conceptManager";
 import { z } from "zod";
 import { ConceptCategory, QuestionLevel } from "@/lib/enum";
 
-interface RouteParams {
-  params: { id: string };
-}
-
 // Update concept schema (partial)
 const updateConceptSchema = z.object({
   name: z.string().min(1).max(100).optional(),
@@ -32,12 +28,18 @@ const updateConceptSchema = z.object({
 });
 
 // GET /api/concepts/[id] - Fetch specific concept
-export async function GET(request: NextRequest, { params }: RouteParams) {
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
   try {
     await connectToDatabase();
     const conceptManager = new ConceptManager();
+    
+    // Await the params
+    const { id } = await params;
 
-    const concept = await conceptManager.getConcept(params.id);
+    const concept = await conceptManager.getConcept(id);
 
     if (!concept) {
       return NextResponse.json(
@@ -50,7 +52,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
 
     // Include related data
-    const relatedCourses = await conceptManager.getCoursesForConcept(params.id);
+    const relatedCourses = await conceptManager.getCoursesForConcept(id);
 
     return NextResponse.json(
       {
@@ -76,10 +78,16 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 }
 
 // PUT /api/concepts/[id] - Update concept
-export async function PUT(request: NextRequest, { params }: RouteParams) {
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
   try {
     await connectToDatabase();
     const body = await request.json();
+    
+    // Await the params
+    const { id } = await params;
 
     // Validate partial update data
     const validatedData = updateConceptSchema.parse(body);
@@ -87,7 +95,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     const conceptManager = new ConceptManager();
 
     // Check if concept exists
-    const existingConcept = await conceptManager.getConcept(params.id);
+    const existingConcept = await conceptManager.getConcept(id);
     if (!existingConcept) {
       return NextResponse.json(
         {
@@ -99,7 +107,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     }
 
     const updatedConcept = await conceptManager.updateConcept(
-      params.id,
+      id,
       validatedData
     );
 
@@ -135,13 +143,19 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 }
 
 // DELETE /api/concepts/[id] - Soft delete concept
-export async function DELETE(request: NextRequest, { params }: RouteParams) {
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
   try {
     await connectToDatabase();
     const conceptManager = new ConceptManager();
+    
+    // Await the params
+    const { id } = await params;
 
     // Check if concept exists
-    const existingConcept = await conceptManager.getConcept(params.id);
+    const existingConcept = await conceptManager.getConcept(id);
     if (!existingConcept) {
       return NextResponse.json(
         {
@@ -153,7 +167,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     }
 
     // Soft delete by setting isActive to false
-    await conceptManager.updateConcept(params.id, { isActive: false });
+    await conceptManager.updateConcept(id, { isActive: false });
 
     return NextResponse.json(
       {

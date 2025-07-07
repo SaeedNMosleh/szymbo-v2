@@ -4,6 +4,7 @@
  * Includes both existing and new concept-based learning enums
  */
 
+/* eslint-disable no-unused-vars */
 export enum QuestionType {
   CLOZE_GAP = "cloze_gap",
   MULTIPLE_CHOICE = "multiple_choice",
@@ -33,12 +34,14 @@ export enum QuestionLevel {
   C1 = "C1",
   C2 = "C2",
 }
+/* eslint-enable no-unused-vars */
 
 /**
  * Concept categories for organizing learning content
  * Grammar: sentence structures, verb conjugations, cases, etc.
  * Vocabulary: word groups, expressions, idioms, themes
  */
+/* eslint-disable no-unused-vars */
 export enum ConceptCategory {
   GRAMMAR = "grammar",
   VOCABULARY = "vocabulary",
@@ -52,7 +55,7 @@ export enum ConceptCategory {
  */
 export enum PracticeMode {
   NORMAL = "normal",
-  PREVIOUS = "previous", 
+  PREVIOUS = "previous",
   DRILL = "drill",
 }
 
@@ -67,3 +70,4 @@ export enum ConceptExtractionStatus {
   COMPLETED = "completed",
   REVIEWED = "reviewed",
 }
+/* eslint-enable no-unused-vars */

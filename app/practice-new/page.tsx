@@ -1,23 +1,48 @@
 // app/practice-new/page.tsx
 "use client";
 
-import { useState, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useState } from "react";
+import { Card, CardContent } from "@/components/ui/card";
 import { PracticeSelector } from "@/components/Features/practiceNew/PracticeSelector";
 import { PracticeSession } from "@/components/Features/practiceNew/PracticeSession";
 import { PracticeStats } from "@/components/Features/practiceNew/PracticeStats";
-import { PracticeMode } from "@/lib/enum";
+import { PracticeMode, QuestionType, QuestionLevel } from "@/lib/enum";
+
+// Interface definitions matching what's expected in PracticeSession
+interface Question {
+  id: string;
+  question: string;
+  questionType: QuestionType;
+  difficulty: QuestionLevel;
+  targetConcepts: string[];
+  options?: string[];
+  correctAnswer?: string;
+  context?: string;
+  additionalInfo?: string;
+}
+
+interface SessionData {
+  sessionId: string;
+  conceptIds: string[];
+  questions: Question[];
+  metadata: {
+    mode: PracticeMode;
+    totalQuestions: number;
+    conceptCount: number;
+    rationale: string;
+  };
+}
 
 export default function PracticeNewPage() {
   const [selectedMode, setSelectedMode] = useState<PracticeMode | null>(null);
-  const [sessionData, setSessionData] = useState<any>(null);
+  const [sessionData, setSessionData] = useState<SessionData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleModeSelect = async (mode: PracticeMode) => {
     setIsLoading(true);
     setError(null);
-    
+
     try {
       const response = await fetch("/api/practice-new/session", {
         method: "POST",
@@ -63,7 +88,7 @@ export default function PracticeNewPage() {
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="mb-8 text-center">
-        <h1 className="text-4xl font-bold text-gray-900 mb-2">
+        <h1 className="mb-2 text-4xl font-bold text-gray-900">
           Polish Practice System
         </h1>
         <p className="text-gray-600">
@@ -76,7 +101,7 @@ export default function PracticeNewPage() {
           <CardContent className="pt-6">
             <div className="text-red-800">
               <strong>Error:</strong> {error}
-              <button 
+              <button
                 onClick={handleBackToModes}
                 className="ml-4 text-sm underline"
               >
@@ -90,7 +115,7 @@ export default function PracticeNewPage() {
       {!selectedMode && !isLoading && (
         <>
           <PracticeStats />
-          <PracticeSelector 
+          <PracticeSelector
             onModeSelect={handleModeSelect}
             isLoading={isLoading}
           />
@@ -101,7 +126,7 @@ export default function PracticeNewPage() {
         <Card>
           <CardContent className="pt-6">
             <div className="text-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+              <div className="mx-auto mb-4 size-8 animate-spin rounded-full border-b-2 border-blue-600"></div>
               <p>Starting practice session...</p>
             </div>
           </CardContent>

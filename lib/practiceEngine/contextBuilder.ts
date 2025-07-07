@@ -1,6 +1,16 @@
 // lib/practiceEngine/contextBuilder.ts
-import Concept, { IConcept } from "@/datamodels/concept.model";
+// Using a single import to avoid circular dependency issues
+import Concept from "@/datamodels/concept.model";
 import { ConceptCategory } from "@/lib/enum";
+
+export interface ConceptSummary {
+  id: string;
+  name: string;
+  category: ConceptCategory;
+  description?: string;
+  keyExamples?: string[];
+  difficulty?: string;
+}
 
 export interface SmartContext {
   targetConcepts: ConceptSummary[];
@@ -9,17 +19,7 @@ export interface SmartContext {
   interleaving: boolean;
 }
 
-export interface ConceptSummary {
-  id: string;
-  name: string;
-  category: ConceptCategory;
-  description: string;
-  keyExamples: string[];
-  difficulty: string;
-}
-
 export class ContextBuilder {
-  
   /**
    * Build minimal context for LLM question generation
    */
@@ -30,16 +30,16 @@ export class ContextBuilder {
 
     // Get target concepts
     const targetConcepts = await this.getConceptSummaries(conceptIds);
-    
+
     // Get related concepts for richer context
     const relatedConcepts = await this.getRelatedConcepts(conceptIds);
-    
+
     // Build smart context
     const smartContext: SmartContext = {
       targetConcepts,
       relatedConcepts,
       sessionObjectives: this.generateSessionObjectives(targetConcepts),
-      interleaving: targetConcepts.length > 1
+      interleaving: targetConcepts.length > 1,
     };
 
     return this.formatContextForLLM(smartContext);
@@ -48,19 +48,21 @@ export class ContextBuilder {
   /**
    * Get lightweight concept summaries for efficient LLM usage
    */
-  private async getConceptSummaries(conceptIds: string[]): Promise<ConceptSummary[]> {
+  private async getConceptSummaries(
+    conceptIds: string[]
+  ): Promise<ConceptSummary[]> {
     const concepts = await Concept.find({
       id: { $in: conceptIds },
-      isActive: true
+      isActive: true,
     });
 
-    return concepts.map(concept => ({
+    return concepts.map((concept) => ({
       id: concept.id,
       name: concept.name,
       category: concept.category,
       description: concept.description,
       keyExamples: concept.examples.slice(0, 3), // Limit examples for token efficiency
-      difficulty: concept.difficulty
+      difficulty: concept.difficulty,
     }));
   }
 
@@ -70,35 +72,35 @@ export class ContextBuilder {
   async getRelatedConcepts(conceptIds: string[]): Promise<ConceptSummary[]> {
     const targetConcepts = await Concept.find({
       id: { $in: conceptIds },
-      isActive: true
+      isActive: true,
     });
 
     if (targetConcepts.length === 0) return [];
 
     // Collect all related concept IDs
     const relatedIds = new Set<string>();
-    
+
     for (const concept of targetConcepts) {
       // Add prerequisites
-      concept.prerequisites?.forEach(id => relatedIds.add(id));
-      
+      concept.prerequisites?.forEach((id: string) => relatedIds.add(id));
+
       // Add explicitly related concepts
-      concept.relatedConcepts?.forEach(id => relatedIds.add(id));
+      concept.relatedConcepts?.forEach((id: string) => relatedIds.add(id));
     }
 
     // Remove target concepts from related set
-    conceptIds.forEach(id => relatedIds.delete(id));
+    conceptIds.forEach((id) => relatedIds.delete(id));
 
     // If no explicit relationships, find concepts from same category
     if (relatedIds.size === 0) {
-      const categories = [...new Set(targetConcepts.map(c => c.category))];
+      const categories = [...new Set(targetConcepts.map((c) => c.category))];
       const sameCategoryConcepts = await Concept.find({
         category: { $in: categories },
         id: { $nin: conceptIds },
-        isActive: true
+        isActive: true,
       }).limit(3);
 
-      sameCategoryConcepts.forEach(c => relatedIds.add(c.id));
+      sameCategoryConcepts.forEach((c) => relatedIds.add(c.id));
     }
 
     // Get related concept details (limit to 3 for efficiency)
@@ -109,7 +111,9 @@ export class ContextBuilder {
   /**
    * Generate session learning objectives
    */
-  private generateSessionObjectives(targetConcepts: ConceptSummary[]): string[] {
+  private generateSessionObjectives(
+    targetConcepts: ConceptSummary[]
+  ): string[] {
     const objectives: string[] = [];
 
     if (targetConcepts.length === 0) {
@@ -122,8 +126,12 @@ export class ContextBuilder {
       objectives.push(`Apply ${concept.name} in context`);
     } else {
       // Multi-concept session
-      const grammarConcepts = targetConcepts.filter(c => c.category === ConceptCategory.GRAMMAR);
-      const vocabularyConcepts = targetConcepts.filter(c => c.category === ConceptCategory.VOCABULARY);
+      const grammarConcepts = targetConcepts.filter(
+        (c) => c.category === ConceptCategory.GRAMMAR
+      );
+      const vocabularyConcepts = targetConcepts.filter(
+        (c) => c.category === ConceptCategory.VOCABULARY
+      );
 
       if (grammarConcepts.length > 0 && vocabularyConcepts.length > 0) {
         objectives.push("Practice grammar and vocabulary together in context");
@@ -154,7 +162,7 @@ export class ContextBuilder {
     for (const concept of context.targetConcepts) {
       formattedContext += `• ${concept.name} (${concept.category}, ${concept.difficulty})\n`;
       formattedContext += `  Description: ${concept.description}\n`;
-      if (concept.keyExamples.length > 0) {
+      if (concept.keyExamples && concept.keyExamples.length > 0) {
         formattedContext += `  Examples: ${concept.keyExamples.join(", ")}\n`;
       }
       formattedContext += "\n";
@@ -179,9 +187,12 @@ export class ContextBuilder {
     // Special instructions for multi-concept sessions
     if (context.interleaving) {
       formattedContext += "SPECIAL INSTRUCTIONS:\n";
-      formattedContext += "• Create questions that combine multiple concepts when possible\n";
-      formattedContext += "• Focus on practical application rather than isolated rules\n";
-      formattedContext += "• Vary question difficulty to match concept levels\n\n";
+      formattedContext +=
+        "• Create questions that combine multiple concepts when possible\n";
+      formattedContext +=
+        "• Focus on practical application rather than isolated rules\n";
+      formattedContext +=
+        "• Vary question difficulty to match concept levels\n\n";
     }
 
     return formattedContext;
@@ -192,21 +203,24 @@ export class ContextBuilder {
    */
   async buildContextForQuestionType(
     conceptIds: string[],
-    questionType: 'grammar_focus' | 'vocabulary_focus' | 'mixed'
+    questionType: "grammar_focus" | "vocabulary_focus" | "mixed"
   ): Promise<string> {
     const baseContext = await this.buildContextForConcepts(conceptIds);
-    
+
     let typeSpecificInstructions = "";
-    
+
     switch (questionType) {
-      case 'grammar_focus':
-        typeSpecificInstructions = "\nFOCUS: Create questions that test grammatical understanding and application. Include sentence transformation, conjugation, or syntax questions.";
+      case "grammar_focus":
+        typeSpecificInstructions =
+          "\nFOCUS: Create questions that test grammatical understanding and application. Include sentence transformation, conjugation, or syntax questions.";
         break;
-      case 'vocabulary_focus':
-        typeSpecificInstructions = "\nFOCUS: Create questions that test vocabulary knowledge and usage. Include context clues, word formation, or meaning-in-context questions.";
+      case "vocabulary_focus":
+        typeSpecificInstructions =
+          "\nFOCUS: Create questions that test vocabulary knowledge and usage. Include context clues, word formation, or meaning-in-context questions.";
         break;
-      case 'mixed':
-        typeSpecificInstructions = "\nFOCUS: Create questions that integrate both grammar and vocabulary. Focus on real-world language use and communication.";
+      case "mixed":
+        typeSpecificInstructions =
+          "\nFOCUS: Create questions that integrate both grammar and vocabulary. Focus on real-world language use and communication.";
         break;
     }
 
@@ -221,12 +235,14 @@ export class ContextBuilder {
     weaknessAreas: string[]
   ): Promise<string> {
     const baseContext = await this.buildContextForConcepts(conceptIds);
-    
+
     let drillInstructions = "\nDRILL SESSION FOCUS:\n";
     drillInstructions += "• Target areas where student showed difficulty\n";
-    drillInstructions += "• Create slightly easier questions to build confidence\n";
-    drillInstructions += "• Focus on fundamental understanding before complexity\n";
-    
+    drillInstructions +=
+      "• Create slightly easier questions to build confidence\n";
+    drillInstructions +=
+      "• Focus on fundamental understanding before complexity\n";
+
     if (weaknessAreas.length > 0) {
       drillInstructions += "\nSPECIFIC WEAKNESS AREAS:\n";
       for (const area of weaknessAreas) {
@@ -247,7 +263,7 @@ export class ContextBuilder {
   }> {
     const concepts = await Concept.find({
       id: { $in: conceptIds },
-      isActive: true
+      isActive: true,
     });
 
     const clusters: string[][] = [];
@@ -255,14 +271,18 @@ export class ContextBuilder {
     const combinations: string[][] = [];
 
     // Group by category
-    const grammarConcepts = concepts.filter(c => c.category === ConceptCategory.GRAMMAR);
-    const vocabularyConcepts = concepts.filter(c => c.category === ConceptCategory.VOCABULARY);
+    const grammarConcepts = concepts.filter(
+      (c) => c.category === ConceptCategory.GRAMMAR
+    );
+    const vocabularyConcepts = concepts.filter(
+      (c) => c.category === ConceptCategory.VOCABULARY
+    );
 
     if (grammarConcepts.length > 0) {
-      clusters.push(grammarConcepts.map(c => c.id));
+      clusters.push(grammarConcepts.map((c) => c.id));
     }
     if (vocabularyConcepts.length > 0) {
-      clusters.push(vocabularyConcepts.map(c => c.id));
+      clusters.push(vocabularyConcepts.map((c) => c.id));
     }
 
     // Map prerequisites
