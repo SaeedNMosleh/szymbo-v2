@@ -47,6 +47,35 @@ export interface ExtractionResult {
 }
 
 /**
+ * Review decision for human-in-the-loop concept approval
+ */
+export interface ReviewDecision {
+  action: "approve" | "link" | "edit" | "reject";
+  extractedConcept: ExtractedConcept;
+  targetConceptId?: string; // for link action
+  editedConcept?: Partial<ExtractedConcept>; // for edit action
+  courseId: number;
+}
+
+/**
+ * Batch review request
+ */
+export interface BatchReviewRequest {
+  decisions: ReviewDecision[];
+}
+
+/**
+ * Review processing result
+ */
+export interface ReviewResult {
+  success: boolean;
+  conceptName: string;
+  action: string;
+  conceptId?: string;
+  error?: string;
+}
+
+/**
  * Custom error types for concept extraction
  */
 export class ConceptExtractionError extends Error {

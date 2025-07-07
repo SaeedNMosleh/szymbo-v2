@@ -219,7 +219,7 @@ export class ConceptExtractor {
   }
 
   /**
-   * Apply reviewed concepts to the database
+   * Apply reviewed concepts to the database with enhanced duplicate handling
    * @param courseId ID of the course
    * @param approvedConcepts Array of reviewed and approved concepts
    * @returns Success status and count of concepts created
@@ -257,8 +257,8 @@ export class ConceptExtractor {
       for (const { concept, action, mergeWithId } of approvedConcepts) {
         try {
           if (action === "create") {
-            // Create new concept
-            const newConcept = await this.conceptManager.createConcept({
+            // Use createOrFindConcept to handle potential duplicates gracefully
+            const newConcept = await this.conceptManager.createOrFindConcept({
               id: uuidv4(),
               name: concept.name,
               category: concept.category,
@@ -280,6 +280,7 @@ export class ConceptExtractor {
             );
 
             results.created++;
+            console.log(`Successfully processed concept: ${concept.name}`);
           } else if (action === "merge" && mergeWithId) {
             // Add course to existing concept's createdFrom list
             const existingConcept =
@@ -313,21 +314,48 @@ export class ConceptExtractor {
           const errorMessage = `Error processing concept "${concept.name}": ${error instanceof Error ? error.message : String(error)}`;
           results.errors.push(errorMessage);
           console.error(errorMessage);
+
+          // Don't fail the entire operation for individual concept errors
+          // Continue processing remaining concepts
         }
       }
 
-      // Update course status to REVIEWED
-      await Course.updateOne(
-        { courseId },
-        {
-          $set: {
-            conceptExtractionStatus: ConceptExtractionStatus.REVIEWED,
-          },
+      // Update course status to REVIEWED only if we had some success
+      if (results.created > 0 || results.merged > 0) {
+        try {
+          await Course.updateOne(
+            { courseId },
+            {
+              $set: {
+                conceptExtractionStatus: ConceptExtractionStatus.REVIEWED,
+              },
+            }
+          );
+          console.log(`Updated course ${courseId} status to REVIEWED`);
+        } catch (statusError) {
+          console.error(`Failed to update course status:`, statusError);
+          results.errors.push("Failed to update course status");
         }
-      );
+      }
 
       // Clear cache for this course
       this.extractionCache.delete(courseId);
+
+      // Set success to false only if we had no successes and errors
+      if (
+        results.created === 0 &&
+        results.merged === 0 &&
+        results.errors.length > 0
+      ) {
+        results.success = false;
+      }
+
+      console.log(`Concept application results:`, {
+        courseId,
+        created: results.created,
+        merged: results.merged,
+        errors: results.errors.length,
+      });
 
       return results;
     } catch (error) {
@@ -335,6 +363,7 @@ export class ConceptExtractor {
       results.errors.push(
         `Failed to apply reviewed concepts: ${error instanceof Error ? error.message : String(error)}`
       );
+      console.error("Critical error in applyReviewedConcepts:", error);
       return results;
     }
   }

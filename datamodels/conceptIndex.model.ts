@@ -16,7 +16,12 @@ export interface IConceptIndex {
   isActive: boolean;
 }
 
-// Export a function to create a concept index from a full concept
+/**
+ * Export a function to create a concept index from a full concept
+ * Used for generating lightweight representations for LLM operations
+ * @param concept Full concept document
+ * @returns Lightweight concept index
+ */
 export const createConceptIndex = (concept: IConcept): IConceptIndex => {
   return {
     conceptId: concept.id,
@@ -26,4 +31,13 @@ export const createConceptIndex = (concept: IConcept): IConceptIndex => {
     difficulty: concept.difficulty,
     isActive: concept.isActive,
   };
+};
+
+/**
+ * Utility function to create concept indexes in bulk
+ * @param concepts Array of full concept documents
+ * @returns Array of lightweight concept indexes
+ */
+export const createConceptIndexes = (concepts: IConcept[]): IConceptIndex[] => {
+  return concepts.map(createConceptIndex);
 };

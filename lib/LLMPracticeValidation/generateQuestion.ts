@@ -22,19 +22,13 @@ export async function generateQuestion(course: ICourse, previousQuestions: strin
     If there are 3 to 5 previous questions, make it moderately difficult within A1 (e.g., slightly longer sentences or additional vocabulary).
     If there are more than 5 previous questions, make it a bit more challenging but still within A1 (e.g., varied sentence patterns or more contextual inference).
     Additionally, if the last two previous questions were similar in structure or topic, make the next question simpler to avoid overwhelming the learner.
-    Choose the question type based on the number of previous questions:
-    For the nth question:
-    Use a cloze gap question if n % 4 == 0.
-    Use a multiple-choice question if n % 4 == 1.
-    Use a sentence transformation question if n % 4 == 2.
-    Use a short-answer question if n % 4 == 3.
-    Ensure the question targets a different aspect of the lesson notes compared to recent questions.
-    Include sufficient context in the question to make it self-contained.
+    The question should be self-contained and meaningful, providing sufficient context for the learner to understand without needing to refer back to the course material.
     Do not ask about grammar rules directly; test them in context.
     Do not ask for translations.
     Do not ask questions that can have multiple correct answers.
+    If the course content is not sufficient to generate a question, you can generate a question based on general Polish language knowledge at the A1 level using the course content as a reference.
     Previous questions: ${previousQuestions.length > 0 ? previousQuestions.join(", ") : "None"}`
-  // console.log(prompt);
+    console.log(prompt);
   /*   const completion = await openai.chat.completions.create({
     model: "o1-mini",
     // reasoning_effort: "medium",

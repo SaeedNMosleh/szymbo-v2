@@ -20,7 +20,9 @@ export interface ICourse {
   numberOfPractices?: number;
   fluency?: number;
   easinessFactor?: number;
-  extractedConcepts?: string[]; // concept IDs
+  
+  // NEW: Concept-related fields
+  extractedConcepts?: string[]; // concept IDs extracted from this course
   conceptExtractionDate?: Date;
   conceptExtractionStatus?: ConceptExtractionStatus;
 }
@@ -49,6 +51,8 @@ const CourseSchema = new Schema<ICourse>(
     fluency: { type: Number, min: 0, max: 10, default: 0 },
     nextPracticeDate: { type: Date, default: null },
     easinessFactor: { type: Number, default: 2.5, min: 1.3, max: 2.5 },
+    
+    // NEW: Concept-related fields
     extractedConcepts: { type: [String], default: [], ref: "Concept" },
     conceptExtractionDate: { type: Date, default: null },
     conceptExtractionStatus: {

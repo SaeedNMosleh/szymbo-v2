@@ -15,8 +15,12 @@ export interface IQuestionAnswer {
     questionLevel: QuestionLevel
     responseTime: number
   }
-  isCorrect: boolean // New field
-  feedback: string // New field
+  isCorrect: boolean
+  feedback: string
+  
+  // NEW: Concept integration
+  conceptId?: string // primary concept this question targets
+  targetConcepts?: string[] // all concepts this question addresses
 }
 
 const QuestionAnswerSchema = new Schema<IQuestionAnswer>({
@@ -33,8 +37,12 @@ const QuestionAnswerSchema = new Schema<IQuestionAnswer>({
     questionLevel: { type: String, enum: Object.values(QuestionLevel), required: true },
     responseTime: { type: Number, required: true, min: 0 },
   },
-  isCorrect: { type: Boolean, required: true }, // New field
-  feedback: { type: String, required: true }, // New field
+  isCorrect: { type: Boolean, required: true },
+  feedback: { type: String, required: true },
+  
+  // NEW: Concept integration
+  conceptId: { type: String, ref: "Concept" },
+  targetConcepts: { type: [String], default: [], ref: "Concept" },
 })
 
 const QuestionAnswer = models?.QuestionAnswer || model<IQuestionAnswer>("QuestionAnswer", QuestionAnswerSchema)

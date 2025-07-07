@@ -1,3 +1,4 @@
+// app/api/concepts/review/route.ts - FIXED VERSION
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/dbConnect";
 import { ConceptManager } from "@/lib/conceptExtraction/conceptManager";
@@ -62,15 +63,93 @@ export async function POST(request: NextRequest) {
     // Validate the request body
     const { decisions } = batchReviewSchema.parse(body);
 
+    if (decisions.length === 0) {
+      return NextResponse.json({
+        success: false,
+        error: "No decisions provided"
+      }, { status: 400 });
+    }
+
+    const courseId = decisions[0].courseId;
     const conceptManager = new ConceptManager();
+    const extractor = new ConceptExtractor();
+    
+    // Process all decisions and prepare for batch creation
+    const approvedConcepts = [];
     const results = [];
-    let processedCount = 0;
 
     for (const decision of decisions) {
       try {
-        const result = await processReviewDecision(decision, conceptManager);
-        results.push(result);
-        if (result.success) processedCount++;
+        if (decision.action === "approve") {
+          approvedConcepts.push({
+            concept: decision.extractedConcept,
+            action: "create" as const,
+          });
+          results.push({
+            success: true,
+            conceptName: decision.extractedConcept.name,
+            action: "approved_for_creation",
+          });
+        } else if (decision.action === "edit") {
+          const editedConcept = {
+            ...decision.extractedConcept,
+            name: decision.editedConcept?.name || decision.extractedConcept.name,
+            description: decision.editedConcept?.description || decision.extractedConcept.description,
+            examples: decision.editedConcept?.examples || decision.extractedConcept.examples,
+            suggestedDifficulty: decision.editedConcept?.difficulty || decision.extractedConcept.suggestedDifficulty,
+          };
+          
+          approvedConcepts.push({
+            concept: editedConcept,
+            action: "create" as const,
+          });
+          results.push({
+            success: true,
+            conceptName: decision.extractedConcept.name,
+            action: "approved_for_creation_with_edits",
+          });
+        } else if (decision.action === "link") {
+          if (!decision.targetConceptId) {
+            results.push({
+              success: false,
+              conceptName: decision.extractedConcept.name,
+              error: "Target concept ID required for link action",
+            });
+            continue;
+          }
+
+          // Verify target concept exists
+          const targetConcept = await conceptManager.getConcept(decision.targetConceptId);
+          if (!targetConcept) {
+            results.push({
+              success: false,
+              conceptName: decision.extractedConcept.name,
+              error: `Target concept with ID ${decision.targetConceptId} not found`,
+            });
+            continue;
+          }
+
+          // Link to existing concept
+          await conceptManager.linkConceptToCourse(
+            decision.targetConceptId,
+            courseId,
+            decision.extractedConcept.confidence,
+            decision.extractedConcept.sourceContent
+          );
+
+          results.push({
+            success: true,
+            conceptName: decision.extractedConcept.name,
+            action: "linked",
+            conceptId: decision.targetConceptId,
+          });
+        } else if (decision.action === "reject") {
+          results.push({
+            success: true,
+            conceptName: decision.extractedConcept.name,
+            action: "rejected",
+          });
+        }
       } catch (error) {
         results.push({
           success: false,
@@ -80,187 +159,63 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Update course extraction status if all decisions for a course are processed
-    if (processedCount > 0 && decisions.length > 0) {
-      const courseId = decisions[0].courseId;
-      const extractor = new ConceptExtractor();
-
-      // Create the approved concepts array manually to satisfy type requirements
-      // This is a workaround for type compatibility issues
-      const manuallyApprovedConcepts = decisions
-        .filter((d) => d.action === "approve" || d.action === "edit")
-        .map((d) => {
-          // Create a properly typed object for the extractor
-          return {
-            concept: {
-              name: d.extractedConcept.name,
-              category: d.extractedConcept.category,
-              description: d.extractedConcept.description,
-              examples: d.extractedConcept.examples,
-              sourceContent: d.extractedConcept.sourceContent,
-              confidence: d.extractedConcept.confidence,
-              // Ensure suggestedDifficulty is always defined
-              suggestedDifficulty:
-                d.extractedConcept.suggestedDifficulty || QuestionLevel.A1,
-            },
-            action:
-              d.action === "link" ? ("merge" as const) : ("create" as const),
-            mergeWithId: d.targetConceptId,
-          };
-        });
-
-      if (manuallyApprovedConcepts.length > 0) {
-        await extractor.applyReviewedConcepts(
+    // Now create all approved concepts in one batch operation
+    let createdCount = 0;
+    if (approvedConcepts.length > 0) {
+      try {
+        const creationResult = await extractor.applyReviewedConcepts(
           courseId,
-          manuallyApprovedConcepts
+          approvedConcepts
         );
+        
+        createdCount = creationResult.created + creationResult.merged;
+        
+        if (creationResult.errors.length > 0) {
+          console.error("Concept creation errors:", creationResult.errors);
+          // Update results with any creation errors
+          creationResult.errors.forEach(error => {
+            results.push({
+              success: false,
+              conceptName: "Unknown",
+              error,
+            });
+          });
+        }
+      } catch (error) {
+        console.error("Batch concept creation failed:", error);
+        return NextResponse.json({
+          success: false,
+          error: "Failed to create approved concepts",
+          details: error instanceof Error ? error.message : "Unknown error"
+        }, { status: 500 });
       }
     }
 
-    return NextResponse.json(
-      {
-        success: true,
-        processedCount,
-        totalDecisions: decisions.length,
-        results,
-      },
-      { status: 200 }
-    );
+    const successCount = results.filter(r => r.success).length;
+
+    return NextResponse.json({
+      success: true,
+      processedCount: successCount,
+      createdCount,
+      totalDecisions: decisions.length,
+      results,
+      message: `Processed ${successCount} decisions, created ${createdCount} concepts`
+    }, { status: 200 });
+
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Invalid review data",
-          details: error.errors,
-        },
-        { status: 400 }
-      );
+      return NextResponse.json({
+        success: false,
+        error: "Invalid review data",
+        details: error.errors,
+      }, { status: 400 });
     }
 
     console.error("Review processing error:", error);
-    return NextResponse.json(
-      {
-        success: false,
-        error: "Failed to process review decisions",
-        details: error instanceof Error ? error.message : "Unknown error",
-      },
-      { status: 500 }
-    );
-  }
-}
-
-/**
- * Process an individual review decision
- * @param decision The review decision
- * @param conceptManager The concept manager instance
- * @returns Result of the processing
- */
-async function processReviewDecision(
-  decision: z.infer<typeof reviewDecisionSchema>,
-  conceptManager: ConceptManager
-) {
-  const { action, extractedConcept, targetConceptId, editedConcept, courseId } =
-    decision;
-
-  switch (action) {
-    case "approve": {
-      // Create new concept from extracted data
-      const newConcept = await conceptManager.createConcept({
-        name: extractedConcept.name,
-        category: extractedConcept.category,
-        description: extractedConcept.description,
-        examples: extractedConcept.examples,
-        difficulty: extractedConcept.suggestedDifficulty || QuestionLevel.A1,
-        confidence: extractedConcept.confidence,
-        createdFrom: [courseId.toString()],
-      });
-
-      // Link to course
-      await conceptManager.linkConceptToCourse(
-        newConcept.id,
-        courseId,
-        extractedConcept.confidence,
-        extractedConcept.sourceContent
-      );
-
-      return {
-        success: true,
-        conceptName: extractedConcept.name,
-        action: "created",
-        conceptId: newConcept.id,
-      };
-    }
-
-    case "link": {
-      // Link extracted concept to existing concept
-      if (!targetConceptId) {
-        throw new Error("Target concept ID required for link action");
-      }
-
-      // Verify target concept exists
-      const targetConcept = await conceptManager.getConcept(targetConceptId);
-      if (!targetConcept) {
-        throw new Error(`Target concept with ID ${targetConceptId} not found`);
-      }
-
-      await conceptManager.linkConceptToCourse(
-        targetConceptId,
-        courseId,
-        extractedConcept.confidence,
-        extractedConcept.sourceContent
-      );
-
-      return {
-        success: true,
-        conceptName: extractedConcept.name,
-        action: "linked",
-        conceptId: targetConceptId,
-      };
-    }
-
-    case "edit": {
-      // Create concept with edited data
-      const editedConceptData = {
-        name: editedConcept?.name || extractedConcept.name,
-        category: extractedConcept.category,
-        description: editedConcept?.description || extractedConcept.description,
-        examples: editedConcept?.examples || extractedConcept.examples,
-        difficulty:
-          editedConcept?.difficulty ||
-          extractedConcept.suggestedDifficulty ||
-          QuestionLevel.A1,
-        confidence: extractedConcept.confidence,
-        createdFrom: [courseId.toString()],
-      };
-
-      const editedConceptResult =
-        await conceptManager.createConcept(editedConceptData);
-
-      await conceptManager.linkConceptToCourse(
-        editedConceptResult.id,
-        courseId,
-        extractedConcept.confidence,
-        extractedConcept.sourceContent
-      );
-
-      return {
-        success: true,
-        conceptName: extractedConcept.name,
-        action: "edited",
-        conceptId: editedConceptResult.id,
-      };
-    }
-
-    case "reject":
-      // Do nothing, just log the rejection
-      return {
-        success: true,
-        conceptName: extractedConcept.name,
-        action: "rejected",
-      };
-
-    default:
-      throw new Error(`Unknown action: ${action}`);
+    return NextResponse.json({
+      success: false,
+      error: "Failed to process review decisions",
+      details: error instanceof Error ? error.message : "Unknown error",
+    }, { status: 500 });
   }
 }

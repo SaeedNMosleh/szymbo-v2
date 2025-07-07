@@ -1,3 +1,4 @@
+// lib/conceptExtraction/conceptManager.ts - ENHANCED VERSION
 import Concept, { IConcept } from "@/datamodels/concept.model";
 import {
   IConceptIndex,
@@ -13,6 +14,7 @@ import {
   ConceptValidationError,
 } from "./types";
 import { ConceptCategory } from "@/lib/enum";
+import { SRSCalculator } from "@/lib/practiceEngine/srsCalculator";
 
 import { v4 as uuidv4 } from "uuid";
 
@@ -34,11 +36,15 @@ export class ConceptManager {
   }
 
   /**
-   * Create a new concept with validation
+   * Create a new concept with validation and duplicate handling
    * @param conceptData Data for the new concept
-   * @returns The created concept
+   * @param skipUniquenessCheck Skip uniqueness validation
+   * @returns The created or existing concept
    */
-  async createConcept(conceptData: Partial<IConcept>): Promise<IConcept> {
+  async createConcept(
+    conceptData: Partial<IConcept>,
+    skipUniquenessCheck: boolean = false
+  ): Promise<IConcept> {
     try {
       // Validate required fields
       if (
@@ -51,16 +57,36 @@ export class ConceptManager {
         );
       }
 
-      // Check for duplicates
-      const isDuplicate = await this.validateConceptUniqueness(
-        conceptData.name,
-        conceptData.category as ConceptCategory
-      );
+      // Check if concept already exists (even when skipping uniqueness check)
+      const existingConcept = await Concept.findOne({
+        name: new RegExp(`^${conceptData.name.trim()}$`, "i"),
+        category: conceptData.category,
+        isActive: true
+      });
 
-      if (!isDuplicate) {
-        throw new ConceptValidationError(
-          `Concept "${conceptData.name}" already exists in category "${conceptData.category}"`
+      if (existingConcept) {
+        if (skipUniquenessCheck) {
+          console.log(`Concept "${conceptData.name}" already exists, returning existing concept`);
+          return existingConcept.toObject();
+        } else {
+          throw new ConceptValidationError(
+            `Concept "${conceptData.name}" already exists in category "${conceptData.category}"`
+          );
+        }
+      }
+
+      // Only check detailed uniqueness if not skipping and no exact match found
+      if (!skipUniquenessCheck) {
+        const isUnique = await this.validateConceptUniqueness(
+          conceptData.name,
+          conceptData.category as ConceptCategory
         );
+
+        if (!isUnique) {
+          throw new ConceptValidationError(
+            `Concept "${conceptData.name}" already exists in category "${conceptData.category}"`
+          );
+        }
       }
 
       // Generate unique ID if not provided
@@ -82,6 +108,15 @@ export class ConceptManager {
       const conceptModel = new Concept(newConcept);
       const savedConcept = await conceptModel.save();
 
+      // Initialize concept progress for default user to make it available for practice
+      try {
+        await SRSCalculator.initializeConceptProgress(savedConcept.id, "default");
+        console.log(`Initialized practice progress for concept: ${savedConcept.name}`);
+      } catch (progressError) {
+        console.warn(`Failed to initialize progress for concept ${savedConcept.id}:`, progressError);
+        // Don't fail the concept creation if progress initialization fails
+      }
+
       // Invalidate cache
       this.invalidateCache();
 
@@ -93,6 +128,51 @@ export class ConceptManager {
       throw new Error(
         `Failed to create concept: ${error instanceof Error ? error.message : String(error)}`
       );
+    }
+  }
+
+  /**
+   * Enhanced method to create or find existing concept
+   * @param conceptData Data for the concept
+   * @returns The created or existing concept
+   */
+  async createOrFindConcept(conceptData: Partial<IConcept>): Promise<IConcept> {
+    try {
+      // First try to find existing concept
+      const existingConcept = await Concept.findOne({
+        name: new RegExp(`^${conceptData.name?.trim()}$`, "i"),
+        category: conceptData.category,
+        isActive: true
+      });
+
+      if (existingConcept) {
+        console.log(`Found existing concept: ${existingConcept.name}`);
+        
+        // Update createdFrom if this course isn't already listed
+        if (conceptData.createdFrom && conceptData.createdFrom.length > 0) {
+          const newCourseId = conceptData.createdFrom[0];
+          if (!existingConcept.createdFrom.includes(newCourseId)) {
+            existingConcept.createdFrom.push(newCourseId);
+            existingConcept.lastUpdated = new Date();
+            await existingConcept.save();
+          }
+        }
+
+        // Ensure progress is initialized
+        try {
+          await SRSCalculator.initializeConceptProgress(existingConcept.id, "default");
+        } catch (progressError) {
+          // Progress might already exist, which is fine
+        }
+
+        return existingConcept.toObject();
+      }
+
+      // Create new concept if not found
+      return await this.createConcept(conceptData, true);
+    } catch (error) {
+      console.error(`Error in createOrFindConcept for "${conceptData.name}":`, error);
+      throw error;
     }
   }
 
@@ -251,7 +331,7 @@ export class ConceptManager {
   }
 
   /**
-   * Link a concept to a course
+   * Link a concept to a course with enhanced error handling
    * @param conceptId ID of the concept
    * @param courseId ID of the course
    * @param confidence Confidence score for the link
@@ -268,6 +348,14 @@ export class ConceptManager {
       if (!conceptId || !courseId) {
         throw new ConceptValidationError(
           "Missing required fields: conceptId or courseId"
+        );
+      }
+
+      // Verify concept exists
+      const concept = await this.getConcept(conceptId);
+      if (!concept) {
+        throw new ConceptValidationError(
+          `Concept with ID ${conceptId} not found`
         );
       }
 
@@ -293,6 +381,7 @@ export class ConceptManager {
             },
           }
         );
+        console.log(`Updated link between concept ${conceptId} and course ${courseId}`);
       } else {
         // Create new link
         const courseConceptData: ICourseConcept = {
@@ -306,6 +395,7 @@ export class ConceptManager {
 
         const courseConcept = new CourseConcept(courseConceptData);
         await courseConcept.save();
+        console.log(`Created new link between concept ${conceptId} and course ${courseId}`);
       }
     } catch (error) {
       if (error instanceof ConceptValidationError) {
@@ -419,6 +509,7 @@ export class ConceptManager {
       const exactMatch = await Concept.findOne({
         name: new RegExp(`^${name.trim()}$`, "i"), // Case-insensitive exact match
         category,
+        isActive: true
       });
 
       if (exactMatch) {
@@ -436,6 +527,7 @@ export class ConceptManager {
           "i"
         ),
         category,
+        isActive: true
       });
 
       // If we find more than 3 words in common with an existing concept, consider it a duplicate

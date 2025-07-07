@@ -1,3 +1,9 @@
+// lib/enum.ts (Updated with PracticeMode)
+/**
+ * Comprehensive enum definitions for the Polish learning application
+ * Includes both existing and new concept-based learning enums
+ */
+
 export enum QuestionType {
   CLOZE_GAP = "cloze_gap",
   MULTIPLE_CHOICE = "multiple_choice",
@@ -28,17 +34,34 @@ export enum QuestionLevel {
   C2 = "C2",
 }
 
+/**
+ * Concept categories for organizing learning content
+ * Grammar: sentence structures, verb conjugations, cases, etc.
+ * Vocabulary: word groups, expressions, idioms, themes
+ */
 export enum ConceptCategory {
   GRAMMAR = "grammar",
   VOCABULARY = "vocabulary",
 }
 
+/**
+ * Practice modes for different learning approaches
+ * Normal: Smart concept selection based on SRS
+ * Previous: Review previously asked questions
+ * Drill: Focus on previously failed questions
+ */
 export enum PracticeMode {
   NORMAL = "normal",
-  PREVIOUS = "previous",
+  PREVIOUS = "previous", 
   DRILL = "drill",
 }
 
+/**
+ * Concept extraction workflow status
+ * Pending: Course added but concepts not extracted
+ * Completed: LLM extraction finished, awaiting human review
+ * Reviewed: Human review completed, concepts added to DB
+ */
 export enum ConceptExtractionStatus {
   PENDING = "pending",
   COMPLETED = "completed",
