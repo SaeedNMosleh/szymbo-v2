@@ -2,9 +2,12 @@
 
 import Groq from "groq-sdk";
 import { polishDay, polishMonth } from "@/data/polishDayMonth";
+import dotenv from "dotenv";
+
+dotenv.config(); // Load environment variables from .env file
 
 const groq = new Groq({
-  apiKey: "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",
+  apiKey: process.env.GROK_API_KEY, // Use the API key from environment variables
 });
 
 export async function validateDate(

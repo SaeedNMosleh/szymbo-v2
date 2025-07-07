@@ -34,6 +34,9 @@ export interface IPracticeSession {
   completedAt: Date;
   questionAnswers: IQuestionAnswer[];
   metrics: IMetrics;
+  
+  // NEW: Concept integration for backwards compatibility
+  conceptIds?: string[]; // concepts practiced in this session
 }
 
 const PracticeSessionSchema = new Schema<IPracticeSession>(
@@ -62,6 +65,9 @@ const PracticeSessionSchema = new Schema<IPracticeSession>(
       accuracy: Number,
       avgResponseTime: Number,
     },
+    
+    // NEW: Concept integration
+    conceptIds: { type: [String], default: [], ref: "Concept" },
   },
   {
     timestamps: true,
