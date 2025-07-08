@@ -1,10 +1,11 @@
 // app/concept-review/page.tsx
 "use client";
 
+import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { ConceptReview } from "@/components/Features/conceptReview/ConceptReview";
 
-const ConceptReviewPage = () => {
+const ConceptReviewContent = () => {
   const searchParams = useSearchParams();
   const courseIdParam = searchParams.get("courseId");
   const courseId = courseIdParam ? parseInt(courseIdParam) : 1; // Default to 1 if no courseId
@@ -18,6 +19,15 @@ const ConceptReviewPage = () => {
   };
 
   return (
+    <ConceptReview
+      courseId={courseId}
+      onReviewComplete={handleReviewComplete}
+    />
+  );
+};
+
+const ConceptReviewPage = () => {
+  return (
     <main className="container mx-auto py-8">
       <div className="mb-8">
         <h1 className="mb-4 text-center text-3xl font-bold">
@@ -30,10 +40,9 @@ const ConceptReviewPage = () => {
         </p>
       </div>
 
-      <ConceptReview
-        courseId={courseId}
-        onReviewComplete={handleReviewComplete}
-      />
+      <Suspense fallback={<div>Loading...</div>}>
+        <ConceptReviewContent />
+      </Suspense>
     </main>
   );
 };

@@ -43,7 +43,6 @@ const QuestionBankSchema = new Schema<IQuestionBank>(
     targetConcepts: {
       type: [String],
       required: true,
-      index: true,
       ref: "Concept",
     },
     difficulty: {

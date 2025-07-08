@@ -1,19 +1,21 @@
 import type { Metadata } from "next";
 
-// Importing with a renamed variable to fix linting issues
-import { Geist, Geist_Mono as GeistMonoFont } from "next/font/google";
+// Using Inter and Roboto Mono which are available in Google Fonts
+import { Inter, Roboto_Mono as RobotoMono } from "next/font/google";
 import "./globals.css";
 
 import React from "react";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
+  weight: ["100", "200", "300", "400", "500", "600", "700", "800", "900"],
 });
 
-const geistMono = GeistMonoFont({
-  variable: "--font-geist-mono",
+const robotoMono = RobotoMono({
+  variable: "--font-roboto-mono",
   subsets: ["latin"],
+  weight: ["100", "200", "300", "400", "500", "600", "700"],
 });
 
 export const metadata: Metadata = {
@@ -27,12 +29,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
-        {children}
-      </body>
+    <html lang="en" className={`${inter.variable} ${robotoMono.variable}`}>
+      <body className="antialiased">{children}</body>
     </html>
   );
 }
