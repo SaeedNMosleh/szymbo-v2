@@ -7,8 +7,6 @@ import { Input } from "@/components/ui/input";
 // import { validateAnswer } from "@/lib/LLMCheckTime/actionsOpenAI";
 import { validateAnswer } from "@/lib/LLMCheckTime/actionsOpenAI-JSON";
 
-import { FaPlusCircle } from "react-icons/fa";
-
 export default function PolishTimeQuiz() {
   const [time, setTime] = useState("");
   const [userAnswer, setUserAnswer] = useState("");
@@ -40,41 +38,6 @@ export default function PolishTimeQuiz() {
     setUserAnswer("");
     setResult(null);
   };
-
-  // Add question and answer to the JSON file
-  const handleAddToDB = async () => {
-    const newEntry = {
-      question: `Write this time in Polish:`,
-      time,
-      answer: {
-        formal: result?.correctForm.formal || "",
-        informal: result?.correctForm.informal || "",
-        comment: result?.comment || "",
-      },
-    };
-
-    try {
-      const response = await fetch("/api/addTimeQuestion", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(newEntry),
-      });
-  
-      if (!response.ok) {
-        const message = `Error: ${response.status}`;
-        throw new Error(message);
-      }
-  
-      const data = await response.json();
-      console.log("Success:", data);
-      // Further actions after successful DB addition
-    } catch (error) {
-      console.error("Error adding to DB:", error);
-      // Handle errors appropriately, e.g., display an error message to the user.
-    }
-  }
 
   useEffect(() => {
     setTime(getCurrentTime());
@@ -150,11 +113,6 @@ export default function PolishTimeQuiz() {
           </p>
         </div>
       )}
-      <FaPlusCircle
-        className="mt-5 cursor-pointer text-blue-600"
-        size={20}
-        onClick={handleAddToDB}
-      />
     </div>
   );
 }

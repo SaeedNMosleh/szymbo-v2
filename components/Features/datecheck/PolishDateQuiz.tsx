@@ -7,7 +7,6 @@ import { Input } from "@/components/ui/input";
 import { validateDate } from "@/lib/LLMCheckDate/validateDatesOpenAI";
 import importantDates from "@/data/importantDates.json"; // Import JSON file
 
-import { FaPlusCircle } from "react-icons/fa";
 import { polishDay, polishMonth } from "@/data/polishDayMonth";
 
 interface DateQuestion {
@@ -55,48 +54,6 @@ export default function PolishDateQuiz() {
     setUserMonth("");
     setUserYear("");
     setResult(null);
-  };
-
-  // Add question and answer to the JSON file
-  const handleAddToDB = async () => {
-    const date = currentQuestion?.date;
-    if (!date) return; // Guard clause to exit if date is undefined
-
-    const [day, month] = date.split("/");
-    const correctDay = polishDay[parseInt(day) - 1];
-    const correctMonth = polishMonth[parseInt(month) - 1];
-    const newEntry = {
-      question: currentQuestion?.question || "",
-      date: currentQuestion?.date || "",
-      answer: {
-        day: correctDay,
-        month: correctMonth,
-        year: currentQuestion?.year || "",
-        comment: result?.comment || "",
-      },
-    };
-
-    try {
-      const response = await fetch("/api/addDateQuestion", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(newEntry),
-      });
-
-      if (!response.ok) {
-        const message = `Error: ${response.status}`;
-        throw new Error(message);
-      }
-
-      const data = await response.json();
-      console.log("Success:", data);
-      // Further actions after successful DB addition
-    } catch (error) {
-      console.error("Error adding to DB:", error);
-      // Handle errors appropriately, e.g., display an error message to the user.
-    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -200,11 +157,6 @@ export default function PolishDateQuiz() {
           </p>
         </div>
       )}
-      <FaPlusCircle
-        className="mt-5 cursor-pointer text-blue-600"
-        size={20}
-        onClick={handleAddToDB}
-      />
     </div>
   );
 }
