@@ -10,11 +10,13 @@ const sessionRequestSchema = z.object({
     PracticeMode.NORMAL,
     PracticeMode.PREVIOUS,
     PracticeMode.DRILL,
+    PracticeMode.COURSE,
   ]),
   userId: z.string().optional().default("default"),
   maxQuestions: z.number().optional().default(10),
   maxConcepts: z.number().optional().default(5),
   targetConceptIds: z.array(z.string()).optional(),
+  courseId: z.number().optional(),
 });
 
 // POST /api/practice-new/session - Start new practice session
@@ -23,7 +25,7 @@ export async function POST(request: NextRequest) {
     await connectToDatabase();
     const body = await request.json();
 
-    const { mode, userId, maxQuestions, maxConcepts, targetConceptIds } =
+    const { mode, userId, maxQuestions, maxConcepts, targetConceptIds, courseId } =
       sessionRequestSchema.parse(body);
 
     console.log(
@@ -42,6 +44,27 @@ export async function POST(request: NextRequest) {
       conceptIds = targetConceptIds.slice(0, maxConcepts);
       rationale = "Manually selected concepts";
       console.log(`Using manually selected concepts: ${conceptIds.join(", ")}`);
+    } else if (mode === PracticeMode.COURSE) {
+      // Course-based concept selection
+      if (!courseId) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Course ID is required for course-based practice",
+          },
+          { status: 400 }
+        );
+      }
+      
+      const selection = await practiceEngine.selectConceptsFromCourse(
+        courseId,
+        maxConcepts
+      );
+      conceptIds = selection.concepts.map((c) => c.id);
+      rationale = selection.rationale;
+      console.log(
+        `Course selection result: ${conceptIds.length} concepts selected from course ${courseId}`
+      );
     } else {
       // Smart concept selection
       const selection = await practiceEngine.selectPracticeConceptsForUser(
@@ -94,6 +117,15 @@ export async function POST(request: NextRequest) {
             "Add some Polish language courses through the 'Add Course' feature",
             "Extract concepts from your courses using the concept extraction system",
             "Ensure your courses have sufficient content (notes, practice text, keywords)"
+          ];
+          break;
+        case PracticeMode.COURSE:
+          errorMessage = `No concepts or questions available for the selected course.`;
+          suggestions = [
+            "Ensure concepts have been extracted from this course",
+            "Try the concept extraction system to process course content",
+            "Add more content to the course (notes, practice text, keywords)",
+            "Switch to 'Smart Practice' mode to practice other concepts"
           ];
           break;
       }

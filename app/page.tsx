@@ -29,12 +29,7 @@ const Home = () => {
                   className="bg-blue-600 text-white hover:bg-blue-700"
                   size="sm"
                 >
-                  Smart Practice
-                </Button>
-              </Link>
-              <Link href="/practice">
-                <Button variant="ghost" size="sm" className="text-gray-500">
-                  Practice (Old)
+                  Practice
                 </Button>
               </Link>
             </div>
@@ -58,7 +53,7 @@ const Home = () => {
                 className="bg-white text-blue-600 hover:bg-gray-100"
                 size="lg"
               >
-                Start Smart Practice
+                Start Practice
               </Button>
             </Link>
             <Link href="/course">

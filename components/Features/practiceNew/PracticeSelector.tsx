@@ -15,6 +15,7 @@ import {
   Brain,
   RotateCcw,
   Target,
+  BookOpen,
   Info,
   CheckCircle,
   AlertTriangle,
@@ -36,6 +37,7 @@ interface SystemStats {
   questionBankSize: number;
   dueConcepts: number;
   previouslyUsedQuestions: number;
+  totalCourses: number;
 }
 
 export function PracticeSelector({
@@ -49,6 +51,7 @@ export function PracticeSelector({
     [PracticeMode.NORMAL]: { available: true, fallbackAvailable: true },
     [PracticeMode.PREVIOUS]: { available: true, fallbackAvailable: true },
     [PracticeMode.DRILL]: { available: true, fallbackAvailable: true },
+    [PracticeMode.COURSE]: { available: true, fallbackAvailable: true },
   });
 
   useEffect(() => {
@@ -67,6 +70,10 @@ export function PracticeSelector({
       const questionsResponse = await fetch("/api/questions?stats=true");
       const questionsResult = await questionsResponse.json();
 
+      // Get course info
+      const coursesResponse = await fetch("/api/courses");
+      const coursesResult = await coursesResponse.json();
+
       if (statsResult.success && questionsResult.success) {
         const stats: SystemStats = {
           totalConcepts: statsResult.data.totalConcepts || 0,
@@ -75,6 +82,7 @@ export function PracticeSelector({
             (statsResult.data.dueConcepts || 0) +
             (statsResult.data.overdueConcepts || 0),
           previouslyUsedQuestions: questionsResult.data.questionsUsed || 0,
+          totalCourses: coursesResult.length || 0,
         };
 
         setSystemStats(stats);
@@ -102,6 +110,14 @@ export function PracticeSelector({
             reason:
               stats.previouslyUsedQuestions <= 2
                 ? "Need more practice history for drilling."
+                : undefined,
+            fallbackAvailable: stats.questionBankSize > 0,
+          },
+          [PracticeMode.COURSE]: {
+            available: stats.totalCourses > 0,
+            reason:
+              stats.totalCourses === 0
+                ? "No courses available. Add courses first."
                 : undefined,
             fallbackAvailable: stats.questionBankSize > 0,
           },
@@ -162,6 +178,22 @@ export function PracticeSelector({
       fallbackInfo:
         "Falls back to all questions if insufficient performance data",
     },
+    {
+      mode: PracticeMode.COURSE,
+      title: "Course Practice",
+      description: "Practice concepts from a specific course you've added",
+      icon: <BookOpen className="size-8 text-purple-600" />,
+      color: "border-purple-200 hover:border-purple-300 bg-purple-50",
+      buttonColor: "bg-purple-600 hover:bg-purple-700",
+      features: [
+        "Select specific course",
+        "Practice course concepts",
+        "Familiar course context",
+        "Targeted learning",
+      ],
+      fallbackInfo:
+        "Falls back to available questions if course has no concepts",
+    },
   ];
 
   const getStatusIcon = (mode: PracticeMode) => {
@@ -203,7 +235,7 @@ export function PracticeSelector({
       {systemStats && (
         <Card className="bg-gray-50">
           <CardContent className="pt-6">
-            <div className="grid grid-cols-2 gap-4 text-center md:grid-cols-4">
+            <div className="grid grid-cols-2 gap-4 text-center md:grid-cols-5">
               <div>
                 <div className="text-2xl font-bold text-blue-600">
                   {systemStats.totalConcepts}
@@ -228,13 +260,19 @@ export function PracticeSelector({
                 </div>
                 <div className="text-sm text-gray-600">Used</div>
               </div>
+              <div>
+                <div className="text-2xl font-bold text-indigo-600">
+                  {systemStats.totalCourses}
+                </div>
+                <div className="text-sm text-gray-600">Courses</div>
+              </div>
             </div>
           </CardContent>
         </Card>
       )}
 
       {/* Practice Mode Grid */}
-      <div className="mx-auto grid max-w-6xl grid-cols-1 gap-6 md:grid-cols-3">
+      <div className="mx-auto grid max-w-7xl grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
         {practiceOptions.map((option) => {
           const availability = modeAvailability[option.mode];
           const isDisabled =
@@ -341,10 +379,6 @@ export function PracticeSelector({
                 className="underline hover:no-underline"
               >
                 Review Concepts
-              </a>
-              {" • "}
-              <a href="/practice" className="underline hover:no-underline">
-                Legacy Practice
               </a>
             </div>
           </div>

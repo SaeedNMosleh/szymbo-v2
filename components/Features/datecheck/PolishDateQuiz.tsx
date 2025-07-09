@@ -7,7 +7,6 @@ import { Input } from "@/components/ui/input";
 import { validateDate } from "@/lib/LLMCheckDate/validateDatesOpenAI";
 import importantDates from "@/data/importantDates.json"; // Import JSON file
 
-import { polishDay, polishMonth } from "@/data/polishDayMonth";
 
 interface DateQuestion {
   question: string;

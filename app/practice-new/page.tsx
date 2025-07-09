@@ -1,12 +1,19 @@
 // app/practice-new/page.tsx
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { PracticeSelector } from "@/components/Features/practiceNew/PracticeSelector";
 import { PracticeSession } from "@/components/Features/practiceNew/PracticeSession";
 import { PracticeStats } from "@/components/Features/practiceNew/PracticeStats";
-import { PracticeMode, QuestionType, QuestionLevel } from "@/lib/enum";
+import {
+  PracticeMode,
+  QuestionType,
+  QuestionLevel,
+  CourseType,
+} from "@/lib/enum";
+import { ArrowLeft } from "lucide-react";
 
 // Interface definitions matching what's expected in PracticeSession
 interface Question {
@@ -33,28 +40,184 @@ interface SessionData {
   };
 }
 
+interface Course {
+  courseId: number;
+  date: string;
+  courseType: CourseType;
+  notes: string;
+  keywords: string[];
+  extractedConcepts?: string[];
+}
+
+function CourseSelector({
+  onCourseSelect,
+  onBack,
+  isLoading,
+}: {
+  onCourseSelect: (courseId: number) => void;
+  onBack: () => void;
+  isLoading: boolean;
+}) {
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchCourses();
+  }, []);
+
+  const fetchCourses = async () => {
+    try {
+      const response = await fetch("/api/courses");
+      if (!response.ok) {
+        throw new Error("Failed to fetch courses");
+      }
+      const data = await response.json();
+      setCourses(
+        data.sort(
+          (a: Course, b: Course) =>
+            new Date(b.date).getTime() - new Date(a.date).getTime()
+        )
+      );
+    } catch {
+      setError("Failed to load courses");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <Card>
+        <CardContent className="pt-6">
+          <div className="text-center">
+            <div className="mx-auto mb-4 size-8 animate-spin rounded-full border-b-2 border-blue-600"></div>
+            <p>Loading courses...</p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card>
+        <CardContent className="pt-6">
+          <div className="text-center text-red-600">
+            <p>{error}</p>
+            <Button onClick={onBack} className="mt-4">
+              Back to Practice Modes
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardContent className="pt-6">
+        <div className="mb-6 flex items-center justify-between">
+          <Button variant="ghost" onClick={onBack} disabled={isLoading}>
+            <ArrowLeft className="mr-2 size-4" />
+            Back to Practice Modes
+          </Button>
+          <h2 className="text-xl font-semibold">Select Course to Practice</h2>
+        </div>
+
+        {courses.length === 0 ? (
+          <div className="text-center">
+            <p className="mb-4 text-gray-600">No courses available</p>
+            <Button onClick={onBack}>Back to Practice Modes</Button>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {courses.map((course) => (
+              <div
+                key={course.courseId}
+                className="cursor-pointer rounded-lg border p-4 hover:bg-gray-50"
+                onClick={() => onCourseSelect(course.courseId)}
+              >
+                <div className="flex items-start justify-between">
+                  <div>
+                    <h3 className="font-medium">
+                      {course.courseType} -{" "}
+                      {new Date(course.date).toLocaleDateString()}
+                    </h3>
+                    <p className="mt-1 text-sm text-gray-600">
+                      {course.notes.substring(0, 100)}...
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {course.keywords.slice(0, 3).map((keyword, idx) => (
+                        <span
+                          key={idx}
+                          className="rounded bg-blue-100 px-2 py-1 text-xs text-blue-800"
+                        >
+                          {keyword}
+                        </span>
+                      ))}
+                      {course.keywords.length > 3 && (
+                        <span className="rounded bg-gray-100 px-2 py-1 text-xs text-gray-600">
+                          +{course.keywords.length - 3} more
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-sm text-gray-500">
+                      Course ID: {course.courseId}
+                    </div>
+                    {course.extractedConcepts && (
+                      <div className="mt-1 text-xs text-green-600">
+                        {course.extractedConcepts.length} concepts
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function PracticeNewPage() {
   const [selectedMode, setSelectedMode] = useState<PracticeMode | null>(null);
   const [sessionData, setSessionData] = useState<SessionData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleModeSelect = async (mode: PracticeMode) => {
+  const handleModeSelect = async (mode: PracticeMode, courseId?: number) => {
+    // For course mode, if no courseId provided, just set the mode for course selection
+    if (mode === PracticeMode.COURSE && !courseId) {
+      setSelectedMode(mode);
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
 
     try {
+      // Use a mutable object type for requestBody
+      const requestBody: Record<string, unknown> = {
+        mode,
+        userId: "default",
+        maxQuestions: 10,
+        maxConcepts: 5,
+      };
+
+      if (mode === PracticeMode.COURSE && courseId) {
+        requestBody.courseId = courseId;
+      }
+
       const response = await fetch("/api/practice-new/session", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          mode,
-          userId: "default",
-          maxQuestions: 10,
-          maxConcepts: 5,
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       const result = await response.json();
@@ -66,9 +229,9 @@ export default function PracticeNewPage() {
 
       setSelectedMode(mode);
       setSessionData(result.data);
-    } catch (err) {
+    } catch {
       setError("Failed to connect to server");
-      console.error("Error starting practice session:", err);
+      console.error("Error starting practice session");
     } finally {
       setIsLoading(false);
     }
@@ -120,6 +283,16 @@ export default function PracticeNewPage() {
             isLoading={isLoading}
           />
         </>
+      )}
+
+      {selectedMode === PracticeMode.COURSE && !sessionData && !isLoading && (
+        <CourseSelector
+          onCourseSelect={(courseId) =>
+            handleModeSelect(PracticeMode.COURSE, courseId)
+          }
+          onBack={handleBackToModes}
+          isLoading={isLoading}
+        />
       )}
 
       {isLoading && (

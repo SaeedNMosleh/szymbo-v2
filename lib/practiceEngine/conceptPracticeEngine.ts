@@ -217,6 +217,76 @@ export class ConceptPracticeEngine {
   }
 
   /**
+   * Select concepts from a specific course for practice
+   */
+  async selectConceptsFromCourse(
+    courseId: number,
+    maxConcepts: number = 5
+  ): Promise<ConceptSelection> {
+    try {
+      console.log(
+        `📖 Selecting concepts from course: ${courseId}, max: ${maxConcepts}`
+      );
+
+      // Import CourseConcept model
+      const { default: CourseConcept } = await import("@/datamodels/courseConcept.model");
+
+      // Get course-concept mappings
+      const courseConceptMappings = await CourseConcept.find({
+        courseId,
+        isActive: true,
+      })
+        .sort({ confidence: -1 }) // Sort by extraction confidence
+        .limit(maxConcepts);
+
+      if (courseConceptMappings.length === 0) {
+        console.log(`No concepts found for course ${courseId}`);
+        return {
+          concepts: [],
+          rationale: `No concepts have been extracted from course ${courseId} yet`,
+          priorities: new Map(),
+        };
+      }
+
+      const conceptIds = courseConceptMappings.map(cc => cc.conceptId);
+
+      // Get full concept details
+      const concepts = await Concept.find({
+        id: { $in: conceptIds },
+        isActive: true,
+      });
+
+      // Create priorities based on extraction confidence
+      const priorities = new Map<string, number>();
+      courseConceptMappings.forEach(cc => {
+        priorities.set(cc.conceptId, cc.confidence);
+      });
+
+      // Get course info for rationale
+      const { default: Course } = await import("@/datamodels/course.model");
+      const course = await Course.findOne({ courseId });
+      const courseName = course ? `${course.courseType} course from ${course.date.toLocaleDateString()}` : `Course ${courseId}`;
+
+      const rationale = `Practice session focused on concepts from ${courseName}`;
+
+      console.log(`✅ Selected ${concepts.length} concepts from course ${courseId}`);
+
+      return {
+        concepts,
+        rationale,
+        priorities,
+      };
+    } catch (error) {
+      console.error(`❌ Error selecting concepts from course ${courseId}:`, error);
+      return {
+        concepts: [],
+        rationale: `Error loading concepts from course ${courseId}`,
+        priorities: new Map(),
+      };
+    }
+  }
+
+  /**
    * Initialize practice for new users with basic concepts
    */
   private async initializeNewUserPractice(
