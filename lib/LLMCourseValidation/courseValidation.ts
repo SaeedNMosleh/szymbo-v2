@@ -1,14 +1,20 @@
 "use server"
 
-import OpenAI from "openai"
+import { OpenAIService } from "@/lib/services/llm/openAIService"
 import { z } from "zod"
 import { connectToDatabase } from "@/lib/dbConnect"
 import Course from "@/datamodels/course.model"
+import { LLMServiceError } from "@/lib/utils/errors"
+import { logger } from "@/lib/utils/logger"
 
-
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+const llmService = new OpenAIService({
+  apiKey: process.env.OPENAI_API_KEY!,
+  model: "gpt-4o",
+  temperature: 0.3,
+  maxTokens: 1500,
+  timeout: 30000,
+  maxRetries: 3,
+  retryDelay: 1000,
 })
 
 const courseSchema = z.object({
@@ -34,95 +40,75 @@ export async function validateAndSaveCourse(data: z.infer<typeof courseSchema>, 
     // Validate data with Zod
     courseSchema.parse(data)
 
-    const prompt = `Please review this course information and suggest any improvements or corrections in terms of typo, grammar issues or any suggestion to clarify. There is no need for exaplanation , you must only return the revised version in JSON format. Please keep the original contetnt of key if there is no suggestion for that key or if the input ar empty.
-    The User inputs for course information: 
-            ${JSON.stringify(data, null, 2)}`;
-    console.log("Prompt:", prompt)
+    logger.info("Starting course validation and save process", {
+      operation: "validate_and_save_course",
+      courseId: data.courseId,
+      finalSubmission,
+    })
 
     if (!finalSubmission) {
       // LLM validation
-      const completion = await openai.chat.completions.create({
-        model: "gpt-4o",
-        messages: [
-          {
-            role: "system",
-            content:
-              "You are an AI assistant that helps validate and improve course information. Provide suggestions in a structured JSON format.",
-          },
-          {
-            role: "user",
-            content: prompt,
-          },
-        ],
-        response_format: {
-          type: "json_schema",
-          json_schema: {
-            name: "validation_feedback",
-            schema: {
-              type: "object",
-              properties: {
-                sessionNumber: {
-                  type: "number",
-                  description: "Indicates whether the input was correct.",
-                },
-                date: {
-                  type: "string",
-                  description: "The input is valid input for the date.",
-                },
-                keywords: {
-                  type: "string",
-                  description: "The input is valid input for the keywords.",
-                },
-                mainSubjects: {
-                  type: "string",
-                  description: "The input is valid input for the main subjects.",
-                },
-                courseType: {
-                  type: "string",
-                  description: "The input is valid input for the course type.",
-                },
-                newSubjects: {
-                  type: "string",
-                  description: "The input is valid input for the new subjects.",
-                },
-                reviewSubjects: {
-                  type: "string",
-                  description: "The input is valid input for the review subjects.",
-                },
-                weaknesses: {
-                  type: "string",
-                  description: "The input is valid input for the weaknesses.",
-                },
-                strengths: {
-                  type: "string",
-                  description: "The input is valid input for the strengths.",
-                },
-                notes: {
-                  type: "string",
-                  description: "The input is valid input for the notes.",
-                },
-                practice: {
-                  type: "string",
-                  description: "The input is valid input for the practice.",
-                },
-                homework: {
-                  type: "string",
-                  description: "The input is valid input for the homework.",
-                },
-              },
-              required: ["courseId", "date", "keywords", "courseType", "notes", "practice", "homework", "mainSubjects", "newSubjects", "reviewSubjects", "weaknesses", "strengths"],
-              additionalProperties: false,        
-            strict: true,
-          },
-        },
-      },
-      })
+      const prompt = `Please review this course information and suggest any improvements or corrections in terms of typo, grammar issues or any suggestion to clarify. There is no need for explanation, you must only return the revised version in JSON format. Please keep the original content of key if there is no suggestion for that key or if the input is empty.
+      
+      The User inputs for course information: 
+      ${JSON.stringify(data, null, 2)}
+      
+      Return the improved version with the same structure, fixing any typos, grammar issues, and providing clearer language where needed.`;
 
-      console.log("Completion:",completion.choices[0]?.message?.content);
-      const suggestions = JSON.parse(completion.choices[0]?.message?.content || "{}")
+      const systemPrompt = "You are an AI assistant that helps validate and improve course information. Provide suggestions in a structured JSON format with the same structure as the input.";
 
-      if (Object.keys(suggestions).length > 0) {
-        return { success: false, suggestions }
+      try {
+        logger.info("Requesting LLM validation for course", {
+          operation: "llm_course_validation",
+          courseId: data.courseId,
+        })
+
+        const response = await llmService.generateResponse(
+          {
+            prompt,
+            systemPrompt,
+          },
+          (rawResponse: string) => {
+            try {
+              return JSON.parse(rawResponse);
+            } catch (error) {
+              logger.warn("Failed to parse LLM response", {
+                error: error instanceof Error ? error.message : 'Unknown error',
+                response: rawResponse.substring(0, 200),
+              });
+              throw new LLMServiceError("Failed to parse LLM response as JSON");
+            }
+          }
+        );
+
+        if (!response.success) {
+          logger.warn("LLM validation failed, proceeding without validation", {
+            operation: "llm_course_validation",
+            error: response.error,
+          });
+          // Continue without validation rather than failing
+        } else {
+          const suggestions = response.data as Record<string, unknown>;
+          logger.info("LLM validation completed", {
+            operation: "llm_course_validation",
+            suggestionsCount: Object.keys(suggestions).length,
+            duration: response.metadata?.duration,
+          });
+
+          // Check if there are meaningful suggestions (not just echoing back the same data)
+          const hasRealSuggestions = Object.keys(suggestions).some(key => {
+            const original = data[key as keyof typeof data];
+            const suggested = suggestions[key];
+            return original !== suggested && suggested !== null && suggested !== undefined;
+          });
+
+          if (hasRealSuggestions) {
+            return { success: false, suggestions };
+          }
+        }
+      } catch (error) {
+        logger.error("LLM validation error, proceeding without validation", error as Error);
+        // Continue without validation rather than failing the entire operation
       }
     }
 
@@ -133,9 +119,26 @@ export async function validateAndSaveCourse(data: z.infer<typeof courseSchema>, 
     const course = new Course(data)
     await course.save()
 
+    logger.success("Course saved successfully", {
+      operation: "save_course",
+      courseId: data.courseId,
+    })
+
     return { success: true }
   } catch (error) {
-    console.error("Error in validateAndSaveCourse:", error)
-    return { success: false, error: "Failed to validate and save course" }
+    logger.error("Error in validateAndSaveCourse", error as Error);
+    
+    if (error instanceof z.ZodError) {
+      return { 
+        success: false, 
+        error: "Validation failed", 
+        details: error.errors 
+      };
+    }
+    
+    return { 
+      success: false, 
+      error: "Failed to validate and save course" 
+    };
   }
 }

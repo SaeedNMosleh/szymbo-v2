@@ -30,10 +30,18 @@ const Course = () => {
   const fetchCourses = async () => {
     try {
       const response = await fetch("/api/courses");
-      const data = await response.json();
-      setCourses(data);
+      const result = await response.json();
+      
+      // Handle the new standardized API response format
+      if (result.success && result.data) {
+        setCourses(result.data);
+      } else {
+        console.error("Error fetching courses:", result.error || "Unknown error");
+        setCourses([]);
+      }
     } catch (error) {
       console.error("Error fetching courses:", error);
+      setCourses([]);
     } finally {
       setIsLoading(false);
     }

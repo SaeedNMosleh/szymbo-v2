@@ -92,9 +92,3 @@ export class ConceptValidationError extends Error {
   }
 }
 
-export class LLMServiceError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "LLMServiceError";
-  }
-}

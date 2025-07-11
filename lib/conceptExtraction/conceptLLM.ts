@@ -1,26 +1,28 @@
-import OpenAI from "openai";
-import dotenv from "dotenv";
-import { ExtractedConcept, SimilarityMatch, LLMServiceError } from "./types";
+import { OpenAIService } from "@/lib/services/llm/openAIService";
+import { LLMServiceError } from "@/lib/utils/errors";
+import { logger } from "@/lib/utils/logger";
+import { ExtractedConcept, SimilarityMatch } from "./types";
 import { ConceptCategory, QuestionLevel } from "@/lib/enum";
 import { IConceptIndex } from "@/datamodels/conceptIndex.model";
-
-dotenv.config();
 
 /**
  * Service responsible for LLM interactions for concept extraction and similarity checking
  */
 export class ConceptLLMService {
-  private openai: OpenAI;
-  private retryLimit: number = 3;
-  private retryDelay: number = 1000; // milliseconds
-  private timeoutDuration: number = 30000; // 30 seconds
+  private llmService: OpenAIService;
 
   /**
-   * Initialize OpenAI client using environment variables
+   * Initialize LLM service using the centralized abstraction
    */
   constructor() {
-    this.openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
+    this.llmService = new OpenAIService({
+      apiKey: process.env.OPENAI_API_KEY!,
+      model: "gpt-4o",
+      temperature: 0.3,
+      maxTokens: 2000,
+      timeout: 30000,
+      maxRetries: 3,
+      retryDelay: 1000,
     });
   }
 
@@ -37,9 +39,33 @@ export class ConceptLLMService {
     homework?: string;
   }): Promise<ExtractedConcept[]> {
     const prompt = this.buildExtractionPrompt(courseContent);
+    const systemPrompt = "You are a Polish language learning assistant specializing in extracting and organizing language concepts from learning materials.";
 
     try {
-      const result = await this.makeOpenAIRequest(prompt, "concept_extraction");
+      logger.info("Starting concept extraction from course content", {
+        operation: "concept_extraction",
+        keywordCount: courseContent.keywords.length,
+        notesLength: courseContent.notes.length,
+        practiceLength: courseContent.practice.length,
+        newWordsCount: courseContent.newWords.length,
+        hasHomework: !!courseContent.homework,
+      });
+
+      const response = await this.llmService.generateResponse(
+        {
+          prompt,
+          systemPrompt,
+        },
+        (rawResponse: string) => this.parseJsonResponse(rawResponse)
+      );
+
+      if (!response.success || !response.data) {
+        throw new LLMServiceError(
+          `Concept extraction failed: ${response.error || "Unknown error"}`
+        );
+      }
+
+      const result = response.data as { concepts: unknown[] };
 
       // Parse and validate the response
       if (!result || !Array.isArray(result.concepts)) {
@@ -71,8 +97,16 @@ export class ConceptLLMService {
         })
       );
 
+      logger.success("Concept extraction completed successfully", {
+        operation: "concept_extraction",
+        conceptCount: concepts.length,
+        duration: response.metadata?.duration,
+      });
+
       return concepts;
     } catch (error) {
+      logger.error("Concept extraction failed", error as Error);
+      
       if (error instanceof LLMServiceError) {
         throw error;
       }
@@ -101,9 +135,30 @@ export class ConceptLLMService {
       extractedConcept,
       existingConcepts
     );
+    const systemPrompt = "You are tasked with identifying similarity between language concepts for a Polish learning application.";
 
     try {
-      const result = await this.makeOpenAIRequest(prompt, "similarity_check");
+      logger.info("Starting concept similarity check", {
+        operation: "similarity_check",
+        extractedConceptName: extractedConcept.name,
+        existingConceptsCount: existingConcepts.length,
+      });
+
+      const response = await this.llmService.generateResponse(
+        {
+          prompt,
+          systemPrompt,
+        },
+        (rawResponse: string) => this.parseJsonResponse(rawResponse)
+      );
+
+      if (!response.success || !response.data) {
+        throw new LLMServiceError(
+          `Similarity check failed: ${response.error || "Unknown error"}`
+        );
+      }
+
+      const result = response.data as { matches: unknown[] };
 
       // Parse and validate the response
       if (!result || !Array.isArray(result.matches)) {
@@ -130,10 +185,20 @@ export class ConceptLLMService {
       );
 
       // Sort by similarity score descending
-      return matches.sort(
+      const sortedMatches = matches.sort(
         (a: SimilarityMatch, b: SimilarityMatch) => b.similarity - a.similarity
       );
+
+      logger.success("Concept similarity check completed", {
+        operation: "similarity_check",
+        matchesFound: sortedMatches.length,
+        duration: response.metadata?.duration,
+      });
+
+      return sortedMatches;
     } catch (error) {
+      logger.error("Concept similarity check failed", error as Error);
+      
       if (error instanceof LLMServiceError) {
         throw error;
       }
@@ -144,85 +209,27 @@ export class ConceptLLMService {
   }
 
   /**
-   * Make an OpenAI API request with retry logic
-   * @param prompt The prompt to send to the LLM
-   * @param context Context string for error reporting
-   * @returns Parsed JSON response
+   * Parse JSON response from LLM with error handling
+   * @param response Raw response from LLM
+   * @returns Parsed JSON object
    */
-  private async makeOpenAIRequest(
-    prompt: string,
-    context: string
-  ): Promise<Record<string, unknown>> {
-    let attempts = 0;
-    let lastError: Error | null = null;
+  private parseJsonResponse(response: string): Record<string, unknown> {
+    try {
+      // Try to extract JSON from response if it's wrapped in markdown or other text
+      const jsonMatch = response.match(/```(?:json)?\s*(\{[\s\S]*\})\s*```/);
+      const jsonString = jsonMatch ? jsonMatch[1] : response.trim();
 
-    while (attempts < this.retryLimit) {
-      attempts++;
-      try {
-        // Create a promise that will be rejected after the timeout
-        const timeoutPromise = new Promise<never>((_resolve, reject) => {
-          setTimeout(
-            () =>
-              reject(
-                new Error(`Request timed out after ${this.timeoutDuration}ms`)
-              ),
-            this.timeoutDuration
-          );
-        });
+      return JSON.parse(jsonString);
+    } catch (error) {
+      logger.warn("Failed to parse JSON response", {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        response: response.substring(0, 200),
+      });
 
-        // Race the actual request against the timeout
-        const completionPromise = this.openai.chat.completions.create({
-          model: "gpt-4o",
-          messages: [
-            {
-              role: "system",
-              content:
-                "You are a Polish language learning assistant specializing in extracting and organizing language concepts from learning materials.",
-            },
-            {
-              role: "user",
-              content: prompt,
-            },
-          ],
-          temperature: 0.3,
-          max_tokens: 2000,
-          top_p: 0.9,
-          frequency_penalty: 0,
-          presence_penalty: 0,
-          response_format: { type: "json_object" },
-        });
-
-        const completion = await Promise.race([
-          completionPromise,
-          timeoutPromise,
-        ]);
-
-        // Extract and parse the response content
-        const response = completion.choices[0]?.message?.content || "";
-
-        try {
-          return JSON.parse(response);
-        } catch {
-          throw new LLMServiceError(
-            `Failed to parse LLM response as JSON: ${response.substring(0, 100)}...`
-          );
-        }
-      } catch (error) {
-        lastError = error instanceof Error ? error : new Error(String(error));
-
-        // If this is not the last attempt, wait and retry
-        if (attempts < this.retryLimit) {
-          await new Promise((resolve) =>
-            setTimeout(resolve, this.retryDelay * attempts)
-          );
-        }
-      }
+      throw new LLMServiceError(
+        `Failed to parse LLM response as JSON: ${response.substring(0, 100)}...`
+      );
     }
-
-    // If we've exhausted all retries, throw the last error
-    throw new LLMServiceError(
-      `${context} failed after ${attempts} attempts: ${lastError?.message}`
-    );
   }
 
   /**
@@ -428,7 +435,7 @@ export async function safeConceptExtraction<T>(
   try {
     return await operation();
   } catch (error) {
-    console.error(`Concept extraction error in ${errorContext}:`, error);
+    logger.error(`Concept extraction error in ${errorContext}`, error as Error);
     return fallback;
   }
 }

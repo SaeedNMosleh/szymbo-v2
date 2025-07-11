@@ -72,13 +72,19 @@ function CourseSelector({
       if (!response.ok) {
         throw new Error("Failed to fetch courses");
       }
-      const data = await response.json();
-      setCourses(
-        data.sort(
-          (a: Course, b: Course) =>
-            new Date(b.date).getTime() - new Date(a.date).getTime()
-        )
-      );
+      const result = await response.json();
+      
+      // Handle the new standardized API response format
+      if (result.success && result.data) {
+        setCourses(
+          result.data.sort(
+            (a: Course, b: Course) =>
+              new Date(b.date).getTime() - new Date(a.date).getTime()
+          )
+        );
+      } else {
+        setError(result.error || "Failed to load courses");
+      }
     } catch {
       setError("Failed to load courses");
     } finally {

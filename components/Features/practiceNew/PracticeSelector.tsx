@@ -82,7 +82,7 @@ export function PracticeSelector({
             (statsResult.data.dueConcepts || 0) +
             (statsResult.data.overdueConcepts || 0),
           previouslyUsedQuestions: questionsResult.data.questionsUsed || 0,
-          totalCourses: coursesResult.length || 0,
+          totalCourses: (coursesResult.success && coursesResult.data) ? coursesResult.data.length : 0,
         };
 
         setSystemStats(stats);
