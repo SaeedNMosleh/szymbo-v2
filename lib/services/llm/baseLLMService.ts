@@ -280,7 +280,7 @@ export abstract class BaseLLMService {
         maxTokens: 10,
       });
 
-      return response.success && response.data?.toString().toLowerCase().includes('ok');
+      return Boolean(response.success && response.data?.toString().toLowerCase().includes('ok'));
     } catch (error) {
       logger.error('Health check failed', error as Error);
       return false;

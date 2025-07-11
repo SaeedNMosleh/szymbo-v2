@@ -1,9 +1,9 @@
-// app/practice-new/page.tsx
 "use client";
 
 import { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Navigation } from "@/components/ui/navigation";
 import { PracticeSelector } from "@/components/Features/practiceNew/PracticeSelector";
 import { PracticeSession } from "@/components/Features/practiceNew/PracticeSession";
 import { PracticeStats } from "@/components/Features/practiceNew/PracticeStats";
@@ -255,7 +255,9 @@ export default function PracticeNewPage() {
   };
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <>
+      <Navigation />
+      <div className="container mx-auto px-4 py-8">
       <div className="mb-8 text-center">
         <h1 className="mb-2 text-4xl font-bold text-gray-900">
           Polish Practice System
@@ -320,6 +322,7 @@ export default function PracticeNewPage() {
           onBack={handleBackToModes}
         />
       )}
-    </div>
+      </div>
+    </>
   );
 }

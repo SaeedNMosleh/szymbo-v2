@@ -194,7 +194,7 @@ export class ErrorContextBuilder {
   /**
    * Add request context
    */
-  addRequest(method: string, url: string, body?: any): this {
+  addRequest(method: string, url: string, body?: unknown): this {
     this.context.request = { method, url, body };
     return this;
   }
@@ -202,7 +202,7 @@ export class ErrorContextBuilder {
   /**
    * Add database context
    */
-  addDatabase(operation: string, collection?: string, query?: any): this {
+  addDatabase(operation: string, collection?: string, query?: unknown): this {
     this.context.database = { operation, collection, query };
     return this;
   }

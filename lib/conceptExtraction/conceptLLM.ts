@@ -75,16 +75,16 @@ export class ConceptLLMService {
       }
 
       // Map the response to ExtractedConcept objects
-      const concepts = result.concepts.map(
-        (concept: {
-          name?: string;
-          category?: string;
-          description?: string;
-          examples?: string[];
-          sourceContent?: string;
-          confidence?: number;
-          suggestedDifficulty?: string;
-        }) => ({
+      const concepts = (result.concepts as Array<{
+        name?: string;
+        category?: string;
+        description?: string;
+        examples?: string[];
+        sourceContent?: string;
+        confidence?: number;
+        suggestedDifficulty?: string;
+      }>).map(
+        (concept) => ({
           name: concept.name || "",
           category: this.validateCategory(concept.category),
           description: concept.description || "",
@@ -168,14 +168,14 @@ export class ConceptLLMService {
       }
 
       // Map the response to SimilarityMatch objects
-      const matches = result.matches.map(
-        (match: {
-          conceptId?: string;
-          name?: string;
-          similarity?: number;
-          category?: string;
-          description?: string;
-        }) => ({
+      const matches = (result.matches as Array<{
+        conceptId?: string;
+        name?: string;
+        similarity?: number;
+        category?: string;
+        description?: string;
+      }>).map(
+        (match) => ({
           conceptId: match.conceptId || "",
           name: match.name || "",
           similarity: this.validateConfidence(match.similarity),

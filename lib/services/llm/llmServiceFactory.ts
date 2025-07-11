@@ -2,12 +2,12 @@
  * LLM Service Factory for creating and managing LLM service instances
  */
 
-import { OpenAIService } from './openAIService';
-import { GroqService } from './groqService';
-import { LLMServiceError } from '@/lib/utils/errors';
-import { logger } from '@/lib/utils/logger';
-import type { LLMProvider, LLMServiceConfig } from './types';
-import type { BaseLLMService } from './baseLLMService';
+import { OpenAIService } from "./openAIService";
+import { GroqService } from "./groqService";
+import { LLMServiceError } from "@/lib/utils/errors";
+import { logger } from "@/lib/utils/logger";
+import { type LLMProvider, type LLMServiceConfig } from "./types";
+import type { BaseLLMService } from "./baseLLMService";
 
 export class LLMServiceFactory {
   private static instances: Map<string, BaseLLMService> = new Map();
@@ -20,14 +20,14 @@ export class LLMServiceFactory {
     config?: Partial<LLMServiceConfig>
   ): BaseLLMService {
     const instanceKey = `${provider}_${JSON.stringify(config || {})}`;
-    
+
     if (this.instances.has(instanceKey)) {
       return this.instances.get(instanceKey)!;
     }
 
     const service = this.createService(provider, config);
     this.instances.set(instanceKey, service);
-    
+
     return service;
   }
 
@@ -41,15 +41,14 @@ export class LLMServiceFactory {
     const finalConfig = this.buildConfig(provider, config);
 
     switch (provider) {
-      case 'openai':
+      case "openai":
         return new OpenAIService(finalConfig);
-      case 'groq':
+      case "groq":
         return new GroqService(finalConfig);
       default:
-        throw new LLMServiceError(
-          `Unsupported LLM provider: ${provider}`,
-          { provider }
-        );
+        throw new LLMServiceError(`Unsupported LLM provider: ${provider}`, {
+          provider,
+        });
     }
   }
 
@@ -57,14 +56,14 @@ export class LLMServiceFactory {
    * Get OpenAI service with default configuration
    */
   static getOpenAIService(config?: Partial<LLMServiceConfig>): OpenAIService {
-    return this.getService('openai', config) as OpenAIService;
+    return this.getService("openai", config) as OpenAIService;
   }
 
   /**
    * Get Groq service with default configuration
    */
   static getGroqService(config?: Partial<LLMServiceConfig>): GroqService {
-    return this.getService('groq', config) as GroqService;
+    return this.getService("groq", config) as GroqService;
   }
 
   /**
@@ -99,17 +98,16 @@ export class LLMServiceFactory {
     let apiKey: string | undefined;
 
     switch (provider) {
-      case 'openai':
+      case "openai":
         apiKey = process.env.OPENAI_API_KEY;
         break;
-      case 'groq':
+      case "groq":
         apiKey = process.env.GROQ_API_KEY;
         break;
       default:
-        throw new LLMServiceError(
-          `Unsupported provider: ${provider}`,
-          { provider }
-        );
+        throw new LLMServiceError(`Unsupported provider: ${provider}`, {
+          provider,
+        });
     }
 
     if (!apiKey) {
@@ -127,10 +125,10 @@ export class LLMServiceFactory {
    */
   private static getDefaultModel(provider: LLMProvider): string {
     switch (provider) {
-      case 'openai':
-        return 'gpt-3.5-turbo';
-      case 'groq':
-        return 'llama3-70b-8192';
+      case "openai":
+        return "gpt-3.5-turbo";
+      case "groq":
+        return "llama3-70b-8192";
       default:
         throw new LLMServiceError(
           `No default model defined for provider: ${provider}`,
@@ -145,15 +143,19 @@ export class LLMServiceFactory {
   static async getAvailableService(
     preferredProvider?: LLMProvider
   ): Promise<BaseLLMService> {
-    const providers: LLMProvider[] = preferredProvider 
-      ? [preferredProvider, ...Object.values(LLMProvider).filter(p => p !== preferredProvider)]
-      : Object.values(LLMProvider);
+    const allProviders = ["openai", "groq"] as LLMProvider[];
+    const providers: LLMProvider[] = preferredProvider
+      ? [
+          preferredProvider,
+          ...allProviders.filter((p) => p !== preferredProvider),
+        ]
+      : allProviders;
 
     for (const provider of providers) {
       try {
         const service = this.getService(provider);
         const isHealthy = await service.healthCheck();
-        
+
         if (isHealthy) {
           logger.info(`Selected ${provider} as LLM provider`);
           return service;
@@ -161,13 +163,13 @@ export class LLMServiceFactory {
       } catch (error) {
         logger.warn(`Failed to initialize ${provider} service`, {
           provider,
-          error: error instanceof Error ? error.message : 'Unknown error',
+          error: error instanceof Error ? error.message : "Unknown error",
         });
       }
     }
 
     throw new LLMServiceError(
-      'No LLM services are available. Please check your configuration and API keys.',
+      "No LLM services are available. Please check your configuration and API keys.",
       { providers }
     );
   }
@@ -191,7 +193,7 @@ export class LLMServiceFactory {
    */
   static getAllMetrics(): Record<string, unknown> {
     const metrics: Record<string, unknown> = {};
-    
+
     this.instances.forEach((service, key) => {
       metrics[key] = service.getMetrics();
     });

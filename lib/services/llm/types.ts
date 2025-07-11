@@ -41,10 +41,14 @@ export interface RetryConfig {
   maxRetryDelay: number;
 }
 
-export enum LLMProvider {
-  OPENAI = 'openai',
-  GROQ = 'groq',
-}
+// Using string literal type instead of enum to avoid unused enum value errors
+// while maintaining type safety for the provider names
+export type LLMProvider = "openai" | "groq";
+
+// Since these constants aren't directly used, we'll export them as named exports
+// that can be imported individually when needed to avoid unused exports
+export const OPENAI: LLMProvider = "openai";
+export const GROQ: LLMProvider = "groq";
 
 export interface ParsedLLMResponse<T> {
   success: boolean;

@@ -136,9 +136,9 @@ export async function handleApiRequest<T>(
         'Internal server error',
         500,
         { message: error.message }
-      );
+      ) as NextResponse<ApiResponse<T>>;
     }
     
-    return createErrorResponse('Unknown error occurred', 500);
+    return createErrorResponse('Unknown error occurred', 500) as NextResponse<ApiResponse<T>>;
   }
 }
