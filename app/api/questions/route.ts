@@ -29,7 +29,7 @@ class QuestionBankService {
           id: questionData.id || uuidv4(),
           question: questionData.question || "",
           correctAnswer: questionData.correctAnswer || "",
-          questionType: questionData.questionType || QuestionType.Q_AND_A,
+          questionType: questionData.questionType || QuestionType.Q_A,
           targetConcepts: questionData.targetConcepts || [],
           difficulty: questionData.difficulty || QuestionLevel.A1,
           timesUsed: questionData.timesUsed || 0,

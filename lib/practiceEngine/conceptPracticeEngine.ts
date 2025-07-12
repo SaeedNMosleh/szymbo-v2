@@ -784,7 +784,7 @@ export class ConceptPracticeEngine {
             id: uuidv4(),
             question: questionText,
             correctAnswer: "To be determined during practice",
-            questionType: QuestionType.Q_AND_A,
+            questionType: QuestionType.Q_A,
             targetConcepts: conceptIds,
             difficulty: this.inferDifficulty(concepts),
             timesUsed: 0,

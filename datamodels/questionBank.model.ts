@@ -18,6 +18,11 @@ export interface IQuestionBank {
   createdDate: Date;
   isActive: boolean;
   source: "generated" | "manual";
+  
+  // Optional fields for different question types
+  options?: string[]; // Multiple choice options OR word bank for arrangement
+  audioUrl?: string; // Audio file URL
+  imageUrl?: string; // Image file URL
 }
 
 const QuestionBankSchema = new Schema<IQuestionBank>(
@@ -78,6 +83,18 @@ const QuestionBankSchema = new Schema<IQuestionBank>(
       type: String,
       enum: ["generated", "manual"],
       required: true,
+    },
+    options: {
+      type: [String],
+      required: false,
+    },
+    audioUrl: {
+      type: String,
+      required: false,
+    },
+    imageUrl: {
+      type: String,
+      required: false,
     },
   },
   {

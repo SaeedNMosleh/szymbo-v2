@@ -86,7 +86,7 @@ export async function validateAnswer(
             isCorrect: false,
             feedback: attemptNumber < 3 ? "Keep trying!" : "Here's the correct answer.",
             correctAnswer: "No correct answer provided.",
-            questionType: QuestionType.Q_AND_A,
+            questionType: QuestionType.Q_A,
             confidenceLevel: 0.5,
             errorType: null,
             keywords: [],
@@ -135,7 +135,7 @@ export async function validateAnswer(
         result.questionType as QuestionType
       )
         ? (result.questionType as QuestionType)
-        : QuestionType.Q_AND_A,
+        : QuestionType.Q_A,
       keywords: Array.isArray(result.keywords) ? result.keywords : [],
       category: result.category || "general",
       analysisDetails: {

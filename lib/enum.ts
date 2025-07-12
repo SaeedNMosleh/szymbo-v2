@@ -6,10 +6,24 @@
 
 /* eslint-disable no-unused-vars */
 export enum QuestionType {
-  CLOZE_GAP = "cloze_gap",
-  MULTIPLE_CHOICE = "multiple_choice",
-  MAKE_SENTENCE = "make_sentence",
-  Q_AND_A = "q_and_a",
+  BASIC_CLOZE = "basic_cloze",
+  MULTI_CLOZE = "multi_cloze",
+  VOCAB_CHOICE = "vocab_choice",
+  MULTI_SELECT = "multi_select",
+  CONJUGATION_TABLE = "conjugation_table",
+  CASE_TRANSFORM = "case_transform",
+  SENTENCE_TRANSFORM = "sentence_transform",
+  WORD_ARRANGEMENT = "word_arrangement",
+  TRANSLATION_PL = "translation_pl",
+  TRANSLATION_EN = "translation_en",
+  AUDIO_COMPREHENSION = "audio_comprehension",
+  VISUAL_VOCABULARY = "visual_vocabulary",
+  DIALOGUE_COMPLETE = "dialogue_complete",
+  ASPECT_PAIRS = "aspect_pairs",
+  DIMINUTIVE_FORMS = "diminutive_forms",
+  SCENARIO_RESPONSE = "scenario_response",
+  CULTURAL_CONTEXT = "cultural_context",
+  Q_A = "q_and_a",
 }
 
 export enum MistakeType {

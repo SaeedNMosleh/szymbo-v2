@@ -4,6 +4,9 @@ import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { QuestionRenderer } from "./QuestionRenderer";
+import { QuestionControls } from "./ui/QuestionControls";
+import { QuestionData, ValidationResult } from "./types/questionTypes";
 import { Progress } from "@/components/ui/progress";
 import {
   PracticeMode,
@@ -44,13 +47,7 @@ interface PracticeSessionProps {
   onBack: () => void;
 }
 
-interface QuestionResult {
-  isCorrect: boolean;
-  feedback: string;
-  correctAnswer: string;
-  attempts: number;
-  responseTime: number;
-}
+// Use ValidationResult from types instead of local interface
 
 export function PracticeSession({
   mode,
@@ -59,12 +56,12 @@ export function PracticeSession({
   onBack,
 }: PracticeSessionProps) {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
-  const [userAnswer, setUserAnswer] = useState("");
-  const [questionResult, setQuestionResult] = useState<QuestionResult | null>(
+  const [userAnswer, setUserAnswer] = useState<string | string[]>("");
+  const [questionResult, setQuestionResult] = useState<ValidationResult | null>(
     null
   );
   const [isValidating, setIsValidating] = useState(false);
-  const [sessionResults, setSessionResults] = useState<QuestionResult[]>([]);
+  const [sessionResults, setSessionResults] = useState<ValidationResult[]>([]);
   const [questionStartTime, setQuestionStartTime] = useState<number>(
     Date.now()
   );
@@ -237,7 +234,11 @@ export function PracticeSession({
   };
 
   const handleSubmitAnswer = async () => {
-    if (!userAnswer.trim() || isValidating) return;
+    const hasAnswer = Array.isArray(userAnswer) 
+      ? userAnswer.some(answer => answer.trim()) 
+      : userAnswer.trim();
+    
+    if (!hasAnswer || isValidating) return;
 
     setIsValidating(true);
     setValidationError(null);
@@ -255,14 +256,18 @@ export function PracticeSession({
       };
 
       const attempts = (questionResult?.attempts || 0) + 1;
+      const answerString = Array.isArray(userAnswer) 
+        ? userAnswer.join(", ") 
+        : userAnswer;
+        
       const result = await validateAnswer(
         currentQuestion.question,
-        userAnswer,
+        answerString,
         mockCourse,
         attempts
       );
 
-      const newResult: QuestionResult = {
+      const newResult: ValidationResult = {
         isCorrect: result.isCorrect || false,
         feedback: result.feedback || "No feedback provided",
         correctAnswer: result.correctAnswer || "",
@@ -367,7 +372,7 @@ export function PracticeSession({
 
     if (currentQuestionIndex < sessionData.questions.length - 1) {
       setCurrentQuestionIndex(currentQuestionIndex + 1);
-      setUserAnswer("");
+      setUserAnswer(Array.isArray(userAnswer) ? [] : "");
       setQuestionResult(null);
       setValidationError(null);
       setQuestionStartTime(Date.now());
@@ -378,7 +383,7 @@ export function PracticeSession({
   };
 
   const handleRetryQuestion = () => {
-    setUserAnswer("");
+    setUserAnswer(Array.isArray(userAnswer) ? [] : "");
     setQuestionResult(null);
     setValidationError(null);
     setQuestionStartTime(Date.now());
@@ -508,100 +513,44 @@ export function PracticeSession({
         </CardHeader>
 
         <CardContent className="space-y-4">
-          <Textarea
-            value={userAnswer}
-            onChange={(e) => setUserAnswer(e.target.value)}
-            placeholder="Type your answer in Polish..."
-            className="min-h-[100px]"
+          <QuestionRenderer
+            question={{
+              id: currentQuestion.id,
+              question: currentQuestion.question,
+              questionType: currentQuestion.questionType as QuestionType,
+              difficulty: currentQuestion.difficulty as any,
+              targetConcepts: currentQuestion.targetConcepts,
+              correctAnswer: currentQuestion.correctAnswer,
+              options: (currentQuestion as any).options,
+              audioUrl: (currentQuestion as any).audioUrl,
+              imageUrl: (currentQuestion as any).imageUrl,
+            }}
+            userAnswer={userAnswer}
+            onAnswerChange={setUserAnswer}
+            validationResult={questionResult}
+            isValidating={isValidating}
             disabled={isValidating || !!questionResult}
+            onSubmit={handleSubmitAnswer}
+            onRetry={handleRetryQuestion}
+            onNext={handleNextQuestion}
+            showSubmit={!questionResult}
+            showRetry={!!questionResult && !questionResult.isCorrect && questionResult.attempts < 3}
+            showNext={!!questionResult}
           />
 
-          {validationError && (
-            <Card className="border-2 border-red-200 bg-red-50">
-              <CardContent className="pt-6">
-                <div className="flex items-start space-x-3">
-                  <AlertCircle className="mt-0.5 size-5 text-red-600" />
-                  <div className="flex-1">
-                    <p className="font-medium text-red-800">Validation Error</p>
-                    <p className="text-sm text-red-700">{validationError}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {questionResult && (
-            <Card
-              className={`border-2 ${questionResult.isCorrect ? "border-green-200 bg-green-50" : "border-red-200 bg-red-50"}`}
-            >
-              <CardContent className="pt-6">
-                <div className="flex items-start space-x-3">
-                  {questionResult.isCorrect ? (
-                    <CheckCircle className="mt-0.5 size-5 text-green-600" />
-                  ) : (
-                    <XCircle className="mt-0.5 size-5 text-red-600" />
-                  )}
-                  <div className="flex-1 space-y-2">
-                    <p
-                      className={`font-medium ${questionResult.isCorrect ? "text-green-800" : "text-red-800"}`}
-                    >
-                      {questionResult.isCorrect
-                        ? "Correct!"
-                        : "Not quite right"}
-                    </p>
-                    {questionResult.feedback && (
-                      <p className="text-sm text-gray-700">
-                        {questionResult.feedback}
-                      </p>
-                    )}
-                    {!questionResult.isCorrect &&
-                      questionResult.correctAnswer && (
-                        <p className="text-sm">
-                          <strong>Correct answer:</strong>{" "}
-                          {questionResult.correctAnswer}
-                        </p>
-                      )}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          <div className="flex gap-3">
-            {!questionResult ? (
-              <Button
-                onClick={handleSubmitAnswer}
-                disabled={!userAnswer.trim() || isValidating}
-                className="flex-1"
-              >
-                {isValidating ? (
-                  <div className="flex items-center">
-                    <div className="mr-2 size-4 animate-spin rounded-full border-b-2 border-white"></div>
-                    Checking...
-                  </div>
-                ) : (
-                  "Submit Answer"
-                )}
-              </Button>
-            ) : (
-              <>
-                {!questionResult.isCorrect && questionResult.attempts < 3 && (
-                  <Button
-                    variant="outline"
-                    onClick={handleRetryQuestion}
-                    className="flex-1"
-                  >
-                    Try Again
-                  </Button>
-                )}
-                <Button onClick={handleNextQuestion} className="flex-1">
-                  {currentQuestionIndex < sessionData.questions.length - 1
-                    ? "Next Question"
-                    : "Complete Session"}
-                </Button>
-              </>
-            )}
-          </div>
+          <QuestionControls
+            validationResult={questionResult}
+            isValidating={isValidating}
+            hasAnswer={Array.isArray(userAnswer) 
+              ? userAnswer.some(answer => answer.trim()) 
+              : !!userAnswer.trim()}
+            onSubmit={handleSubmitAnswer}
+            onRetry={handleRetryQuestion}
+            onNext={handleNextQuestion}
+            currentQuestionIndex={currentQuestionIndex}
+            totalQuestions={sessionData.questions.length}
+            validationError={validationError}
+          />
         </CardContent>
       </Card>
     </div>
