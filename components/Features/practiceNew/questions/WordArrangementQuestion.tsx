@@ -12,7 +12,7 @@ export function WordArrangementQuestion({
   onAnswerChange,
   disabled,
 }: QuestionComponentProps) {
-  const words = question.options || [];
+  const words = useMemo(() => question.options || [], [question.options]);
 
   // Initialize drag drop items from words
   const dragDropItems = useMemo(() => {

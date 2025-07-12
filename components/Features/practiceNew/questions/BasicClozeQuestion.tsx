@@ -6,13 +6,12 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-export function BasicClozeQuestion({ 
-  question, 
-  userAnswer, 
-  onAnswerChange, 
-  disabled 
+export function BasicClozeQuestion({
+  question,
+  userAnswer,
+  onAnswerChange,
+  disabled,
 }: QuestionComponentProps) {
-  
   const handleAnswerChange = (value: string) => {
     onAnswerChange(value);
   };
@@ -21,19 +20,19 @@ export function BasicClozeQuestion({
   const renderQuestionWithGaps = () => {
     const text = question.question;
     const parts = text.split(/(\[.*?\])/g);
-    
+
     return parts.map((part, index) => {
-      if (part.startsWith('[') && part.endsWith(']')) {
+      if (part.startsWith("[") && part.endsWith("]")) {
         // This is a gap
         const gapId = `gap-${index}`;
         return (
-          <span key={index} className="inline-block mx-1">
+          <span key={index} className="mx-1 inline-block">
             <Input
               id={gapId}
-              value={typeof userAnswer === 'string' ? userAnswer : ''}
+              value={typeof userAnswer === "string" ? userAnswer : ""}
               onChange={(e) => handleAnswerChange(e.target.value)}
               disabled={disabled}
-              className="w-32 h-8 text-center inline-block"
+              className="inline-block h-8 w-32 text-center"
               placeholder="..."
               aria-label="Fill in the blank"
             />
@@ -48,16 +47,16 @@ export function BasicClozeQuestion({
     <Card>
       <CardContent className="pt-6">
         <div className="space-y-4">
-          <Label className="text-base font-medium">
-            Fill in the blank:
-          </Label>
-          
+          <Label className="text-base font-medium">Fill in the blank:</Label>
+
           <div className="text-lg leading-relaxed">
             {renderQuestionWithGaps()}
           </div>
-          
+
           <div className="text-sm text-gray-600">
-            <p>Complete the sentence by filling in the missing word or phrase.</p>
+            <p>
+              Complete the sentence by filling in the missing word or phrase.
+            </p>
           </div>
         </div>
       </CardContent>

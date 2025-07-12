@@ -36,13 +36,12 @@ export function DragDropZone({
     setDragOverIndex(index);
   };
 
-  const handleDragEnter = (e: React.DragEvent) => {
+  const handleDragEnter = () => {
     if (disabled) return;
-    e.preventDefault();
     dragCounterRef.current++;
   };
 
-  const handleDragLeave = (e: React.DragEvent) => {
+  const handleDragLeave = () => {
     if (disabled) return;
     dragCounterRef.current--;
     if (dragCounterRef.current === 0) {

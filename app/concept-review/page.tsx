@@ -2,7 +2,7 @@
 
 import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { ConceptReview } from "@/components/Features/conceptReview/ConceptReview";
+import { EnhancedConceptReview } from "@/components/Features/conceptReview/EnhancedConceptReview";
 import { Navigation } from "@/components/ui/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -212,7 +212,7 @@ const ConceptReviewContent = () => {
           Back to Course Selection
         </Button>
       </div>
-      <ConceptReview
+      <EnhancedConceptReview
         courseId={selectedCourseId}
         onReviewComplete={handleReviewComplete}
       />

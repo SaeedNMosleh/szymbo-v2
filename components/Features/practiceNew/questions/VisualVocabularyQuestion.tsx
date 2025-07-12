@@ -5,6 +5,7 @@ import { QuestionComponentProps } from "../types/questionTypes";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import Image from "next/image";
 import { AlertCircle } from "lucide-react";
 
 export function VisualVocabularyQuestion({
@@ -45,25 +46,14 @@ export function VisualVocabularyQuestion({
 
           <div className="flex justify-center">
             <div className="relative w-full max-w-md">
-              <img
+              <Image
                 src={question.imageUrl}
                 alt="Visual vocabulary exercise"
+                width={400} // Specify appropriate width
+                height={300} // Specify appropriate height
                 className="h-auto w-full rounded-lg border shadow-sm"
-                style={{ maxHeight: "400px", objectFit: "contain" }}
-                onError={(e) => {
-                  const target = e.target as HTMLImageElement;
-                  target.style.display = "none";
-                  const errorDiv = target.nextSibling as HTMLElement;
-                  if (errorDiv) errorDiv.style.display = "block";
-                }}
               />
-              <div
-                className="hidden rounded-lg bg-gray-100 p-8 text-center text-gray-600"
-                style={{ display: "none" }}
-              >
-                <AlertCircle className="mx-auto mb-2 size-8" />
-                <p>Failed to load image</p>
-              </div>
+              {/* The error handling div is no longer needed with next/image as it handles loading states */}
             </div>
           </div>
 

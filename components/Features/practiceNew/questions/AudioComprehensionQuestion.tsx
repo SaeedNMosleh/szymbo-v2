@@ -24,7 +24,7 @@ export function AudioComprehensionQuestion({
       <Card className="border-red-200 bg-red-50">
         <CardContent className="pt-6">
           <div className="flex items-center gap-3 text-red-800">
-            <AlertCircle className="w-5 h-5" />
+            <AlertCircle className="size-5" />
             <div>
               <p className="font-medium">Audio Missing</p>
               <p className="text-sm">No audio file provided for this question.</p>

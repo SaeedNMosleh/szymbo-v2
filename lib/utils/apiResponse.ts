@@ -51,6 +51,18 @@ export function createSuccessResponse<T>(
 }
 
 /**
+ * Create API response (alias for createSuccessResponse for backward compatibility)
+ */
+export function createApiResponse<T>(
+  data: T,
+  message?: string,
+  status: number = 200,
+  pagination?: PaginationMeta
+): NextResponse<ApiResponse<T>> {
+  return createSuccessResponse(data, status, pagination);
+}
+
+/**
  * Create an error API response
  */
 export function createErrorResponse(

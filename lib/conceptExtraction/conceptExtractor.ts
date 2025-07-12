@@ -10,6 +10,11 @@ import {
 import { ConceptExtractionStatus } from "@/lib/enum";
 import Course from "@/datamodels/course.model";
 import type { ICourse } from "@/datamodels/course.model";
+import ConceptExtractionSession, {
+  IConceptExtractionSession,
+  SimilarityData,
+  ReviewProgress,
+} from "@/datamodels/conceptExtractionSession.model";
 import { v4 as uuidv4 } from "uuid";
 
 /**
@@ -18,7 +23,6 @@ import { v4 as uuidv4 } from "uuid";
 export class ConceptExtractor {
   private conceptManager: ConceptManager;
   private llmService: ConceptLLMService;
-  private extractionCache: Map<number, ConceptReviewData> = new Map();
 
   /**
    * Initialize with optional services for dependency injection
@@ -58,8 +62,54 @@ export class ConceptExtractor {
       // 4. Update course with extraction status
       await this.updateCourseExtractionStatus(courseId, extractedConcepts);
 
-      // 5. Prepare review data
+      // 5. Create extraction session in database
       const extractionId = uuidv4();
+      const sessionData: IConceptExtractionSession = {
+        id: extractionId,
+        courseId,
+        courseName: `Course ${courseId} - ${course.keywords.join(", ")}`,
+        extractionDate: new Date(),
+        status: "extracted",
+        extractedConcepts: extractedConcepts.map((concept) => ({
+          ...concept,
+          extractionMetadata: {
+            model: "current-llm-model", // TODO: Get from LLM service
+            timestamp: new Date(),
+            processingTime: 0, // TODO: Track actual processing time
+          },
+        })),
+        similarityMatches: Array.from(similarityMatches.entries()).map(
+          ([name, matches]: [string, SimilarityMatch[]]) => ({
+            extractedConceptName: name,
+            matches: matches.map((match) => ({
+              ...match,
+              examples: match.examples || [],
+            })),
+          })
+        ),
+        reviewProgress: {
+          totalConcepts: extractedConcepts.length,
+          reviewedCount: 0,
+          decisions: [],
+          isDraft: true,
+        },
+        extractionMetadata: {
+          llmModel: "current-llm-model", // TODO: Get from LLM service
+          totalProcessingTime: 0, // TODO: Track actual processing time
+          extractionConfidence:
+            extractedConcepts.reduce((sum, c) => sum + c.confidence, 0) /
+            extractedConcepts.length,
+          sourceContentLength:
+            (course.notes?.length || 0) + (course.practice?.length || 0),
+        },
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      // Save to database
+      await ConceptExtractionSession.create(sessionData);
+
+      // Prepare review data for backward compatibility
       const reviewData: ConceptReviewData = {
         courseId,
         courseName: `Course ${courseId} - ${course.keywords.join(", ")}`,
@@ -69,9 +119,6 @@ export class ConceptExtractor {
         highConfidenceCount: extractedConcepts.filter((c) => c.confidence > 0.8)
           .length,
       };
-
-      // Cache the review data
-      this.extractionCache.set(courseId, reviewData);
 
       return {
         success: true,
@@ -193,17 +240,37 @@ export class ConceptExtractor {
   }
 
   /**
-   * Get review data for a course
+   * Get review data for a course from database session
    * @param courseId ID of the course
    * @returns Review data or null if not found
    */
   async prepareReviewData(courseId: number): Promise<ConceptReviewData | null> {
-    // Check cache first
-    if (this.extractionCache.has(courseId)) {
-      return this.extractionCache.get(courseId) || null;
+    // Check for existing extraction session first
+    const session = await ConceptExtractionSession.findOne({
+      courseId,
+      status: { $in: ["extracted", "in_review"] },
+    }).sort({ extractionDate: -1 });
+
+    if (session) {
+      // Convert session data to review data format
+      const similarityMap = new Map<string, SimilarityMatch[]>();
+      session.similarityMatches.forEach((data: SimilarityData) => {
+        similarityMap.set(data.extractedConceptName, data.matches);
+      });
+
+      return {
+        courseId: session.courseId,
+        courseName: session.courseName,
+        extractedConcepts: session.extractedConcepts,
+        similarityMatches: similarityMap,
+        totalExtracted: session.extractedConcepts.length,
+        highConfidenceCount: session.extractedConcepts.filter(
+          (c: ExtractedConcept) => c.confidence > 0.8
+        ).length,
+      };
     }
 
-    // If not in cache, check if course has been extracted
+    // If no session exists, check if course has been extracted
     const course = await Course.findOne({
       courseId,
       conceptExtractionStatus: ConceptExtractionStatus.COMPLETED,
@@ -216,6 +283,52 @@ export class ConceptExtractor {
     // Re-extract concepts to rebuild review data
     const extractionResult = await this.extractConceptsFromCourse(courseId);
     return extractionResult.data || null;
+  }
+
+  /**
+   * Get extraction session by ID
+   * @param sessionId ID of the extraction session
+   * @returns Extraction session or null if not found
+   */
+  async getExtractionSession(
+    sessionId: string
+  ): Promise<IConceptExtractionSession | null> {
+    return await ConceptExtractionSession.findOne({ id: sessionId });
+  }
+
+  /**
+   * Get latest extraction session for a course
+   * @param courseId ID of the course
+   * @returns Latest extraction session or null if not found
+   */
+  async getLatestExtractionSession(
+    courseId: number
+  ): Promise<IConceptExtractionSession | null> {
+    return await ConceptExtractionSession.findOne({
+      courseId,
+      status: { $in: ["extracted", "in_review"] },
+    }).sort({ extractionDate: -1 });
+  }
+
+  /**
+   * Update extraction session progress
+   * @param sessionId ID of the extraction session
+   * @param progress Updated progress data
+   */
+  async updateSessionProgress(
+    sessionId: string,
+    progress: Partial<ReviewProgress>
+  ): Promise<void> {
+    await ConceptExtractionSession.updateOne(
+      { id: sessionId },
+      {
+        $set: {
+          reviewProgress: progress,
+          updatedAt: new Date(),
+          status: progress.isDraft ? "in_review" : "reviewed",
+        },
+      }
+    );
   }
 
   /**
@@ -338,8 +451,11 @@ export class ConceptExtractor {
         }
       }
 
-      // Clear cache for this course
-      this.extractionCache.delete(courseId);
+      // Archive the extraction session
+      await ConceptExtractionSession.updateOne(
+        { courseId, status: { $in: ["extracted", "in_review", "reviewed"] } },
+        { $set: { status: "archived", updatedAt: new Date() } }
+      );
 
       // Set success to false only if we had no successes and errors
       if (

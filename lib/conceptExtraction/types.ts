@@ -22,6 +22,7 @@ export interface SimilarityMatch {
   similarity: number; // 0-1 score
   category: ConceptCategory;
   description: string;
+  examples?: string[];
 }
 
 /**

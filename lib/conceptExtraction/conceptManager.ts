@@ -7,6 +7,10 @@ import {
 import CourseConcept, {
   ICourseConcept,
 } from "@/datamodels/courseConcept.model";
+import ConceptExtractionSession, {
+  IConceptExtractionSession,
+  ExtractedConcept as SessionExtractedConcept,
+} from "@/datamodels/conceptExtractionSession.model";
 import { ConceptLLMService } from "./conceptLLM";
 import {
   ExtractedConcept,
@@ -624,6 +628,203 @@ export class ConceptManager {
         error: error instanceof Error ? error.message : "Unknown error",
       };
     }
+  }
+
+  /**
+   * Get extraction sessions for a course
+   * @param courseId ID of the course
+   * @param status Optional status filter
+   * @returns Array of extraction sessions
+   */
+  async getExtractionSessions(
+    courseId: number,
+    status?: "extracted" | "in_review" | "reviewed" | "archived"
+  ): Promise<IConceptExtractionSession[]> {
+    try {
+      const query: { courseId: number; status?: string } = { courseId };
+      if (status) {
+        query.status = status;
+      }
+
+      const sessionDocs = await ConceptExtractionSession.find(query)
+        .sort({ extractionDate: -1 })
+        .lean();
+
+      const sessions = sessionDocs as unknown as IConceptExtractionSession[];
+
+      return sessions;
+    } catch (error) {
+      console.error(
+        `Error fetching extraction sessions for course ${courseId}:`,
+        error
+      );
+      return [];
+    }
+  }
+
+  /**
+   * Get the latest active extraction session for a course
+   * @param courseId ID of the course
+   * @returns Latest extraction session or null
+   */
+  async getLatestExtractionSession(
+    courseId: number
+  ): Promise<IConceptExtractionSession | null> {
+    try {
+      const session = (await ConceptExtractionSession.findOne({
+        courseId,
+        status: { $in: ["extracted", "in_review"] },
+      })
+        .sort({ extractionDate: -1 })
+        .lean()) as IConceptExtractionSession | null;
+
+      return session;
+    } catch (error) {
+      console.error(
+        `Error fetching latest extraction session for course ${courseId}:`,
+        error
+      );
+      return null;
+    }
+  }
+
+  /**
+   * Create concept from session extracted concept
+   * @param extractedConcept Extracted concept from session
+   * @param courseId Source course ID
+   * @returns Created concept
+   */
+  async createConceptFromSession(
+    extractedConcept: SessionExtractedConcept,
+    courseId: number
+  ): Promise<IConcept> {
+    const conceptData: Partial<IConcept> = {
+      id: uuidv4(),
+      name: extractedConcept.name,
+      category: extractedConcept.category,
+      description: extractedConcept.description,
+      examples: extractedConcept.examples,
+      difficulty: extractedConcept.suggestedDifficulty,
+      confidence: extractedConcept.confidence,
+      createdFrom: [courseId.toString()],
+      isActive: true,
+      lastUpdated: new Date(),
+      prerequisites: [],
+      relatedConcepts: [],
+    };
+
+    const concept = await this.createOrFindConcept(conceptData);
+
+    // Link to course
+    await this.linkConceptToCourse(
+      concept.id,
+      courseId,
+      extractedConcept.confidence,
+      extractedConcept.sourceContent
+    );
+
+    return concept;
+  }
+
+  /**
+   * Merge concept data from session into existing concept
+   * @param targetConceptId ID of the target concept
+   * @param extractedConcept Extracted concept data
+   * @param additionalData Additional data to merge
+   * @param courseId Source course ID
+   */
+  async mergeConceptFromSession(
+    targetConceptId: string,
+    extractedConcept: SessionExtractedConcept,
+    additionalData: { examples?: string[]; description?: string },
+    courseId: number
+  ): Promise<void> {
+    const existingConcept = await this.getConcept(targetConceptId);
+    if (!existingConcept) {
+      throw new ConceptValidationError(
+        `Target concept ${targetConceptId} not found`
+      );
+    }
+
+    const updates: Partial<IConcept> = {
+      lastUpdated: new Date(),
+    };
+
+    // Merge examples
+    if (additionalData.examples && Array.isArray(additionalData.examples)) {
+      const existingExamples = existingConcept.examples || [];
+      const newExamples = additionalData.examples.filter(
+        (example: string) => !existingExamples.includes(example)
+      );
+      if (newExamples.length > 0) {
+        updates.examples = [...existingExamples, ...newExamples];
+      }
+    }
+
+    // Merge description
+    if (
+      additionalData.description &&
+      additionalData.description !== existingConcept.description
+    ) {
+      updates.description = `${existingConcept.description}\n\nAdditional: ${additionalData.description}`;
+    }
+
+    // Update createdFrom
+    const createdFrom = [...(existingConcept.createdFrom || [])];
+    if (!createdFrom.includes(courseId.toString())) {
+      createdFrom.push(courseId.toString());
+      updates.createdFrom = createdFrom;
+    }
+
+    // Apply updates
+    if (Object.keys(updates).length > 1) {
+      await this.updateConcept(targetConceptId, updates);
+    }
+
+    // Link to course
+    await this.linkConceptToCourse(
+      targetConceptId,
+      courseId,
+      extractedConcept.confidence,
+      extractedConcept.sourceContent
+    );
+  }
+
+  /**
+   * Link extracted concept to existing concept
+   * @param targetConceptId ID of the target concept
+   * @param extractedConcept Extracted concept data
+   * @param courseId Source course ID
+   */
+  async linkConceptFromSession(
+    targetConceptId: string,
+    extractedConcept: SessionExtractedConcept,
+    courseId: number
+  ): Promise<void> {
+    const existingConcept = await this.getConcept(targetConceptId);
+    if (!existingConcept) {
+      throw new ConceptValidationError(
+        `Target concept ${targetConceptId} not found`
+      );
+    }
+
+    // Update createdFrom if not already included
+    const createdFrom = [...(existingConcept.createdFrom || [])];
+    if (!createdFrom.includes(courseId.toString())) {
+      createdFrom.push(courseId.toString());
+      await this.updateConcept(targetConceptId, {
+        createdFrom,
+        lastUpdated: new Date(),
+      });
+    }
+
+    // Link to course
+    await this.linkConceptToCourse(
+      targetConceptId,
+      courseId,
+      extractedConcept.confidence,
+      extractedConcept.sourceContent
+    );
   }
 }
 

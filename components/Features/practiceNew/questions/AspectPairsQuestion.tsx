@@ -34,7 +34,7 @@ export function AspectPairsQuestion({
       <CardContent className="pt-6">
         <div className="space-y-4">
           <div className="flex items-center gap-2">
-            <Shuffle className="w-5 h-5 text-orange-600" />
+            <Shuffle className="size-5 text-orange-600" />
             <Label className="text-base font-medium">
               {question.question}
             </Label>

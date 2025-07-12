@@ -41,6 +41,9 @@ export enum CourseType {
 }
 
 export enum QuestionLevel {
+  EASY = "easy",
+  MEDIUM = "medium",
+  HARD = "hard",
   A1 = "A1",
   A2 = "A2",
   B1 = "B1",

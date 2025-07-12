@@ -51,3 +51,6 @@ export async function connectToDatabase() {
 
   return cached.conn;
 }
+
+// Default export for backward compatibility
+export default connectToDatabase;

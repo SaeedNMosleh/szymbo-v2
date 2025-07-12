@@ -3,10 +3,9 @@
 import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { QuestionRenderer } from "./QuestionRenderer";
 import { QuestionControls } from "./ui/QuestionControls";
-import { QuestionData, ValidationResult } from "./types/questionTypes";
+import { ValidationResult } from "./types/questionTypes";
 import { Progress } from "@/components/ui/progress";
 import {
   PracticeMode,
@@ -17,7 +16,7 @@ import {
 import { validateAnswer } from "@/lib/LLMPracticeValidation/validateAnswer";
 import { IQuestionBank } from "@/datamodels/questionBank.model";
 import { ICourse } from "@/datamodels/course.model";
-import { ArrowLeft, CheckCircle, XCircle, AlertCircle } from "lucide-react";
+import { ArrowLeft, AlertCircle } from "lucide-react";
 
 interface Question {
   id: string;
@@ -518,12 +517,12 @@ export function PracticeSession({
               id: currentQuestion.id,
               question: currentQuestion.question,
               questionType: currentQuestion.questionType as QuestionType,
-              difficulty: currentQuestion.difficulty as any,
+              difficulty: currentQuestion.difficulty as QuestionLevel,
               targetConcepts: currentQuestion.targetConcepts,
               correctAnswer: currentQuestion.correctAnswer,
-              options: (currentQuestion as any).options,
-              audioUrl: (currentQuestion as any).audioUrl,
-              imageUrl: (currentQuestion as any).imageUrl,
+              options: (currentQuestion as { options?: string[] }).options,
+              audioUrl: (currentQuestion as { audioUrl?: string }).audioUrl,
+              imageUrl: (currentQuestion as { imageUrl?: string }).imageUrl,
             }}
             userAnswer={userAnswer}
             onAnswerChange={setUserAnswer}
