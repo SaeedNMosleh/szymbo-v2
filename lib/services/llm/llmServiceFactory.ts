@@ -126,7 +126,7 @@ export class LLMServiceFactory {
   private static getDefaultModel(provider: LLMProvider): string {
     switch (provider) {
       case "openai":
-        return "gpt-3.5-turbo";
+        return "gpt-4o";
       case "groq":
         return "llama3-70b-8192";
       default:

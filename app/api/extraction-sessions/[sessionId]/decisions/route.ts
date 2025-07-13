@@ -12,9 +12,9 @@ import dbConnect from "@/lib/dbConnect";
 
 // Define a type for the route context
 interface RouteContext {
-  params: {
+  params: Promise<{
     sessionId: string;
-  };
+  }>;
 }
 
 // Schema for adding review decisions
@@ -35,7 +35,7 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
   try {
     await dbConnect();
 
-    const { sessionId } = params;
+    const { sessionId } = await params;
 
     if (!sessionId) {
       return createErrorResponse("Session ID is required", 400);
@@ -76,7 +76,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
   try {
     await dbConnect();
 
-    const { sessionId } = params;
+    const { sessionId } = await params;
 
     if (!sessionId) {
       return createErrorResponse("Session ID is required", 400);
@@ -154,7 +154,7 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
   try {
     await dbConnect();
 
-    const { sessionId } = params;
+    const { sessionId } = await params;
 
     if (!sessionId) {
       return createErrorResponse("Session ID is required", 400);

@@ -10,7 +10,7 @@ import type { LLMRequest, LLMServiceConfig, LLMProvider } from './types';
 
 export class OpenAIService extends BaseLLMService {
   private client: OpenAI;
-  private defaultModel = 'gpt-3.5-turbo';
+  private defaultModel = 'gpt-4o';
 
   constructor(config: LLMServiceConfig) {
     super(config);
