@@ -47,13 +47,16 @@ export async function GET(request: NextRequest) {
       coverageMap.set(concept.id, coverage);
     });
     
-    // Count questions for each concept and type
+    // Count questions for each concept and type (STRICT: Only valid concept IDs)
     questions.forEach(question => {
       question.targetConcepts.forEach((conceptId: string) => {
         const coverage = coverageMap.get(conceptId);
         if (coverage && question.questionType in QuestionType) {
           const questionType = question.questionType as QuestionType;
           coverage[questionType] = (coverage[questionType] || 0) + 1;
+        } else if (!coverage) {
+          // Log invalid concept IDs for cleanup (strict architecture - no fallbacks)
+          console.warn(`Question ${question.id} references invalid concept ID: ${conceptId}`);
         }
       });
       

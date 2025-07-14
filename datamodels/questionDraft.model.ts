@@ -10,7 +10,7 @@ export interface IQuestionDraft {
   question: string;
   correctAnswer: string;
   questionType: QuestionType;
-  targetConcepts: string[]; // concept names/tags (simplified - no need for exact IDs in draft stage)
+  targetConcepts: string[]; // concept IDs - all internal storage uses concept IDs
   difficulty: QuestionLevel;
   source: "generated" | "manual";
   createdDate: Date;

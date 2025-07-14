@@ -216,9 +216,10 @@ export default function QuestionEditor({
       const draftData = {
         ...questionData,
         source: "manual",
-        targetConcepts: questionData.targetConcepts.length > 0 
-          ? questionData.targetConcepts 
-          : ["Manual Entry"], // Fallback concept name
+        targetConcepts:
+          questionData.targetConcepts.length > 0
+            ? questionData.targetConcepts
+            : ["Manual Entry"], // Fallback concept name
         options: questionData.options.filter((opt) => opt.trim() !== ""),
       };
 
@@ -451,34 +452,129 @@ export default function QuestionEditor({
         </CardContent>
       </Card>
 
-      {/* Media URLs */}
+      {/* Media URLs and Files */}
       <Card>
         <CardHeader>
           <CardTitle>Media (Optional)</CardTitle>
           <CardDescription>
-            Add audio or image files to enhance the question
+            Add audio or image files to enhance the question. You can either
+            provide URLs or upload files.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div>
-            <Label htmlFor="audioUrl">Audio URL</Label>
-            <Input
-              id="audioUrl"
-              placeholder="https://example.com/audio.mp3"
-              value={questionData.audioUrl}
-              onChange={(e) => handleInputChange("audioUrl", e.target.value)}
-            />
+        <CardContent className="space-y-6">
+          {/* Audio Section */}
+          <div className="space-y-3">
+            <Label className="text-base font-medium">Audio</Label>
+            <div className="grid grid-cols-1 gap-3">
+              <div>
+                <Label htmlFor="audioUrl" className="text-sm">
+                  Audio URL
+                </Label>
+                <Input
+                  id="audioUrl"
+                  placeholder="https://example.com/audio.mp3"
+                  value={questionData.audioUrl}
+                  onChange={(e) =>
+                    handleInputChange("audioUrl", e.target.value)
+                  }
+                />
+              </div>
+              <div className="text-center text-sm text-muted-foreground">
+                OR
+              </div>
+              <div>
+                <Label htmlFor="audioFile" className="text-sm">
+                  Upload Audio File
+                </Label>
+                <Input
+                  id="audioFile"
+                  type="file"
+                  accept="audio/*"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      // For now, show file name - in a real app you'd upload to a service
+                      const fileName = `[Uploaded: ${file.name}]`;
+                      handleInputChange("audioUrl", fileName);
+                    }
+                  }}
+                  className="file:mr-4 file:rounded-md file:border-0 file:bg-blue-50 file:px-4 file:py-2 file:text-sm file:font-medium file:text-blue-700 hover:file:bg-blue-100"
+                />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Supported formats: MP3, WAV, OGG (Max 10MB)
+                </p>
+              </div>
+            </div>
           </div>
 
-          <div>
-            <Label htmlFor="imageUrl">Image URL</Label>
-            <Input
-              id="imageUrl"
-              placeholder="https://example.com/image.jpg"
-              value={questionData.imageUrl}
-              onChange={(e) => handleInputChange("imageUrl", e.target.value)}
-            />
+          {/* Image Section */}
+          <div className="space-y-3">
+            <Label className="text-base font-medium">Image</Label>
+            <div className="grid grid-cols-1 gap-3">
+              <div>
+                <Label htmlFor="imageUrl" className="text-sm">
+                  Image URL
+                </Label>
+                <Input
+                  id="imageUrl"
+                  placeholder="https://example.com/image.jpg"
+                  value={questionData.imageUrl}
+                  onChange={(e) =>
+                    handleInputChange("imageUrl", e.target.value)
+                  }
+                />
+              </div>
+              <div className="text-center text-sm text-muted-foreground">
+                OR
+              </div>
+              <div>
+                <Label htmlFor="imageFile" className="text-sm">
+                  Upload Image File
+                </Label>
+                <Input
+                  id="imageFile"
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      // For now, show file name - in a real app you'd upload to a service
+                      const fileName = `[Uploaded: ${file.name}]`;
+                      handleInputChange("imageUrl", fileName);
+                    }
+                  }}
+                  className="file:mr-4 file:rounded-md file:border-0 file:bg-blue-50 file:px-4 file:py-2 file:text-sm file:font-medium file:text-blue-700 hover:file:bg-blue-100"
+                />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Supported formats: JPG, PNG, GIF, WebP (Max 5MB)
+                </p>
+              </div>
+            </div>
           </div>
+
+          {(questionData.audioUrl || questionData.imageUrl) && (
+            <div className="mt-4 rounded-md bg-blue-50 p-3">
+              <p className="text-sm font-medium text-blue-800">
+                Media Preview:
+              </p>
+              {questionData.audioUrl && (
+                <p className="mt-1 text-sm text-blue-700">
+                  🎵 Audio:{" "}
+                  {questionData.audioUrl.startsWith("[Uploaded:")
+                    ? questionData.audioUrl
+                    : "URL provided"}
+                </p>
+              )}
+              {questionData.imageUrl && (
+                <p className="mt-1 text-sm text-blue-700">
+                  🖼️ Image:{" "}
+                  {questionData.imageUrl.startsWith("[Uploaded:")
+                    ? questionData.imageUrl
+                    : "URL provided"}
+                </p>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
 

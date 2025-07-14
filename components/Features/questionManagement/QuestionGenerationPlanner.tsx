@@ -107,10 +107,10 @@ export default function QuestionGenerationPlanner({
   const handleNewSession = async () => {
     if (draftCount === 0) {
       setError(null);
-      setSuccess("✨ New session started! No existing drafts to clear.");
+      setSuccess("✨ New session ready! You can start generating questions.");
       return;
     }
-    
+
     setShowClearConfirm(true);
   };
 
@@ -120,12 +120,14 @@ export default function QuestionGenerationPlanner({
       const response = await fetch("/api/question-management/drafts", {
         method: "DELETE",
       });
-      
+
       if (!response.ok) throw new Error("Failed to clear drafts");
-      
+
       const result = await response.json();
       setDraftCount(0);
-      setSuccess(`✨ New session started! Cleared ${result.data?.deletedCount || result.deletedCount || 0} draft questions.`);
+      setSuccess(
+        `✨ New session started! Cleared ${result.data?.deletedCount || result.deletedCount || 0} draft questions.`
+      );
       setShowClearConfirm(false);
       onGenerationComplete();
     } catch (err) {
@@ -211,16 +213,16 @@ export default function QuestionGenerationPlanner({
       }
 
       const result = await response.json();
-      
+
       // Show detailed success message with breakdown
       const breakdown = result.summary?.breakdown || [];
       const successDetails = breakdown
         .filter((b: any) => b.generated > 0)
-        .map((b: any) => `${b.generated} ${b.type.replace(/_/g, ' ')}`)
-        .join(', ');
-      
+        .map((b: any) => `${b.generated} ${b.type.replace(/_/g, " ")}`)
+        .join(", ");
+
       setSuccess(
-        `🎉 Successfully generated ${result.count} questions! ${successDetails ? `(${successDetails})` : ''} 
+        `🎉 Successfully generated ${result.count} questions! ${successDetails ? `(${successDetails})` : ""} 
         
         ➡️ Go to the "Draft Review" tab above to review and approve your questions.`
       );
@@ -260,14 +262,14 @@ export default function QuestionGenerationPlanner({
           <AlertDescription className="text-green-800">
             <div className="flex flex-col space-y-3">
               <div>{success}</div>
-              <Button 
+              <Button
                 onClick={() => {
                   if (onSwitchToDrafts) {
                     onSwitchToDrafts();
                   }
-                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                  window.scrollTo({ top: 0, behavior: "smooth" });
                 }}
-                className="bg-green-600 hover:bg-green-700 w-fit"
+                className="w-fit bg-green-600 hover:bg-green-700"
               >
                 📝 Review Generated Questions Now
               </Button>
@@ -403,7 +405,7 @@ export default function QuestionGenerationPlanner({
       </Card>
 
       {/* New Session and Generate Buttons */}
-      <div className="flex justify-between items-center">
+      <div className="flex items-center justify-between">
         <div className="flex items-center space-x-4">
           <Button
             onClick={handleNewSession}
@@ -418,7 +420,7 @@ export default function QuestionGenerationPlanner({
             </span>
           )}
         </div>
-        
+
         <Button
           onClick={handleGenerate}
           disabled={
@@ -440,8 +442,8 @@ export default function QuestionGenerationPlanner({
           <AlertDescription className="text-orange-800">
             <div className="space-y-3">
               <p>
-                ⚠️ You have {draftCount} draft questions in the system. 
-                Starting a new session will permanently delete all existing drafts.
+                ⚠️ You have {draftCount} draft questions in the system. Starting
+                a new session will permanently delete all existing drafts.
               </p>
               <div className="flex space-x-2">
                 <Button

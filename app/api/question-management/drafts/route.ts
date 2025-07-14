@@ -13,6 +13,7 @@ export async function GET(request: NextRequest) {
       .sort({ createdDate: -1 })
       .limit(200); // Reasonable limit for staging area
 
+
     return createApiResponse({
       drafts,
       total: drafts.length,

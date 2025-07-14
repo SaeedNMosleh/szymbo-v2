@@ -55,10 +55,36 @@ export default function QuestionDraftReview({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [conceptMap, setConceptMap] = useState<Map<string, string>>(new Map());
 
   useEffect(() => {
     fetchDrafts();
+    fetchConceptMap();
   }, [refreshTrigger]);
+
+  const fetchConceptMap = async () => {
+    try {
+      const response = await fetch("/api/concepts");
+      if (!response.ok) return;
+
+      const data = await response.json();
+      const concepts = data.data || data.concepts || [];
+      
+      const map = new Map<string, string>();
+      concepts.forEach((concept: any) => {
+        map.set(concept.id, concept.name);
+        map.set(concept.name, concept.name); // Handle cases where names are used
+      });
+      
+      setConceptMap(map);
+    } catch (err) {
+      console.error("Failed to fetch concept map:", err);
+    }
+  };
+
+  const getConceptDisplayName = (conceptIdOrName: string): string => {
+    return conceptMap.get(conceptIdOrName) || conceptIdOrName;
+  };
 
   const fetchDrafts = async () => {
     try {
@@ -68,8 +94,13 @@ export default function QuestionDraftReview({
 
       const data = await response.json();
       const drafts = data.data?.drafts || data.drafts || [];
+      
+      console.log("Fetched drafts:", drafts); // Debug log
+      console.log("First draft sample:", drafts[0]); // Debug log
+      
       setDrafts(drafts);
     } catch (err) {
+      console.error("Draft fetch error:", err); // Debug log
       setError("Failed to load question drafts");
     } finally {
       setIsLoading(false);
@@ -114,31 +145,50 @@ export default function QuestionDraftReview({
   const handleRegenerate = async (id: string) => {
     try {
       const draft = drafts.find((d) => d.id === id);
-      if (!draft) return;
+      if (!draft) {
+        console.error("Draft not found for regeneration:", id); // Debug log
+        return;
+      }
+
+      console.log("Regenerating draft:", draft); // Debug log
+      
+      const requestBody = {
+        draftId: id,
+        conceptIds: draft.targetConcepts,
+        questionType: draft.questionType,
+        difficulty: draft.difficulty,
+      };
+      
+      console.log("Regenerate request body:", requestBody); // Debug log
 
       const response = await fetch("/api/question-management/regenerate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          draftId: id,
-          conceptIds: draft.targetConcepts,
-          questionType: draft.questionType,
-          difficulty: draft.difficulty,
-        }),
+        body: JSON.stringify(requestBody),
       });
 
-      if (!response.ok) throw new Error("Failed to regenerate question");
+      console.log("Regenerate response status:", response.status); // Debug log
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error("Regenerate error response:", errorData); // Debug log
+        throw new Error(errorData.error || "Failed to regenerate question");
+      }
 
       const result = await response.json();
+      console.log("Regenerate success result:", result); // Debug log
+      
+      const updatedQuestion = result.data?.question || result.question;
       setDrafts((prev) =>
         prev.map((draft) =>
-          draft.id === id ? { ...draft, ...result.question } : draft
+          draft.id === id ? { ...draft, ...updatedQuestion } : draft
         )
       );
 
       setSuccess("Question regenerated successfully");
     } catch (err) {
-      setError("Failed to regenerate question");
+      console.error("Regenerate error:", err); // Debug log
+      setError(err instanceof Error ? err.message : "Failed to regenerate question");
     }
   };
 
@@ -157,6 +207,66 @@ export default function QuestionDraftReview({
       setSelectedDrafts([]);
     } else {
       setSelectedDrafts(drafts.map((d) => d.id));
+    }
+  };
+
+  const handleDeleteDrafts = async () => {
+    if (selectedDrafts.length === 0) return;
+
+    try {
+      setIsLoading(true);
+      const response = await fetch("/api/question-management/drafts/bulk", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: selectedDrafts }),
+      });
+
+      if (!response.ok) throw new Error("Failed to delete drafts");
+
+      const result = await response.json();
+      setDrafts((prev) => prev.filter((draft) => !selectedDrafts.includes(draft.id)));
+      setSelectedDrafts([]);
+      setSuccess(`Successfully deleted ${result.deletedCount || selectedDrafts.length} draft questions`);
+    } catch (err) {
+      setError("Failed to delete selected drafts");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSaveToQuestionBank = async () => {
+    if (selectedDrafts.length === 0) return;
+
+    try {
+      setIsSaving(true);
+      console.log("Saving to bank - selected drafts:", selectedDrafts); // Debug log
+      
+      const response = await fetch("/api/question-management/save-to-bank", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ questionIds: selectedDrafts }),
+      });
+
+      console.log("Save to bank response status:", response.status); // Debug log
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error("Save to bank error response:", errorData); // Debug log
+        throw new Error(errorData.error || "Failed to save drafts to question bank");
+      }
+
+      const result = await response.json();
+      console.log("Save to bank success result:", result); // Debug log
+      
+      setDrafts((prev) => prev.filter((draft) => !selectedDrafts.includes(draft.id)));
+      setSelectedDrafts([]);
+      setSuccess(`Successfully saved ${result.data?.savedCount || result.savedCount || selectedDrafts.length} questions to the question bank`);
+      onApprovalComplete();
+    } catch (err) {
+      console.error("Save to bank error:", err); // Debug log
+      setError(err instanceof Error ? err.message : "Failed to save selected drafts to question bank");
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -314,13 +424,75 @@ export default function QuestionDraftReview({
           <div>
             <Label>Target Concepts</Label>
             <div className="mt-1 flex flex-wrap gap-1">
-              {draft.conceptNames?.map((name) => (
-                <Badge key={name} variant="outline" className="text-xs">
-                  {name}
+              {draft.targetConcepts?.map((concept) => (
+                <Badge key={concept} variant="outline" className="text-xs">
+                  {getConceptDisplayName(concept)}
                 </Badge>
               ))}
             </div>
           </div>
+
+          {/* Display media URLs when not editing */}
+          {!isEditing && (draft.audioUrl || draft.imageUrl) && (
+            <div className="grid grid-cols-2 gap-4">
+              {draft.audioUrl && (
+                <div>
+                  <Label>Audio</Label>
+                  <div className="rounded bg-gray-50 p-2 text-sm">
+                    <a 
+                      href={draft.audioUrl} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:underline"
+                    >
+                      {draft.audioUrl.length > 50 ? draft.audioUrl.substring(0, 50) + '...' : draft.audioUrl}
+                    </a>
+                  </div>
+                </div>
+              )}
+              {draft.imageUrl && (
+                <div>
+                  <Label>Image</Label>
+                  <div className="rounded bg-gray-50 p-2 text-sm">
+                    <a 
+                      href={draft.imageUrl} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:underline"
+                    >
+                      {draft.imageUrl.length > 50 ? draft.imageUrl.substring(0, 50) + '...' : draft.imageUrl}
+                    </a>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Audio and Image URLs */}
+          {isEditing && (
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Audio URL (Optional)</Label>
+                <Input
+                  value={editData.audioUrl || ''}
+                  onChange={(e) =>
+                    setEditData((prev) => ({ ...prev, audioUrl: e.target.value }))
+                  }
+                  placeholder="https://example.com/audio.mp3"
+                />
+              </div>
+              <div>
+                <Label>Image URL (Optional)</Label>
+                <Input
+                  value={editData.imageUrl || ''}
+                  onChange={(e) =>
+                    setEditData((prev) => ({ ...prev, imageUrl: e.target.value }))
+                  }
+                  placeholder="https://example.com/image.jpg"
+                />
+              </div>
+            </div>
+          )}
 
           {isEditing && (
             <div className="grid grid-cols-2 gap-4">
@@ -328,12 +500,20 @@ export default function QuestionDraftReview({
                 <Label>Question Type</Label>
                 <Select
                   value={editData.questionType}
-                  onValueChange={(value) =>
-                    setEditData((prev) => ({
-                      ...prev,
-                      questionType: value as QuestionType,
-                    }))
-                  }
+                  onValueChange={(value) => {
+                    const newType = value as QuestionType;
+                    setEditData((prev) => {
+                      const needsOptions = [QuestionType.VOCAB_CHOICE, QuestionType.MULTI_SELECT, QuestionType.WORD_ARRANGEMENT].includes(newType);
+                      const hadOptions = [QuestionType.VOCAB_CHOICE, QuestionType.MULTI_SELECT, QuestionType.WORD_ARRANGEMENT].includes(prev.questionType);
+                      
+                      return {
+                        ...prev,
+                        questionType: newType,
+                        options: needsOptions ? (prev.options?.length > 0 ? prev.options : ['', '']) : [],
+                        correctAnswer: (!needsOptions && hadOptions) ? '' : prev.correctAnswer,
+                      };
+                    });
+                  }}
                 >
                   <SelectTrigger>
                     <SelectValue />

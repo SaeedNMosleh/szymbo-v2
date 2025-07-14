@@ -36,11 +36,45 @@ export async function POST(request: NextRequest) {
       return createErrorResponse("Draft not found", 404);
     }
 
-    // Fetch concepts
-    const concepts = await Concept.find({ 
+    // Fetch concepts - handle both concept IDs and names properly
+    console.log("Looking for concepts with IDs/names:", conceptIds); // Debug log
+    
+    const conceptMap = new Map();
+    let allFoundConcepts = [];
+    
+    // First try to find by ID
+    const conceptsByIds = await Concept.find({ 
       id: { $in: conceptIds }, 
       isActive: true 
     });
+    
+    conceptsByIds.forEach(concept => {
+      conceptMap.set(concept.id, concept);
+      allFoundConcepts.push(concept);
+    });
+    
+    // For remaining items, try to find by name
+    const remainingItems = conceptIds.filter(item => !conceptMap.has(item));
+    console.log("Remaining items to search by name:", remainingItems); // Debug log
+    
+    if (remainingItems.length > 0) {
+      const conceptsByNames = await Concept.find({ 
+        name: { $in: remainingItems }, 
+        isActive: true 
+      });
+      
+      conceptsByNames.forEach(concept => {
+        if (!conceptMap.has(concept.id)) { // Avoid duplicates
+          conceptMap.set(concept.name, concept);
+          allFoundConcepts.push(concept);
+        }
+      });
+    }
+    
+    console.log("Total concepts found:", allFoundConcepts.length); // Debug log
+    console.log("Concept details:", allFoundConcepts.map(c => ({id: c.id, name: c.name}))); // Debug log
+    
+    const concepts = allFoundConcepts;
 
     if (concepts.length === 0) {
       return createErrorResponse("No valid concepts found", 404);

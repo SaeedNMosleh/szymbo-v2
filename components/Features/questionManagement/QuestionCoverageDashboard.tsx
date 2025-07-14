@@ -25,7 +25,7 @@ interface CoverageData {
   conceptId: string;
   conceptName: string;
   category: ConceptCategory;
-  difficulty: QuestionLevel;
+  difficulty: string;
   coverage: Record<QuestionType, number>;
   totalQuestions: number;
 }
@@ -66,8 +66,12 @@ export default function QuestionCoverageDashboard({
       if (!response.ok) throw new Error("Failed to fetch coverage data");
 
       const data = await response.json();
-      setCoverageData(data.coverage || []);
-      setStats(data.stats || null);
+      
+      const coverage = data.data?.coverage || data.coverage || [];
+      const stats = data.data?.stats || data.stats || null;
+
+      setCoverageData(coverage);
+      setStats(stats);
     } catch (err) {
       setError("Failed to load coverage data");
     } finally {
@@ -233,76 +237,88 @@ export default function QuestionCoverageDashboard({
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
-            <div className="inline-block min-w-full">
-              {/* Header */}
-              <div className="flex">
-                <div className="w-64 border-b border-r bg-gray-50 p-3 font-medium">
-                  Concept
-                </div>
-                {questionTypes.map((type) => (
-                  <div
-                    key={type}
-                    className="w-20 border-b bg-gray-50 p-2 text-center text-xs font-medium"
-                  >
-                    {type.replace(/_/g, " ").slice(0, 8)}
+          {filteredData.length === 0 ? (
+            <div className="py-8 text-center text-muted-foreground">
+              <p>No coverage data available.</p>
+              <p className="mt-2 text-sm">This could be because:</p>
+              <ul className="mt-2 inline-block text-left text-sm">
+                <li>• No concepts have been created yet</li>
+                <li>• No questions have been generated or added</li>
+                <li>• Questions are not linked to concepts</li>
+              </ul>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <div className="inline-block min-w-full">
+                {/* Header */}
+                <div className="flex">
+                  <div className="w-64 border-b border-r bg-gray-50 p-3 font-medium">
+                    Concept
                   </div>
-                ))}
-                <div className="w-16 border-b bg-gray-50 p-2 text-center text-xs font-medium">
-                  Total
+                  {questionTypes.map((type) => (
+                    <div
+                      key={type}
+                      className="w-20 border-b bg-gray-50 p-2 text-center text-xs font-medium"
+                    >
+                      {type.replace(/_/g, " ").slice(0, 8)}
+                    </div>
+                  ))}
+                  <div className="w-16 border-b bg-gray-50 p-2 text-center text-xs font-medium">
+                    Total
+                  </div>
                 </div>
-              </div>
 
-              {/* Data Rows */}
-              <div className="max-h-96 overflow-y-auto">
-                {filteredData.map((concept) => (
-                  <div
-                    key={concept.conceptId}
-                    className="flex border-b hover:bg-gray-50"
-                  >
-                    <div className="w-64 border-r p-3">
-                      <div className="flex flex-col">
-                        <span className="text-sm font-medium">
-                          {concept.conceptName}
-                        </span>
-                        <div className="mt-1 flex gap-1">
-                          <Badge variant="outline" className="text-xs">
-                            {concept.category}
-                          </Badge>
-                          <Badge variant="secondary" className="text-xs">
-                            {concept.difficulty}
-                          </Badge>
+                {/* Data Rows */}
+                <div className="max-h-96 overflow-y-auto">
+                  {filteredData.map((concept) => (
+                    <div
+                      key={concept.conceptId}
+                      className="flex border-b hover:bg-gray-50"
+                    >
+                      <div className="w-64 border-r p-3">
+                        <div className="flex flex-col">
+                          <span className="text-sm font-medium">
+                            {concept.conceptName}
+                          </span>
+                          <div className="mt-1 flex gap-1">
+                            <Badge variant="outline" className="text-xs">
+                              {concept.category}
+                            </Badge>
+                            <Badge variant="secondary" className="text-xs">
+                              {concept.difficulty}
+                            </Badge>
+                          </div>
                         </div>
                       </div>
-                    </div>
 
-                    {questionTypes.map((type) => {
-                      const count = concept.coverage[type] || 0;
-                      return (
-                        <div
-                          key={type}
-                          className={`w-20 cursor-pointer border-r p-2 text-center text-xs ${getCoverageColor(count)}`}
-                          onClick={() =>
-                            setSelectedConcept(
-                              selectedConcept === concept.conceptId
-                                ? null
-                                : concept.conceptId
-                            )
-                          }
-                        >
-                          {count}
-                        </div>
-                      );
-                    })}
+                      {questionTypes.map((type) => {
+                        const count = concept.coverage[type] || 0;
+                        return (
+                          <div
+                            key={type}
+                            className={`w-20 cursor-pointer border-r p-2 text-center text-xs ${getCoverageColor(count)}`}
+                            onClick={() =>
+                              setSelectedConcept(
+                                selectedConcept === concept.conceptId
+                                  ? null
+                                  : concept.conceptId
+                              )
+                            }
+                          >
+                            {count}
+                          </div>
+                        );
+                      })}
 
-                    <div className="w-16 p-2 text-center text-xs font-medium">
-                      {concept.totalQuestions}
+                      <div className="w-16 p-2 text-center text-xs font-medium">
+                        {concept.totalQuestions}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
           {/* Legend */}
           <div className="mt-4 flex items-center space-x-4 text-xs">

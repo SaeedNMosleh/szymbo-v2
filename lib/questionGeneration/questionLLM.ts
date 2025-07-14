@@ -235,6 +235,7 @@ REQUIREMENTS:
 4. Use authentic Polish language and realistic contexts
 5. For multiple choice questions, include plausible distractors
 6. For fill-in-the-blank, use contextual clues appropriately
+7. In targetConcepts field, use the exact concept NAMES from the list above, not IDs
 
 CRITICAL JSON FORMATTING REQUIREMENTS:
 - Return ONLY valid JSON - no markdown, no explanations, no code blocks
@@ -248,7 +249,7 @@ RESPONSE FORMAT (STRICT JSON):
     {
       "question": "Question text with blanks (___) if applicable",
       "correctAnswer": "Correct answer or comma-separated answers for multi-select",
-      "targetConcepts": ["concept_id_1", "concept_id_2"],
+      "targetConcepts": ["concept_name_1", "concept_name_2"],
       "options": ["option1", "option2", "option3", "option4"]
     }
   ]
@@ -260,7 +261,7 @@ EXAMPLE VALID JSON RESPONSE:
     {
       "question": "Ja _____ do sklepu.",
       "correctAnswer": "idę",
-      "targetConcepts": ["${conceptIds[0] || 'concept_1'}"],
+      "targetConcepts": ["${conceptNames.split(', ')[0] || 'verb conjugation'}"],
       "options": []
     }
   ]
@@ -291,6 +292,9 @@ Generate exactly ${quantity} questions. Return ONLY the JSON object above with n
   ): GeneratedQuestion[] {
     const validQuestions: GeneratedQuestion[] = [];
     const conceptIds = request.concepts.map(c => c.id);
+    
+    // Create mapping from concept names to IDs (LLM uses names, we need IDs for storage)
+    const conceptNameToIdMap = new Map(request.concepts.map(c => [c.name, c.id]));
 
     for (const q of questions) {
       if (!q.question || !q.correctAnswer) {
@@ -298,12 +302,29 @@ Generate exactly ${quantity} questions. Return ONLY the JSON object above with n
         continue;
       }
 
+      // Convert LLM-provided concept names to concept IDs for database storage
+      let targetConceptIds: string[] = conceptIds; // Default to all concept IDs
+      
+      if (q.targetConcepts?.length > 0) {
+        // Convert concept names from LLM to concept IDs for internal storage
+        targetConceptIds = q.targetConcepts
+          .map((conceptName: string) => conceptNameToIdMap.get(conceptName))
+          .filter((id: string | undefined) => id !== undefined) as string[];
+        
+        // If no valid concepts found after mapping, fallback to all concept IDs
+        if (targetConceptIds.length === 0) {
+          targetConceptIds = conceptIds;
+        }
+      }
+
+      console.log(`LLM returned concept names: ${JSON.stringify(q.targetConcepts)}, storing as IDs: ${JSON.stringify(targetConceptIds)}`);
+
       const formattedQuestion: GeneratedQuestion = {
         question: q.question.trim(),
         correctAnswer: q.correctAnswer.trim(),
         questionType: request.questionType,
         difficulty: request.difficulty,
-        targetConcepts: q.targetConcepts?.length > 0 ? q.targetConcepts : conceptIds,
+        targetConcepts: targetConceptIds, // Always concept IDs for database storage
         options: q.options || undefined,
       };
 
