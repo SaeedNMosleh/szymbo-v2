@@ -2,6 +2,19 @@ import { Schema, model, models } from "mongoose";
 import { ConceptCategory, QuestionLevel } from "@/lib/enum";
 
 /**
+ * Vocabulary-specific data for enriched language learning
+ * @interface IVocabularyData
+ */
+export interface IVocabularyData {
+  word: string;           // Primary word: "nóż"
+  translation: string;    // English translation: "knife"
+  partOfSpeech: string;   // "noun", "verb", "adjective"
+  gender?: string;        // "masculine", "feminine", "neuter" (for nouns)
+  pluralForm?: string;    // Plural form if applicable    
+  pronunciation?: string; // IPA or phonetic guide
+}
+
+/**
  * Interface representing a learning concept
  * @interface IConcept
  */
@@ -18,7 +31,26 @@ export interface IConcept {
   confidence: number; // 0-1 extraction confidence
   createdFrom: string[]; // source course IDs
   lastUpdated: Date;
+  
+  // Enhanced fields for concept management hub
+  tags: string[];
+  sourceType: 'course' | 'document' | 'manual' | 'import';
+  version: number; // for concept evolution tracking
+  parentConceptId?: string; // for split concepts
+  mergedFromIds?: string[]; // for merged concepts
+  isArchived?: boolean; // soft delete marker
+  archivedDate?: Date;
+  vocabularyData?: IVocabularyData; // vocabulary-specific data
 }
+
+const VocabularyDataSchema = new Schema<IVocabularyData>({
+  word: { type: String, required: true },
+  translation: { type: String, required: true },
+  partOfSpeech: { type: String, required: true },
+  gender: { type: String },
+  pluralForm: { type: String },
+  pronunciation: { type: String },
+}, { _id: false });
 
 const ConceptSchema = new Schema<IConcept>(
   {
@@ -49,6 +81,21 @@ const ConceptSchema = new Schema<IConcept>(
     },
     createdFrom: { type: [String], default: [] },
     lastUpdated: { type: Date, default: Date.now },
+    
+    // Enhanced fields for concept management hub
+    tags: { type: [String], default: [], index: true },
+    sourceType: { 
+      type: String, 
+      enum: ['course', 'document', 'manual', 'import'],
+      default: 'course',
+      index: true 
+    },
+    version: { type: Number, default: 1 },
+    parentConceptId: { type: String, index: true },
+    mergedFromIds: { type: [String], default: [] },
+    isArchived: { type: Boolean, default: false, index: true },
+    archivedDate: { type: Date },
+    vocabularyData: { type: VocabularyDataSchema },
   },
   {
     timestamps: true,
