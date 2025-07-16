@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 
 interface PracticeSelectorProps {
-  onModeSelect: (mode: PracticeMode) => void;
+  onModeSelect: (mode: PracticeMode, options?: { drillType?: "weakness" | "course"; courseId?: number }) => void;
   isLoading: boolean;
 }
 
@@ -49,9 +49,7 @@ export function PracticeSelector({
     Record<PracticeMode, ModeAvailability>
   >({
     [PracticeMode.NORMAL]: { available: true, fallbackAvailable: true },
-    [PracticeMode.PREVIOUS]: { available: true, fallbackAvailable: true },
     [PracticeMode.DRILL]: { available: true, fallbackAvailable: true },
-    [PracticeMode.COURSE]: { available: true, fallbackAvailable: true },
   });
 
   useEffect(() => {
@@ -97,27 +95,11 @@ export function PracticeSelector({
                 : undefined,
             fallbackAvailable: stats.questionBankSize > 0,
           },
-          [PracticeMode.PREVIOUS]: {
-            available: stats.previouslyUsedQuestions > 0,
-            reason:
-              stats.previouslyUsedQuestions === 0
-                ? "No previously answered questions found."
-                : undefined,
-            fallbackAvailable: stats.questionBankSize > 0,
-          },
           [PracticeMode.DRILL]: {
-            available: stats.previouslyUsedQuestions > 2,
+            available: stats.previouslyUsedQuestions > 2 || stats.totalCourses > 0,
             reason:
-              stats.previouslyUsedQuestions <= 2
-                ? "Need more practice history for drilling."
-                : undefined,
-            fallbackAvailable: stats.questionBankSize > 0,
-          },
-          [PracticeMode.COURSE]: {
-            available: stats.totalCourses > 0,
-            reason:
-              stats.totalCourses === 0
-                ? "No courses available. Add courses first."
+              stats.previouslyUsedQuestions <= 2 && stats.totalCourses === 0
+                ? "Need more practice history or courses for drilling."
                 : undefined,
             fallbackAvailable: stats.questionBankSize > 0,
           },
@@ -131,7 +113,7 @@ export function PracticeSelector({
   const practiceOptions = [
     {
       mode: PracticeMode.NORMAL,
-      title: "Smart Practice",
+      title: "Normal Practice",
       description:
         "AI selects concepts you need to review based on spaced repetition",
       icon: <Brain className="size-8 text-blue-600" />,
@@ -146,53 +128,20 @@ export function PracticeSelector({
       fallbackInfo: "Will generate new questions if needed",
     },
     {
-      mode: PracticeMode.PREVIOUS,
-      title: "Review Previous",
-      description:
-        "Practice with questions you've seen before to reinforce learning",
-      icon: <RotateCcw className="size-8 text-green-600" />,
-      color: "border-green-200 hover:border-green-300 bg-green-50",
-      buttonColor: "bg-green-600 hover:bg-green-700",
-      features: [
-        "Familiar questions only",
-        "Build confidence",
-        "No new question generation",
-        "Quick review sessions",
-      ],
-      fallbackInfo:
-        "Falls back to any available questions if no previous questions found",
-    },
-    {
       mode: PracticeMode.DRILL,
-      title: "Drill Weak Areas",
-      description: "Focus on concepts and questions where you struggled before",
+      title: "Drill Mode",
+      description: "Focus on weak concepts or specific courses",
       icon: <Target className="size-8 text-red-600" />,
       color: "border-red-200 hover:border-red-300 bg-red-50",
       buttonColor: "bg-red-600 hover:bg-red-700",
       features: [
         "Target weak concepts",
-        "Failed questions focus",
-        "Difficulty adjustment",
+        "Course-specific drilling",
+        "User-controlled selection",
         "Intensive practice",
       ],
       fallbackInfo:
         "Falls back to all questions if insufficient performance data",
-    },
-    {
-      mode: PracticeMode.COURSE,
-      title: "Course Practice",
-      description: "Practice concepts from a specific course you've added",
-      icon: <BookOpen className="size-8 text-purple-600" />,
-      color: "border-purple-200 hover:border-purple-300 bg-purple-50",
-      buttonColor: "bg-purple-600 hover:bg-purple-700",
-      features: [
-        "Select specific course",
-        "Practice course concepts",
-        "Familiar course context",
-        "Targeted learning",
-      ],
-      fallbackInfo:
-        "Falls back to available questions if course has no concepts",
     },
   ];
 
@@ -272,7 +221,7 @@ export function PracticeSelector({
       )}
 
       {/* Practice Mode Grid */}
-      <div className="mx-auto grid max-w-7xl grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
+      <div className="mx-auto grid max-w-4xl grid-cols-1 gap-6 md:grid-cols-2">
         {practiceOptions.map((option) => {
           const availability = modeAvailability[option.mode];
           const isDisabled =
@@ -329,20 +278,48 @@ export function PracticeSelector({
                   </div>
                 )}
 
-                <Button
-                  onClick={() => onModeSelect(option.mode)}
-                  disabled={isLoading || isDisabled}
-                  className={`w-full ${option.buttonColor} text-white disabled:opacity-50`}
-                >
-                  {isLoading ? (
-                    <div className="flex items-center">
-                      <div className="mr-2 size-4 animate-spin rounded-full border-b-2 border-white"></div>
-                      Starting...
-                    </div>
-                  ) : (
-                    getModeButtonText(option.mode)
-                  )}
-                </Button>
+                {/* Drill Mode Options */}
+                {option.mode === PracticeMode.DRILL ? (
+                  <div className="space-y-2">
+                    <Button
+                      onClick={() => onModeSelect(option.mode, { drillType: "weakness" })}
+                      disabled={isLoading || isDisabled}
+                      className={`w-full ${option.buttonColor} text-white disabled:opacity-50`}
+                    >
+                      {isLoading ? (
+                        <div className="flex items-center">
+                          <div className="mr-2 size-4 animate-spin rounded-full border-b-2 border-white"></div>
+                          Starting...
+                        </div>
+                      ) : (
+                        "Drill Weak Concepts"
+                      )}
+                    </Button>
+                    <Button
+                      onClick={() => onModeSelect(option.mode)}
+                      disabled={isLoading || isDisabled}
+                      variant="outline"
+                      className="w-full"
+                    >
+                      Drill by Course
+                    </Button>
+                  </div>
+                ) : (
+                  <Button
+                    onClick={() => onModeSelect(option.mode)}
+                    disabled={isLoading || isDisabled}
+                    className={`w-full ${option.buttonColor} text-white disabled:opacity-50`}
+                  >
+                    {isLoading ? (
+                      <div className="flex items-center">
+                        <div className="mr-2 size-4 animate-spin rounded-full border-b-2 border-white"></div>
+                        Starting...
+                      </div>
+                    ) : (
+                      getModeButtonText(option.mode)
+                    )}
+                  </Button>
+                )}
 
                 {/* Fallback explanation */}
                 {!availability.available && availability.fallbackAvailable && (

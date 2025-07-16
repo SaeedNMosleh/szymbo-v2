@@ -128,7 +128,7 @@ function CourseSelector({
             <ArrowLeft className="mr-2 size-4" />
             Back to Practice Modes
           </Button>
-          <h2 className="text-xl font-semibold">Select Course to Practice</h2>
+          <h2 className="text-xl font-semibold">Select Course to Drill</h2>
         </div>
 
         {courses.length === 0 ? (
@@ -195,9 +195,9 @@ export default function PracticeNewPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleModeSelect = async (mode: PracticeMode, courseId?: number) => {
-    // For course mode, if no courseId provided, just set the mode for course selection
-    if (mode === PracticeMode.COURSE && !courseId) {
+  const handleModeSelect = async (mode: PracticeMode, options?: { drillType?: "weakness" | "course"; courseId?: number }) => {
+    // For drill mode, if no drillType provided, set to weakness mode for dashboard
+    if (mode === PracticeMode.DRILL && !options?.drillType) {
       setSelectedMode(mode);
       return;
     }
@@ -214,8 +214,11 @@ export default function PracticeNewPage() {
         maxConcepts: 5,
       };
 
-      if (mode === PracticeMode.COURSE && courseId) {
-        requestBody.courseId = courseId;
+      if (mode === PracticeMode.DRILL && options?.drillType) {
+        requestBody.drillType = options.drillType;
+        if (options.drillType === "course" && options.courseId) {
+          requestBody.courseId = options.courseId;
+        }
       }
 
       const response = await fetch("/api/practice-new/session", {
@@ -293,10 +296,10 @@ export default function PracticeNewPage() {
         </>
       )}
 
-      {selectedMode === PracticeMode.COURSE && !sessionData && !isLoading && (
+      {selectedMode === PracticeMode.DRILL && !sessionData && !isLoading && (
         <CourseSelector
           onCourseSelect={(courseId) =>
-            handleModeSelect(PracticeMode.COURSE, courseId)
+            handleModeSelect(PracticeMode.DRILL, { drillType: "course", courseId })
           }
           onBack={handleBackToModes}
           isLoading={isLoading}

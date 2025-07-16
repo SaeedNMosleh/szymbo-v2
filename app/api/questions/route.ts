@@ -271,7 +271,7 @@ class QuestionBankService {
 const questionQuerySchema = z.object({
   conceptIds: z.string().optional(),
   mode: z
-    .enum([PracticeMode.NORMAL, PracticeMode.PREVIOUS, PracticeMode.DRILL])
+    .enum([PracticeMode.NORMAL, PracticeMode.DRILL])
     .optional(),
   limit: z.string().optional(),
   difficulty: z.string().optional(),
@@ -383,40 +383,34 @@ export async function GET(request: NextRequest) {
     const query: QuestionQuery = { isActive: true };
 
     if (conceptIds) {
-      const conceptIdArray = conceptIds.split(",").filter((id) => id.trim());
+      const conceptIdArray = conceptIds.split(",").filter((id: string) => id.trim());
       if (conceptIdArray.length > 0) {
         query.targetConcepts = { $in: conceptIdArray };
       }
     }
 
     if (difficulty) {
-      query.difficulty = difficulty;
+      query.difficulty = difficulty as string;
     }
 
     if (questionType) {
-      query.questionType = questionType;
+      query.questionType = questionType as string;
     }
 
     // Mode-specific filters
-    if (mode === PracticeMode.PREVIOUS) {
-      query.timesUsed = { $gt: 0 }; // Only previously used questions
-    } else if (mode === PracticeMode.DRILL) {
+    let sortCriteria = {};
+    if (mode === PracticeMode.DRILL) {
       query.successRate = { $lt: 0.6 }; // Low success rate questions
       query.timesUsed = { $gt: 2 }; // Must have been tried multiple times
-    }
-
-    // Build sort criteria
-    let sortCriteria = {};
-    if (mode === PracticeMode.PREVIOUS) {
-      sortCriteria = { lastUsed: -1 }; // Most recently used first
-    } else if (mode === PracticeMode.DRILL) {
       sortCriteria = { successRate: 1, timesUsed: -1 }; // Worst performing first
     } else {
-      sortCriteria = { timesUsed: 1, successRate: -1, createdDate: -1 }; // Prefer less used, higher success, newer
+      // NORMAL mode: Prioritize question bank (previously used questions) then fallback to new ones
+      // No additional query filters - we want both used and unused questions
+      sortCriteria = { timesUsed: -1, successRate: -1, createdDate: -1 }; // Prefer previously used, higher success, newer
     }
 
     // Execute query
-    const limitNum = limit ? Math.min(100, Math.max(1, parseInt(limit))) : 20;
+    const limitNum = limit ? Math.min(100, Math.max(1, parseInt(limit as string))) : 20;
     const questions = await QuestionBank.find(query)
       .sort(sortCriteria)
       .limit(limitNum);

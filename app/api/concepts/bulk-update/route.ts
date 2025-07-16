@@ -2,8 +2,56 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/dbConnect";
 import { ConceptManagerEnhanced } from "@/lib/conceptExtraction/conceptManagerEnhanced";
 import { ConceptLLMService } from "@/lib/conceptExtraction/conceptLLM";
+import { IConcept } from "@/datamodels/concept.model";
+import { RelationshipType } from "@/datamodels/conceptRelationship.model";
 import { z } from "zod";
 import { ConceptCategory, QuestionLevel } from "@/lib/enum";
+
+// Types for change objects
+interface ChangeBase {
+  conceptId: string;
+  conceptName: string;
+  operation: string;
+  oldValue: unknown;
+  applied: boolean;
+  error?: string;
+}
+
+interface TagAssignmentChange extends ChangeBase {
+  operation: 'tag-assignment';
+  newValue: string[];
+}
+
+interface CategoryChange extends ChangeBase {
+  operation: 'category-change';
+  newValue: ConceptCategory;
+}
+
+interface DifficultyChange extends ChangeBase {
+  operation: 'difficulty-change';
+  newValue: QuestionLevel;
+}
+
+interface RelationshipSuggestion {
+  fromConceptId: string;
+  fromConceptName: string;
+  toConceptId: string;
+  toConceptName: string;
+  relationshipType: string;
+  strength: number;
+  reasoning: string;
+  applied: boolean;
+  error?: string;
+}
+
+// Type for bulk operation results
+interface BulkOperationResult {
+  operation: string;
+  conceptsProcessed: number;
+  preview?: boolean;
+  changes?: (TagAssignmentChange | CategoryChange | DifficultyChange)[];
+  suggestions?: RelationshipSuggestion[];
+}
 
 // Request validation schemas for bulk operations
 const bulkUpdateSchema = z.object({
@@ -48,7 +96,7 @@ export async function POST(request: NextRequest) {
       validatedData.conceptIds.map(id => conceptManager.getConcept(id))
     );
 
-    const validConcepts = concepts.filter(c => c !== null) as any[];
+    const validConcepts = concepts.filter(c => c !== null) as IConcept[];
     if (validConcepts.length === 0) {
       return NextResponse.json(
         {
@@ -59,7 +107,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    let results: any = {
+    let results: BulkOperationResult = {
       operation: validatedData.operation,
       conceptsProcessed: validConcepts.length,
       preview: validatedData.preview,
@@ -143,17 +191,17 @@ export async function POST(request: NextRequest) {
 // Helper function for tag assignment
 async function handleTagAssignment(
   conceptManager: ConceptManagerEnhanced,
-  concepts: any[],
+  concepts: IConcept[],
   tags: string[],
   preview: boolean
 ) {
-  const changes = [];
+  const changes: TagAssignmentChange[] = [];
 
   for (const concept of concepts) {
     const existingTags = concept.tags || [];
     const newTags = Array.from(new Set([...existingTags, ...tags]));
     
-    const change = {
+    const change: TagAssignmentChange = {
       conceptId: concept.id,
       conceptName: concept.name,
       operation: 'tag-assignment',
@@ -190,18 +238,18 @@ async function handleTagAssignment(
 // Helper function for category changes
 async function handleCategoryChange(
   conceptManager: ConceptManagerEnhanced,
-  concepts: any[],
+  concepts: IConcept[],
   newCategory: ConceptCategory,
   preview: boolean
 ) {
-  const changes = [];
+  const changes: CategoryChange[] = [];
 
   for (const concept of concepts) {
     if (concept.category === newCategory) {
       continue; // Skip if already in target category
     }
 
-    const change = {
+    const change: CategoryChange = {
       conceptId: concept.id,
       conceptName: concept.name,
       operation: 'category-change',
@@ -238,18 +286,18 @@ async function handleCategoryChange(
 // Helper function for difficulty changes
 async function handleDifficultyChange(
   conceptManager: ConceptManagerEnhanced,
-  concepts: any[],
+  concepts: IConcept[],
   newDifficulty: QuestionLevel,
   preview: boolean
 ) {
-  const changes = [];
+  const changes: DifficultyChange[] = [];
 
   for (const concept of concepts) {
     if (concept.difficulty === newDifficulty) {
       continue; // Skip if already at target difficulty
     }
 
-    const change = {
+    const change: DifficultyChange = {
       conceptId: concept.id,
       conceptName: concept.name,
       operation: 'difficulty-change',
@@ -287,14 +335,12 @@ async function handleDifficultyChange(
 async function handleRelationshipSuggestions(
   conceptManager: ConceptManagerEnhanced,
   llmService: ConceptLLMService,
-  concepts: any[],
+  concepts: IConcept[],
   analysisPrompt?: string,
   autoApprove: boolean = false
 ) {
-  const suggestions = [];
+  const suggestions: RelationshipSuggestion[] = [];
 
-  // Get concept index for similarity analysis
-  const conceptIndex = await conceptManager.getConceptIndex();
 
   for (let i = 0; i < concepts.length; i++) {
     for (let j = i + 1; j < concepts.length; j++) {
@@ -309,6 +355,9 @@ async function handleRelationshipSuggestions(
             description: concept1.description,
             category: concept1.category,
             examples: concept1.examples || [],
+            sourceContent: concept1.sourceContent || 'Bulk update analysis',
+            confidence: concept1.confidence || 0.8,
+            suggestedDifficulty: concept1.difficulty || QuestionLevel.B1,
           },
           [{
             conceptId: concept2.id,
@@ -323,7 +372,7 @@ async function handleRelationshipSuggestions(
         if (similarityMatches.length > 0 && similarityMatches[0].similarity > 0.3) {
           const match = similarityMatches[0];
           
-          const suggestion = {
+          const suggestion: RelationshipSuggestion = {
             fromConceptId: concept1.id,
             fromConceptName: concept1.name,
             toConceptId: concept2.id,
@@ -340,7 +389,7 @@ async function handleRelationshipSuggestions(
               await conceptManager.createConceptRelationship({
                 fromConceptId: concept1.id,
                 toConceptId: concept2.id,
-                relationshipType: suggestion.relationshipType as any,
+                relationshipType: suggestion.relationshipType as RelationshipType,
                 strength: suggestion.strength,
                 createdBy: 'llm',
                 description: suggestion.reasoning,

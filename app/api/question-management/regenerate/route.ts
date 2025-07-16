@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import dbConnect from "@/lib/dbConnect";
 import QuestionDraft from "@/datamodels/questionDraft.model";
 import Concept from "@/datamodels/concept.model";
@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
     console.log("Looking for concepts with IDs/names:", conceptIds); // Debug log
     
     const conceptMap = new Map();
-    let allFoundConcepts = [];
+    const allFoundConcepts: any[] = [];
     
     // First try to find by ID
     const conceptsByIds = await Concept.find({ 

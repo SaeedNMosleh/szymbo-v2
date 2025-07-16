@@ -1,26 +1,32 @@
 "use client";
 
-import React, { useState, useRef, useCallback } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Badge } from '@/components/ui/badge';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { 
-  Upload, 
-  FileText, 
-  Table, 
-  Edit3, 
-  Download, 
+import React, { useState, useRef, useCallback } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Upload,
+  FileText,
+  Table,
+  Edit3,
+  Download,
   CheckCircle,
   AlertCircle,
   Trash2,
-  Plus
-} from 'lucide-react';
+  Plus,
+} from "lucide-react";
 
 // Types for import functionality
 interface ImportResult {
@@ -45,7 +51,7 @@ interface CSVMapping {
 
 interface ManualConcept {
   name: string;
-  category: 'grammar' | 'vocabulary';
+  category: "grammar" | "vocabulary";
   description: string;
   examples: string[];
   tags: string[];
@@ -65,14 +71,16 @@ interface ConceptImporterProps {
 }
 
 export const ConceptImporter: React.FC<ConceptImporterProps> = ({
-  onImportComplete
+  onImportComplete,
 }) => {
-  const [activeTab, setActiveTab] = useState<'csv' | 'manual' | 'document'>('csv');
+  const [activeTab, setActiveTab] = useState<"csv" | "manual" | "document">(
+    "csv"
+  );
   const [isLoading, setIsLoading] = useState(false);
   const [lastResult, setLastResult] = useState<ImportResult | null>(null);
-  
+
   // CSV Import State
-  const [csvData, setCsvData] = useState('');
+  const [csvData, setCsvData] = useState("");
   const [csvMapping, setCsvMapping] = useState<CSVMapping>({
     name: 0,
     category: 1,
@@ -80,49 +88,52 @@ export const ConceptImporter: React.FC<ConceptImporterProps> = ({
   });
   const [hasHeader, setHasHeader] = useState(true);
   const [csvPreview, setCsvPreview] = useState<string[][]>([]);
-  
+
   // Manual Import State
   const [manualConcepts, setManualConcepts] = useState<ManualConcept[]>([]);
   const [editingConcept, setEditingConcept] = useState<number | null>(null);
-  
+
   // Document Import State
-  const [documentContent, setDocumentContent] = useState('');
+  const [documentContent, setDocumentContent] = useState("");
   const [extractionSettings, setExtractionSettings] = useState({
-    targetCategory: 'both',
-    difficulty: 'A1',
+    targetCategory: "both",
+    difficulty: "A1",
     maxConcepts: 50,
-    extractionPrompt: '',
+    extractionPrompt: "",
   });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Handle file upload
-  const handleFileUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+  const handleFileUpload = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const content = e.target?.result as string;
-      
-      if (file.type === 'text/csv' || file.name.endsWith('.csv')) {
-        setCsvData(content);
-        updateCSVPreview(content);
-        setActiveTab('csv');
-      } else {
-        setDocumentContent(content);
-        setActiveTab('document');
-      }
-    };
-    
-    reader.readAsText(file);
-  }, []);
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const content = e.target?.result as string;
+
+        if (file.type === "text/csv" || file.name.endsWith(".csv")) {
+          setCsvData(content);
+          updateCSVPreview(content);
+          setActiveTab("csv");
+        } else {
+          setDocumentContent(content);
+          setActiveTab("document");
+        }
+      };
+
+      reader.readAsText(file);
+    },
+    [updateCSVPreview]
+  );
 
   // Update CSV preview when data or settings change
   const updateCSVPreview = useCallback((data: string) => {
-    const lines = data.trim().split('\n').slice(0, 5); // Show first 5 rows
-    const preview = lines.map(line => 
-      line.split(',').map(cell => cell.trim().replace(/^"|"$/g, ''))
+    const lines = data.trim().split("\n").slice(0, 5); // Show first 5 rows
+    const preview = lines.map((line) =>
+      line.split(",").map((cell) => cell.trim().replace(/^"|"$/g, ""))
     );
     setCsvPreview(preview);
   }, []);
@@ -130,42 +141,42 @@ export const ConceptImporter: React.FC<ConceptImporterProps> = ({
   // Execute import
   const executeImport = useCallback(async () => {
     setIsLoading(true);
-    
+
     try {
       let requestBody: any;
-      
+
       switch (activeTab) {
-        case 'csv':
+        case "csv":
           requestBody = {
-            type: 'csv',
+            type: "csv",
             data: csvData,
             mapping: csvMapping,
             hasHeader,
           };
           break;
-          
-        case 'manual':
+
+        case "manual":
           requestBody = {
-            type: 'manual',
+            type: "manual",
             concepts: manualConcepts,
           };
           break;
-          
-        case 'document':
+
+        case "document":
           requestBody = {
-            type: 'document',
+            type: "document",
             content: documentContent,
             extractionSettings,
           };
           break;
-          
+
         default:
-          throw new Error('Invalid import type');
+          throw new Error("Invalid import type");
       }
 
-      const response = await fetch('/api/concepts/import', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const response = await fetch("/api/concepts/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(requestBody),
       });
 
@@ -175,31 +186,43 @@ export const ConceptImporter: React.FC<ConceptImporterProps> = ({
     } catch (error) {
       const errorResult: ImportResult = {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: error instanceof Error ? error.message : "Unknown error",
       };
       setLastResult(errorResult);
       onImportComplete?.(errorResult);
     } finally {
       setIsLoading(false);
     }
-  }, [activeTab, csvData, csvMapping, hasHeader, manualConcepts, documentContent, extractionSettings, onImportComplete]);
+  }, [
+    activeTab,
+    csvData,
+    csvMapping,
+    hasHeader,
+    manualConcepts,
+    documentContent,
+    extractionSettings,
+    onImportComplete,
+  ]);
 
   // Add new manual concept
   const addManualConcept = () => {
     const newConcept: ManualConcept = {
-      name: '',
-      category: 'vocabulary',
-      description: '',
+      name: "",
+      category: "vocabulary",
+      description: "",
       examples: [],
       tags: [],
-      difficulty: 'A1',
+      difficulty: "A1",
     };
     setManualConcepts([...manualConcepts, newConcept]);
     setEditingConcept(manualConcepts.length);
   };
 
   // Update manual concept
-  const updateManualConcept = (index: number, updates: Partial<ManualConcept>) => {
+  const updateManualConcept = (
+    index: number,
+    updates: Partial<ManualConcept>
+  ) => {
     const updated = [...manualConcepts];
     updated[index] = { ...updated[index], ...updates };
     setManualConcepts(updated);
@@ -219,11 +242,11 @@ export const ConceptImporter: React.FC<ConceptImporterProps> = ({
 "Basic Greeting","vocabulary","How to say hello in Polish","A1","Cześć;Dzień dobry","greeting;basic"
 "Present Tense","grammar","Conjugation of verbs in present tense","A2","Ja jestem;Ty jesteś","verb;tense"`;
 
-    const blob = new Blob([template], { type: 'text/csv' });
+    const blob = new Blob([template], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
+    const link = document.createElement("a");
     link.href = url;
-    link.download = 'concept-import-template.csv';
+    link.download = "concept-import-template.csv";
     link.click();
     URL.revokeObjectURL(url);
   };
@@ -232,15 +255,12 @@ export const ConceptImporter: React.FC<ConceptImporterProps> = ({
   const renderCSVImport = () => (
     <div className="space-y-4">
       <div className="flex items-center gap-2">
-        <Button 
-          variant="outline" 
-          onClick={() => fileInputRef.current?.click()}
-        >
-          <Upload className="w-4 h-4 mr-2" />
+        <Button variant="outline" onClick={() => fileInputRef.current?.click()}>
+          <Upload className="mr-2 size-4" />
           Choose CSV File
         </Button>
         <Button variant="ghost" onClick={downloadCSVTemplate}>
-          <Download className="w-4 h-4 mr-2" />
+          <Download className="mr-2 size-4" />
           Download Template
         </Button>
       </div>
@@ -256,7 +276,7 @@ export const ConceptImporter: React.FC<ConceptImporterProps> = ({
       {csvData && (
         <>
           <div>
-            <label className="block text-sm font-medium mb-2">CSV Data</label>
+            <label className="mb-2 block text-sm font-medium">CSV Data</label>
             <Textarea
               value={csvData}
               onChange={(e) => {
@@ -281,38 +301,49 @@ export const ConceptImporter: React.FC<ConceptImporterProps> = ({
 
           {csvPreview.length > 0 && (
             <div>
-              <label className="block text-sm font-medium mb-2">Preview & Column Mapping</label>
-              <div className="border rounded overflow-hidden">
+              <label className="mb-2 block text-sm font-medium">
+                Preview & Column Mapping
+              </label>
+              <div className="overflow-hidden rounded border">
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50">
                     <tr>
                       {csvPreview[0]?.map((_, colIndex) => (
-                        <th key={colIndex} className="p-2 text-left border-r">
+                        <th key={colIndex} className="border-r p-2 text-left">
                           Column {colIndex + 1}
                         </th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {csvPreview.slice(hasHeader ? 1 : 0, 3).map((row, rowIndex) => (
-                      <tr key={rowIndex} className="border-t">
-                        {row.map((cell, colIndex) => (
-                          <td key={colIndex} className="p-2 border-r truncate max-w-32">
-                            {cell}
-                          </td>
-                        ))}
-                      </tr>
-                    ))}
+                    {csvPreview
+                      .slice(hasHeader ? 1 : 0, 3)
+                      .map((row, rowIndex) => (
+                        <tr key={rowIndex} className="border-t">
+                          {row.map((cell, colIndex) => (
+                            <td
+                              key={colIndex}
+                              className="max-w-32 truncate border-r p-2"
+                            >
+                              {cell}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
                   </tbody>
                 </table>
               </div>
 
-              <div className="grid grid-cols-2 gap-4 mt-4">
+              <div className="mt-4 grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium mb-1">Name Column</label>
-                  <Select 
-                    value={csvMapping.name.toString()} 
-                    onValueChange={(value) => setCsvMapping({...csvMapping, name: parseInt(value)})}
+                  <label className="mb-1 block text-sm font-medium">
+                    Name Column
+                  </label>
+                  <Select
+                    value={csvMapping.name.toString()}
+                    onValueChange={(value) =>
+                      setCsvMapping({ ...csvMapping, name: parseInt(value) })
+                    }
                   >
                     <SelectTrigger>
                       <SelectValue />
@@ -328,10 +359,17 @@ export const ConceptImporter: React.FC<ConceptImporterProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium mb-1">Category Column</label>
-                  <Select 
-                    value={csvMapping.category.toString()} 
-                    onValueChange={(value) => setCsvMapping({...csvMapping, category: parseInt(value)})}
+                  <label className="mb-1 block text-sm font-medium">
+                    Category Column
+                  </label>
+                  <Select
+                    value={csvMapping.category.toString()}
+                    onValueChange={(value) =>
+                      setCsvMapping({
+                        ...csvMapping,
+                        category: parseInt(value),
+                      })
+                    }
                   >
                     <SelectTrigger>
                       <SelectValue />
@@ -347,10 +385,17 @@ export const ConceptImporter: React.FC<ConceptImporterProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium mb-1">Description Column</label>
-                  <Select 
-                    value={csvMapping.description.toString()} 
-                    onValueChange={(value) => setCsvMapping({...csvMapping, description: parseInt(value)})}
+                  <label className="mb-1 block text-sm font-medium">
+                    Description Column
+                  </label>
+                  <Select
+                    value={csvMapping.description.toString()}
+                    onValueChange={(value) =>
+                      setCsvMapping({
+                        ...csvMapping,
+                        description: parseInt(value),
+                      })
+                    }
                   >
                     <SelectTrigger>
                       <SelectValue />
@@ -366,10 +411,18 @@ export const ConceptImporter: React.FC<ConceptImporterProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium mb-1">Difficulty Column (Optional)</label>
-                  <Select 
-                    value={csvMapping.difficulty?.toString() || 'none'} 
-                    onValueChange={(value) => setCsvMapping({...csvMapping, difficulty: value === 'none' ? undefined : parseInt(value)})}
+                  <label className="mb-1 block text-sm font-medium">
+                    Difficulty Column (Optional)
+                  </label>
+                  <Select
+                    value={csvMapping.difficulty?.toString() || "none"}
+                    onValueChange={(value) =>
+                      setCsvMapping({
+                        ...csvMapping,
+                        difficulty:
+                          value === "none" ? undefined : parseInt(value),
+                      })
+                    }
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="None" />
@@ -398,38 +451,53 @@ export const ConceptImporter: React.FC<ConceptImporterProps> = ({
       <div className="flex items-center justify-between">
         <h3 className="font-medium">Manual Concept Entry</h3>
         <Button onClick={addManualConcept}>
-          <Plus className="w-4 h-4 mr-2" />
+          <Plus className="mr-2 size-4" />
           Add Concept
         </Button>
       </div>
 
-      <ScrollArea className="h-96 border rounded">
-        <div className="p-4 space-y-4">
+      <ScrollArea className="h-96 rounded border">
+        <div className="space-y-4 p-4">
           {manualConcepts.map((concept, index) => (
-            <Card key={index} className={editingConcept === index ? 'border-blue-500' : ''}>
+            <Card
+              key={index}
+              className={editingConcept === index ? "border-blue-500" : ""}
+            >
               <CardContent className="p-4">
                 {editingConcept === index ? (
                   <div className="space-y-3">
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <label className="block text-sm font-medium mb-1">Name</label>
+                        <label className="mb-1 block text-sm font-medium">
+                          Name
+                        </label>
                         <Input
                           value={concept.name}
-                          onChange={(e) => updateManualConcept(index, { name: e.target.value })}
+                          onChange={(e) =>
+                            updateManualConcept(index, { name: e.target.value })
+                          }
                           placeholder="Concept name"
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium mb-1">Category</label>
-                        <Select 
-                          value={concept.category} 
-                          onValueChange={(value) => updateManualConcept(index, { category: value as 'grammar' | 'vocabulary' })}
+                        <label className="mb-1 block text-sm font-medium">
+                          Category
+                        </label>
+                        <Select
+                          value={concept.category}
+                          onValueChange={(value) =>
+                            updateManualConcept(index, {
+                              category: value as "grammar" | "vocabulary",
+                            })
+                          }
                         >
                           <SelectTrigger>
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="vocabulary">Vocabulary</SelectItem>
+                            <SelectItem value="vocabulary">
+                              Vocabulary
+                            </SelectItem>
                             <SelectItem value="grammar">Grammar</SelectItem>
                           </SelectContent>
                         </Select>
@@ -437,29 +505,32 @@ export const ConceptImporter: React.FC<ConceptImporterProps> = ({
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium mb-1">Description</label>
+                      <label className="mb-1 block text-sm font-medium">
+                        Description
+                      </label>
                       <Textarea
                         value={concept.description}
-                        onChange={(e) => updateManualConcept(index, { description: e.target.value })}
+                        onChange={(e) =>
+                          updateManualConcept(index, {
+                            description: e.target.value,
+                          })
+                        }
                         placeholder="Concept description"
                         rows={2}
                       />
                     </div>
 
                     <div className="flex gap-2">
-                      <Button 
-                        size="sm" 
-                        onClick={() => setEditingConcept(null)}
-                      >
-                        <CheckCircle className="w-4 h-4 mr-2" />
+                      <Button size="sm" onClick={() => setEditingConcept(null)}>
+                        <CheckCircle className="mr-2 size-4" />
                         Save
                       </Button>
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
+                      <Button
+                        variant="outline"
+                        size="sm"
                         onClick={() => removeManualConcept(index)}
                       >
-                        <Trash2 className="w-4 h-4 mr-2" />
+                        <Trash2 className="mr-2 size-4" />
                         Delete
                       </Button>
                     </div>
@@ -467,18 +538,20 @@ export const ConceptImporter: React.FC<ConceptImporterProps> = ({
                 ) : (
                   <div className="flex items-center justify-between">
                     <div>
-                      <h4 className="font-medium">{concept.name || 'Untitled'}</h4>
+                      <h4 className="font-medium">
+                        {concept.name || "Untitled"}
+                      </h4>
                       <div className="flex items-center gap-2 text-sm text-gray-600">
                         <Badge variant="outline">{concept.category}</Badge>
-                        <span>{concept.description || 'No description'}</span>
+                        <span>{concept.description || "No description"}</span>
                       </div>
                     </div>
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
+                    <Button
+                      variant="ghost"
+                      size="sm"
                       onClick={() => setEditingConcept(index)}
                     >
-                      <Edit3 className="w-4 h-4" />
+                      <Edit3 className="size-4" />
                     </Button>
                   </div>
                 )}
@@ -487,7 +560,7 @@ export const ConceptImporter: React.FC<ConceptImporterProps> = ({
           ))}
 
           {manualConcepts.length === 0 && (
-            <div className="text-center text-gray-500 py-8">
+            <div className="py-8 text-center text-gray-500">
               No concepts added yet. Click "Add Concept" to get started.
             </div>
           )}
@@ -500,11 +573,8 @@ export const ConceptImporter: React.FC<ConceptImporterProps> = ({
   const renderDocumentImport = () => (
     <div className="space-y-4">
       <div className="flex items-center gap-2">
-        <Button 
-          variant="outline" 
-          onClick={() => fileInputRef.current?.click()}
-        >
-          <Upload className="w-4 h-4 mr-2" />
+        <Button variant="outline" onClick={() => fileInputRef.current?.click()}>
+          <Upload className="mr-2 size-4" />
           Choose Document
         </Button>
         <span className="text-sm text-gray-600">
@@ -521,7 +591,9 @@ export const ConceptImporter: React.FC<ConceptImporterProps> = ({
       />
 
       <div>
-        <label className="block text-sm font-medium mb-2">Document Content</label>
+        <label className="mb-2 block text-sm font-medium">
+          Document Content
+        </label>
         <Textarea
           value={documentContent}
           onChange={(e) => setDocumentContent(e.target.value)}
@@ -532,10 +604,17 @@ export const ConceptImporter: React.FC<ConceptImporterProps> = ({
 
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium mb-1">Target Category (Optional)</label>
-          <Select 
-            value={extractionSettings.targetCategory} 
-            onValueChange={(value) => setExtractionSettings({...extractionSettings, targetCategory: value})}
+          <label className="mb-1 block text-sm font-medium">
+            Target Category (Optional)
+          </label>
+          <Select
+            value={extractionSettings.targetCategory}
+            onValueChange={(value) =>
+              setExtractionSettings({
+                ...extractionSettings,
+                targetCategory: value,
+              })
+            }
           >
             <SelectTrigger>
               <SelectValue placeholder="Both" />
@@ -549,10 +628,17 @@ export const ConceptImporter: React.FC<ConceptImporterProps> = ({
         </div>
 
         <div>
-          <label className="block text-sm font-medium mb-1">Default Difficulty</label>
-          <Select 
-            value={extractionSettings.difficulty} 
-            onValueChange={(value) => setExtractionSettings({...extractionSettings, difficulty: value})}
+          <label className="mb-1 block text-sm font-medium">
+            Default Difficulty
+          </label>
+          <Select
+            value={extractionSettings.difficulty}
+            onValueChange={(value) =>
+              setExtractionSettings({
+                ...extractionSettings,
+                difficulty: value,
+              })
+            }
           >
             <SelectTrigger>
               <SelectValue placeholder="A1" />
@@ -570,21 +656,35 @@ export const ConceptImporter: React.FC<ConceptImporterProps> = ({
       </div>
 
       <div>
-        <label className="block text-sm font-medium mb-1">Max Concepts to Extract</label>
+        <label className="mb-1 block text-sm font-medium">
+          Max Concepts to Extract
+        </label>
         <Input
           type="number"
           value={extractionSettings.maxConcepts}
-          onChange={(e) => setExtractionSettings({...extractionSettings, maxConcepts: parseInt(e.target.value) || 50})}
+          onChange={(e) =>
+            setExtractionSettings({
+              ...extractionSettings,
+              maxConcepts: parseInt(e.target.value) || 50,
+            })
+          }
           min="1"
           max="100"
         />
       </div>
 
       <div>
-        <label className="block text-sm font-medium mb-2">Custom Extraction Prompt (Optional)</label>
+        <label className="mb-2 block text-sm font-medium">
+          Custom Extraction Prompt (Optional)
+        </label>
         <Textarea
           value={extractionSettings.extractionPrompt}
-          onChange={(e) => setExtractionSettings({...extractionSettings, extractionPrompt: e.target.value})}
+          onChange={(e) =>
+            setExtractionSettings({
+              ...extractionSettings,
+              extractionPrompt: e.target.value,
+            })
+          }
           placeholder="Provide specific instructions for concept extraction..."
           rows={3}
         />
@@ -601,9 +701,9 @@ export const ConceptImporter: React.FC<ConceptImporterProps> = ({
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             {lastResult.success ? (
-              <CheckCircle className="w-5 h-5 text-green-500" />
+              <CheckCircle className="size-5 text-green-500" />
             ) : (
-              <AlertCircle className="w-5 h-5 text-red-500" />
+              <AlertCircle className="size-5 text-red-500" />
             )}
             Import Results
           </CardTitle>
@@ -611,29 +711,50 @@ export const ConceptImporter: React.FC<ConceptImporterProps> = ({
         <CardContent>
           {lastResult.success ? (
             <div className="space-y-4">
-              <div className="bg-green-50 p-3 rounded">
-                <h4 className="font-medium text-green-800">{lastResult.message}</h4>
+              <div className="rounded bg-green-50 p-3">
+                <h4 className="font-medium text-green-800">
+                  {lastResult.message}
+                </h4>
                 {lastResult.data?.summary && (
                   <div className="mt-2 text-sm text-green-700">
-                    {Object.entries(lastResult.data.summary).map(([key, value]) => (
-                      <div key={key}>
-                        <span className="capitalize">{key.replace(/([A-Z])/g, ' $1')}:</span>
-                        <span className="ml-2 font-medium">{String(value)}</span>
-                      </div>
-                    ))}
+                    {Object.entries(lastResult.data.summary).map(
+                      ([key, value]) => (
+                        <div key={key}>
+                          <span className="capitalize">
+                            {key.replace(/([A-Z])/g, " $1")}:
+                          </span>
+                          <span className="ml-2 font-medium">
+                            {String(value)}
+                          </span>
+                        </div>
+                      )
+                    )}
                   </div>
                 )}
               </div>
 
               {lastResult.data?.errors && lastResult.data.errors.length > 0 && (
                 <div>
-                  <h4 className="font-medium mb-2 text-orange-600">Errors ({lastResult.data.errors.length})</h4>
-                  <ScrollArea className="h-32 border rounded">
-                    <div className="p-2 space-y-1">
+                  <h4 className="mb-2 font-medium text-orange-600">
+                    Errors ({lastResult.data.errors.length})
+                  </h4>
+                  <ScrollArea className="h-32 rounded border">
+                    <div className="space-y-1 p-2">
                       {lastResult.data.errors.map((error, index) => (
-                        <div key={index} className="text-sm bg-orange-50 p-2 rounded">
-                          {error.row && <span className="font-medium">Row {error.row}: </span>}
-                          {error.concept && <span className="font-medium">{error.concept}: </span>}
+                        <div
+                          key={index}
+                          className="rounded bg-orange-50 p-2 text-sm"
+                        >
+                          {error.row && (
+                            <span className="font-medium">
+                              Row {error.row}:{" "}
+                            </span>
+                          )}
+                          {error.concept && (
+                            <span className="font-medium">
+                              {error.concept}:{" "}
+                            </span>
+                          )}
                           <span className="text-orange-700">{error.error}</span>
                         </div>
                       ))}
@@ -643,9 +764,9 @@ export const ConceptImporter: React.FC<ConceptImporterProps> = ({
               )}
             </div>
           ) : (
-            <div className="bg-red-50 p-3 rounded">
+            <div className="rounded bg-red-50 p-3">
               <h4 className="font-medium text-red-800">Import Failed</h4>
-              <p className="text-sm text-red-700 mt-1">{lastResult.error}</p>
+              <p className="mt-1 text-sm text-red-700">{lastResult.error}</p>
             </div>
           )}
         </CardContent>
@@ -658,26 +779,30 @@ export const ConceptImporter: React.FC<ConceptImporterProps> = ({
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <FileText className="w-5 h-5" />
+            <FileText className="size-5" />
             Concept Import
           </CardTitle>
           <p className="text-sm text-gray-600">
-            Import concepts from various sources: CSV files, manual entry, or document extraction.
+            Import concepts from various sources: CSV files, manual entry, or
+            document extraction.
           </p>
         </CardHeader>
         <CardContent>
-          <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as any)}>
+          <Tabs
+            value={activeTab}
+            onValueChange={(value) => setActiveTab(value as any)}
+          >
             <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="csv">
-                <Table className="w-4 h-4 mr-2" />
+                <Table className="mr-2 size-4" />
                 CSV Import
               </TabsTrigger>
               <TabsTrigger value="manual">
-                <Edit3 className="w-4 h-4 mr-2" />
+                <Edit3 className="mr-2 size-4" />
                 Manual Entry
               </TabsTrigger>
               <TabsTrigger value="document">
-                <FileText className="w-4 h-4 mr-2" />
+                <FileText className="mr-2 size-4" />
                 Document Extract
               </TabsTrigger>
             </TabsList>
@@ -696,23 +821,24 @@ export const ConceptImporter: React.FC<ConceptImporterProps> = ({
           </Tabs>
 
           <div className="mt-6">
-            <Button 
-              onClick={executeImport} 
-              disabled={isLoading || (
-                (activeTab === 'csv' && !csvData) ||
-                (activeTab === 'manual' && manualConcepts.length === 0) ||
-                (activeTab === 'document' && !documentContent)
-              )}
+            <Button
+              onClick={executeImport}
+              disabled={
+                isLoading ||
+                (activeTab === "csv" && !csvData) ||
+                (activeTab === "manual" && manualConcepts.length === 0) ||
+                (activeTab === "document" && !documentContent)
+              }
               className="w-full"
             >
               {isLoading ? (
                 <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  <div className="mr-2 size-4 animate-spin rounded-full border-b-2 border-white"></div>
                   Importing...
                 </>
               ) : (
                 <>
-                  <Upload className="w-4 h-4 mr-2" />
+                  <Upload className="mr-2 size-4" />
                   Import Concepts
                 </>
               )}

@@ -66,16 +66,12 @@ export enum ConceptCategory {
 
 /**
  * Practice modes for different learning approaches
- * Normal: Smart concept selection based on SRS
- * Previous: Review previously asked questions
- * Drill: Focus on previously failed questions
- * Course: Practice concepts from a specific course
+ * Normal: Smart concept selection based on SRS algorithm (includes question bank priority)
+ * Drill: User-controlled drilling on weak concepts or specific courses
  */
 export enum PracticeMode {
   NORMAL = "normal",
-  PREVIOUS = "previous",
   DRILL = "drill",
-  COURSE = "course",
 }
 
 /**

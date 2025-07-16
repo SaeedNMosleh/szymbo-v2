@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { v4 as uuidv4 } from "uuid";
 import dbConnect from "@/lib/dbConnect";
 import QuestionDraft from "@/datamodels/questionDraft.model";
@@ -58,8 +58,8 @@ export async function POST(request: NextRequest) {
       try {
         // Convert concept names/IDs to proper concept IDs (STRICT: Must resolve to valid IDs)
         const targetConceptIds = draft.targetConcepts
-          .map(concept => conceptMap.get(concept))
-          .filter(id => id !== undefined) as string[];
+          .map((concept: any) => conceptMap.get(concept))
+          .filter((id: any) => id !== undefined) as string[];
         
         if (targetConceptIds.length === 0) {
           console.warn(`Draft ${draft.id} has no valid target concepts - rejecting question`);

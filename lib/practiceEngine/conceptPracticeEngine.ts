@@ -35,11 +35,6 @@ export interface PracticeStats {
   };
 }
 
-interface FallbackResult {
-  questions: IQuestionBank[];
-  fallbackLevel: string;
-  reason: string;
-}
 
 export class ConceptPracticeEngine {
   private contextBuilder: ContextBuilder;
@@ -389,7 +384,7 @@ export class ConceptPracticeEngine {
   }
 
   /**
-   * Get questions for selected concepts with comprehensive fallback strategy
+   * Simplified question retrieval with QuestionBank priority and generation fallback
    */
   async getQuestionsForConcepts(
     conceptIds: string[],
@@ -406,229 +401,34 @@ export class ConceptPracticeEngine {
         return await this.getFallbackQuestions([], mode, maxQuestions);
       }
 
-      let questions: IQuestionBank[] = [];
+      // Step 1: Try to get questions from QuestionBank first
+      const preMadeQuestions = await this.getQuestionBankQuestions(
+        conceptIds,
+        maxQuestions
+      );
 
-      switch (mode) {
-        case PracticeMode.NORMAL:
-          questions = await this.getNormalPracticeQuestions(
-            conceptIds,
-            maxQuestions
-          );
-          break;
-        case PracticeMode.PREVIOUS:
-          questions = await this.getPreviousQuestionsWithFallback(
-            conceptIds,
-            maxQuestions
-          );
-          break;
-        case PracticeMode.DRILL:
-          questions = await this.getDrillQuestions(conceptIds, maxQuestions);
-          break;
-        default:
-          questions = await this.getNormalPracticeQuestions(
-            conceptIds,
-            maxQuestions
-          );
+      // Step 2: If insufficient, generate on-the-fly to fill gap
+      if (preMadeQuestions.length < maxQuestions) {
+        const needed = maxQuestions - preMadeQuestions.length;
+        const generated = await this.generateNewQuestions(conceptIds, needed);
+        const allQuestions = [...preMadeQuestions, ...generated];
+        console.log(
+          `✅ Retrieved ${preMadeQuestions.length} pre-made + ${generated.length} generated questions`
+        );
+        return allQuestions;
       }
 
-      console.log(`✅ Retrieved ${questions.length} questions for practice`);
-      return questions;
+      console.log(`✅ Retrieved ${preMadeQuestions.length} pre-made questions`);
+      return preMadeQuestions;
     } catch (error) {
       console.error("❌ Error getting questions for concepts:", error);
       return [];
     }
   }
 
-  /**
-   * Enhanced Previous Questions with comprehensive fallback strategy
-   */
-  private async getPreviousQuestionsWithFallback(
-    conceptIds: string[],
-    maxQuestions: number
-  ): Promise<IQuestionBank[]> {
-    console.log(`🔄 Implementing fallback strategy for previous questions`);
 
-    // 1. Try: SRS due concepts → previous questions
-    let result = await this.tryGetPreviousQuestions(
-      conceptIds,
-      maxQuestions,
-      "SRS due concepts"
-    );
-    if (result.questions.length > 0) {
-      console.log(
-        `✅ Success with ${result.fallbackLevel}: ${result.questions.length} questions`
-      );
-      return result.questions;
-    }
 
-    // 2. Fallback 1: Any concepts with progress → previous questions
-    console.log(
-      `⚠️ ${result.reason}, trying fallback 1: concepts with progress`
-    );
-    const conceptsWithProgress = await this.getConceptsWithProgress();
-    result = await this.tryGetPreviousQuestions(
-      conceptsWithProgress.map((c) => c.conceptId),
-      maxQuestions,
-      "concepts with progress"
-    );
-    if (result.questions.length > 0) {
-      console.log(
-        `✅ Success with ${result.fallbackLevel}: ${result.questions.length} questions`
-      );
-      return result.questions;
-    }
 
-    // 3. Fallback 2: Any concepts → previous questions
-    console.log(`⚠️ ${result.reason}, trying fallback 2: any concepts`);
-    const allConcepts = await Concept.find({ isActive: true }).limit(20); // Limit to prevent huge queries
-    result = await this.tryGetPreviousQuestions(
-      allConcepts.map((c) => c.id),
-      maxQuestions,
-      "any available concepts"
-    );
-    if (result.questions.length > 0) {
-      console.log(
-        `✅ Success with ${result.fallbackLevel}: ${result.questions.length} questions`
-      );
-      return result.questions;
-    }
-
-    // 4. Fallback 3: All previous questions (ignore concepts)
-    console.log(
-      `⚠️ ${result.reason}, trying fallback 3: all previous questions`
-    );
-    result = await this.tryGetAllPreviousQuestions(maxQuestions);
-    if (result.questions.length > 0) {
-      console.log(
-        `✅ Success with ${result.fallbackLevel}: ${result.questions.length} questions`
-      );
-      return result.questions;
-    }
-
-    // 5. Final: All available questions
-    console.log(
-      `⚠️ ${result.reason}, trying final fallback: all available questions`
-    );
-    result = await this.tryGetAllAvailableQuestions(maxQuestions);
-    if (result.questions.length > 0) {
-      console.log(
-        `✅ Success with ${result.fallbackLevel}: ${result.questions.length} questions`
-      );
-      return result.questions;
-    }
-
-    console.log(`❌ All fallback strategies exhausted, no questions available`);
-    return [];
-  }
-
-  /**
-   * Try to get previous questions for specific concepts
-   */
-  private async tryGetPreviousQuestions(
-    conceptIds: string[],
-    maxQuestions: number,
-    fallbackLevel: string
-  ): Promise<FallbackResult> {
-    if (conceptIds.length === 0) {
-      return {
-        questions: [],
-        fallbackLevel,
-        reason: `No concepts available for ${fallbackLevel}`,
-      };
-    }
-
-    try {
-      const questions = await QuestionBank.find({
-        targetConcepts: { $in: conceptIds },
-        timesUsed: { $gt: 0 },
-        isActive: true,
-      })
-        .sort({ lastUsed: -1 })
-        .limit(maxQuestions);
-
-      return {
-        questions,
-        fallbackLevel,
-        reason:
-          questions.length === 0
-            ? `No previous questions found for ${fallbackLevel}`
-            : `Found questions using ${fallbackLevel}`,
-      };
-    } catch (error) {
-      console.error(
-        `Error in tryGetPreviousQuestions for ${fallbackLevel}:`,
-        error
-      );
-      return {
-        questions: [],
-        fallbackLevel,
-        reason: `Error querying ${fallbackLevel}`,
-      };
-    }
-  }
-
-  /**
-   * Try to get all previous questions regardless of concepts
-   */
-  private async tryGetAllPreviousQuestions(
-    maxQuestions: number
-  ): Promise<FallbackResult> {
-    try {
-      const questions = await QuestionBank.find({
-        timesUsed: { $gt: 0 },
-        isActive: true,
-      })
-        .sort({ lastUsed: -1 })
-        .limit(maxQuestions);
-
-      return {
-        questions,
-        fallbackLevel: "all previous questions",
-        reason:
-          questions.length === 0
-            ? "No previously used questions found"
-            : "Found previously used questions",
-      };
-    } catch (error) {
-      console.error("Error in tryGetAllPreviousQuestions:", error);
-      return {
-        questions: [],
-        fallbackLevel: "all previous questions",
-        reason: "Error querying all previous questions",
-      };
-    }
-  }
-
-  /**
-   * Final fallback: get any available questions
-   */
-  private async tryGetAllAvailableQuestions(
-    maxQuestions: number
-  ): Promise<FallbackResult> {
-    try {
-      const questions = await QuestionBank.find({
-        isActive: true,
-      })
-        .sort({ createdDate: -1 })
-        .limit(maxQuestions);
-
-      return {
-        questions,
-        fallbackLevel: "all available questions",
-        reason:
-          questions.length === 0
-            ? "No questions available in database"
-            : "Using any available questions",
-      };
-    } catch (error) {
-      console.error("Error in tryGetAllAvailableQuestions:", error);
-      return {
-        questions: [],
-        fallbackLevel: "all available questions",
-        reason: "Error querying all available questions",
-      };
-    }
-  }
 
   /**
    * Get concepts that have progress records
@@ -657,69 +457,99 @@ export class ConceptPracticeEngine {
   ): Promise<IQuestionBank[]> {
     console.log(`🔄 Using fallback questions for mode: ${mode}`);
 
-    switch (mode) {
-      case PracticeMode.PREVIOUS: {
-        const result = await this.tryGetAllPreviousQuestions(maxQuestions);
-        return result.questions;
-      }
-      case PracticeMode.DRILL:
-        return await this.tryGetAllAvailableQuestions(maxQuestions).then(
-          (r) => r.questions
-        );
-      default:
-        return await this.tryGetAllAvailableQuestions(maxQuestions).then(
-          (r) => r.questions
-        );
+    try {
+      // Get any available questions as fallback
+      const questions = await QuestionBank.find({
+        isActive: true,
+      })
+        .sort({ createdDate: -1 })
+        .limit(maxQuestions);
+
+      return questions;
+    } catch (error) {
+      console.error("❌ Error in getFallbackQuestions:", error);
+      return [];
     }
   }
 
   /**
-   * Get normal practice questions (mix of existing and new)
+   * Get questions from QuestionBank with proper prioritization
    */
-  private async getNormalPracticeQuestions(
+  private async getQuestionBankQuestions(
     conceptIds: string[],
     maxQuestions: number
   ): Promise<IQuestionBank[]> {
-    // Get existing questions (50% of total)
-    const existingCount = Math.floor(maxQuestions * 0.5);
-    const existingQuestions = await QuestionBank.find({
-      targetConcepts: { $in: conceptIds },
-      isActive: true,
-    })
-      .sort({ timesUsed: 1, successRate: -1 }) // Prefer less used, higher success rate
-      .limit(existingCount);
-
-    // Generate new questions for remaining slots
-    const newCount = maxQuestions - existingQuestions.length;
-    const newQuestions = await this.generateNewQuestions(conceptIds, newCount);
-
-    return [...existingQuestions, ...newQuestions];
+    try {
+      return await QuestionBank.find({
+        targetConcepts: { $in: conceptIds },
+        isActive: true,
+      })
+        .sort({ timesUsed: 1, successRate: -1 }) // Prefer less used, higher success rate
+        .limit(maxQuestions);
+    } catch (error) {
+      console.error("❌ Error getting QuestionBank questions:", error);
+      return [];
+    }
   }
 
   /**
-   * Get drill questions (focus on poor performance)
+   * Get drill concepts by weakness (low performance)
    */
-  private async getDrillQuestions(
-    conceptIds: string[],
-    maxQuestions: number
-  ): Promise<IQuestionBank[]> {
-    const poorQuestions = await QuestionBank.find({
-      targetConcepts: { $in: conceptIds },
-      successRate: { $lt: 0.6 },
-      timesUsed: { $gt: 2 },
-      isActive: true,
-    })
-      .sort({ successRate: 1 }) // Worst performing first
-      .limit(Math.floor(maxQuestions * 0.7));
+  async getDrillConceptsByWeakness(
+    userId: string = "default",
+    maxConcepts: number = 10
+  ): Promise<string[]> {
+    try {
+      const weakProgress = await ConceptProgress.find({
+        userId,
+        isActive: true,
+        $or: [
+          { masteryLevel: { $lt: 0.5 } },
+          { successRate: { $lt: 0.6 } },
+          { timesIncorrect: { $gt: 2 } },
+        ],
+      })
+        .sort({
+          masteryLevel: 1,
+          successRate: 1,
+          timesIncorrect: -1,
+        })
+        .limit(maxConcepts);
 
-    // Fill remaining with new questions
-    const remainingCount = maxQuestions - poorQuestions.length;
-    const newQuestions = await this.generateNewQuestions(
-      conceptIds,
-      remainingCount
-    );
+      return weakProgress.map((p) => p.conceptId);
+    } catch (error) {
+      console.error("❌ Error getting drill concepts by weakness:", error);
+      return [];
+    }
+  }
 
-    return [...poorQuestions, ...newQuestions];
+  /**
+   * Get drill concepts by course
+   */
+  async getDrillConceptsByCourse(
+    courseId: number,
+    maxConcepts: number = 10
+  ): Promise<string[]> {
+    try {
+      const { default: CourseConcept } = await import(
+        "@/datamodels/courseConcept.model"
+      );
+
+      const courseConceptMappings = await CourseConcept.find({
+        courseId,
+        isActive: true,
+      })
+        .sort({ confidence: -1 })
+        .limit(maxConcepts);
+
+      return courseConceptMappings.map((cc) => cc.conceptId);
+    } catch (error) {
+      console.error(
+        `❌ Error getting drill concepts for course ${courseId}:`,
+        error
+      );
+      return [];
+    }
   }
 
   /**

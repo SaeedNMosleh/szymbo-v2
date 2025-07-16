@@ -117,6 +117,49 @@ export class ConceptLLMService {
   }
 
   /**
+   * Analyze text content using LLM
+   * @param prompt The prompt to send to the LLM
+   * @returns The LLM response
+   */
+  async analyzeText(prompt: string): Promise<string> {
+    const systemPrompt = "You are an expert Polish language learning assistant. Analyze the given text and provide structured, helpful insights.";
+
+    try {
+      logger.info("Starting text analysis", {
+        operation: "text_analysis",
+        promptLength: prompt.length,
+      });
+
+      const response = await this.llmService.generateResponse({
+        prompt,
+        systemPrompt,
+      });
+
+      if (!response.success || !response.data) {
+        throw new LLMServiceError(
+          `Text analysis failed: ${response.error || "Unknown error"}`
+        );
+      }
+
+      logger.success("Text analysis completed", {
+        operation: "text_analysis",
+        duration: response.metadata?.duration,
+      });
+
+      return response.data as string;
+    } catch (error) {
+      logger.error("Text analysis failed", error as Error);
+      
+      if (error instanceof LLMServiceError) {
+        throw error;
+      }
+      throw new LLMServiceError(
+        `Text analysis failed: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  }
+
+  /**
    * Check similarity between an extracted concept and existing concepts
    * @param extractedConcept The newly extracted concept
    * @param existingConcepts Array of existing concept indexes

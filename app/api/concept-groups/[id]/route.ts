@@ -11,10 +11,11 @@ const addConceptsSchema = z.object({
 // GET /api/concept-groups/[id] - Get concepts in a group with optional cascading
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await connectToDatabase();
+    const resolvedParams = await params;
     const { searchParams } = new URL(request.url);
     
     const includeChildren = searchParams.get("includeChildren") === "true";
@@ -24,14 +25,14 @@ export async function GET(
 
     // Get concepts in the group
     const concepts = await conceptManager.getConceptsInGroup(
-      params.id,
+      resolvedParams.id,
       includeChildren,
       maxDepth
     );
 
     // Get group details
     const ConceptGroup = (await import("@/datamodels/conceptGroup.model")).default;
-    const group = await ConceptGroup.findOne({ id: params.id, isActive: true });
+    const group = await ConceptGroup.findOne({ id: resolvedParams.id, isActive: true });
 
     if (!group) {
       return NextResponse.json(
@@ -70,10 +71,11 @@ export async function GET(
 // POST /api/concept-groups/[id] - Add concepts to a group
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await connectToDatabase();
+    const resolvedParams = await params;
     const body = await request.json();
 
     // Validate request body
@@ -82,16 +84,16 @@ export async function POST(
     const conceptManager = new ConceptManagerEnhanced();
 
     // Add concepts to the group
-    await conceptManager.addConceptsToGroup(params.id, validatedData.conceptIds);
+    await conceptManager.addConceptsToGroup(resolvedParams.id, validatedData.conceptIds);
 
     // Get updated group information
-    const concepts = await conceptManager.getConceptsInGroup(params.id);
+    const concepts = await conceptManager.getConceptsInGroup(resolvedParams.id);
 
     return NextResponse.json(
       {
         success: true,
         data: {
-          groupId: params.id,
+          groupId: resolvedParams.id,
           addedConcepts: validatedData.conceptIds.length,
           totalConcepts: concepts.length,
         },

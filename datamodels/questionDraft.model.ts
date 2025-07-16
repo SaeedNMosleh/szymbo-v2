@@ -14,6 +14,8 @@ export interface IQuestionDraft {
   difficulty: QuestionLevel;
   source: "generated" | "manual";
   createdDate: Date;
+  status?: "draft" | "approved" | "rejected";
+  reviewNotes?: string;
   
   // Optional fields for different question types
   options?: string[]; // Multiple choice options OR word bank for arrangement
@@ -59,6 +61,16 @@ const QuestionDraftSchema = new Schema<IQuestionDraft>(
       type: Date,
       default: Date.now,
       required: true,
+    },
+    status: {
+      type: String,
+      enum: ["draft", "approved", "rejected"],
+      default: "draft",
+      required: false,
+    },
+    reviewNotes: {
+      type: String,
+      required: false,
     },
     options: {
       type: [String],

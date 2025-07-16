@@ -6,17 +6,13 @@ import { PracticeMode } from "@/lib/enum";
 import { z } from "zod";
 
 const sessionRequestSchema = z.object({
-  mode: z.enum([
-    PracticeMode.NORMAL,
-    PracticeMode.PREVIOUS,
-    PracticeMode.DRILL,
-    PracticeMode.COURSE,
-  ]),
+  mode: z.enum([PracticeMode.NORMAL, PracticeMode.DRILL]),
   userId: z.string().optional().default("default"),
   maxQuestions: z.number().optional().default(10),
   maxConcepts: z.number().optional().default(5),
   targetConceptIds: z.array(z.string()).optional(),
   courseId: z.number().optional(),
+  drillType: z.enum(["weakness", "course"]).optional(),
 });
 
 // POST /api/practice-new/session - Start new practice session
@@ -25,7 +21,7 @@ export async function POST(request: NextRequest) {
     await connectToDatabase();
     const body = await request.json();
 
-    const { mode, userId, maxQuestions, maxConcepts, targetConceptIds, courseId } =
+    const { mode, userId, maxQuestions, maxConcepts, targetConceptIds, courseId, drillType } =
       sessionRequestSchema.parse(body);
 
     console.log(
@@ -44,29 +40,40 @@ export async function POST(request: NextRequest) {
       conceptIds = targetConceptIds.slice(0, maxConcepts);
       rationale = "Manually selected concepts";
       console.log(`Using manually selected concepts: ${conceptIds.join(", ")}`);
-    } else if (mode === PracticeMode.COURSE) {
-      // Course-based concept selection
-      if (!courseId) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: "Course ID is required for course-based practice",
-          },
-          { status: 400 }
+    } else if (mode === PracticeMode.DRILL) {
+      // Drill mode concept selection
+      if (drillType === "course") {
+        if (!courseId) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: "Course ID is required for course-based drilling",
+            },
+            { status: 400 }
+          );
+        }
+        
+        conceptIds = await practiceEngine.getDrillConceptsByCourse(
+          courseId,
+          maxConcepts
+        );
+        rationale = `Drilling concepts from course ${courseId}`;
+        console.log(
+          `Course drill selection: ${conceptIds.length} concepts from course ${courseId}`
+        );
+      } else {
+        // Weakness-based drilling (default)
+        conceptIds = await practiceEngine.getDrillConceptsByWeakness(
+          userId,
+          maxConcepts
+        );
+        rationale = "Drilling weak concepts based on performance";
+        console.log(
+          `Weakness drill selection: ${conceptIds.length} weak concepts`
         );
       }
-      
-      const selection = await practiceEngine.selectConceptsFromCourse(
-        courseId,
-        maxConcepts
-      );
-      conceptIds = selection.concepts.map((c) => c.id);
-      rationale = selection.rationale;
-      console.log(
-        `Course selection result: ${conceptIds.length} concepts selected from course ${courseId}`
-      );
     } else {
-      // Smart concept selection
+      // NORMAL mode - Smart concept selection via SRS
       const selection = await practiceEngine.selectPracticeConceptsForUser(
         userId,
         maxConcepts
@@ -95,21 +102,23 @@ export async function POST(request: NextRequest) {
       let suggestions: string[] = [];
 
       switch (mode) {
-        case PracticeMode.PREVIOUS:
-          errorMessage = "No previously practiced questions found.";
-          suggestions = [
-            "Try practicing in 'Smart Practice' mode first to build up a question history",
-            "Add some courses and extract concepts to expand your question bank",
-            "Switch to 'Smart Practice' mode to generate new questions"
-          ];
-          break;
         case PracticeMode.DRILL:
-          errorMessage = "No questions with performance data found for drilling.";
-          suggestions = [
-            "Practice some questions first to build performance history",
-            "Try 'Smart Practice' mode to answer questions and create drill material",
-            "Add more courses with concept extraction to expand available content"
-          ];
+          if (drillType === "course") {
+            errorMessage = "No concepts or questions available for the selected course.";
+            suggestions = [
+              "Ensure concepts have been extracted from this course",
+              "Try the concept extraction system to process course content",
+              "Add more content to the course (notes, practice text, keywords)",
+              "Switch to 'Normal Practice' mode to practice other concepts"
+            ];
+          } else {
+            errorMessage = "No weak concepts found for drilling.";
+            suggestions = [
+              "Practice some questions first to build performance history",
+              "Try 'Normal Practice' mode to answer questions and create drill material",
+              "Add more courses with concept extraction to expand available content"
+            ];
+          }
           break;
         case PracticeMode.NORMAL:
           errorMessage = "No concepts or questions available for practice.";
@@ -117,15 +126,6 @@ export async function POST(request: NextRequest) {
             "Add some Polish language courses through the 'Add Course' feature",
             "Extract concepts from your courses using the concept extraction system",
             "Ensure your courses have sufficient content (notes, practice text, keywords)"
-          ];
-          break;
-        case PracticeMode.COURSE:
-          errorMessage = `No concepts or questions available for the selected course.`;
-          suggestions = [
-            "Ensure concepts have been extracted from this course",
-            "Try the concept extraction system to process course content",
-            "Add more content to the course (notes, practice text, keywords)",
-            "Switch to 'Smart Practice' mode to practice other concepts"
           ];
           break;
       }

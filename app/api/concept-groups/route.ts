@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/dbConnect";
 import { ConceptManagerEnhanced } from "@/lib/conceptExtraction/conceptManagerEnhanced";
+import { IConceptGroup } from "@/datamodels/conceptGroup.model";
 import { z } from "zod";
 import { QuestionLevel } from "@/lib/enum";
+
+// Type for group with children for hierarchy building
+interface GroupWithChildren extends IConceptGroup {
+  children: GroupWithChildren[];
+}
 
 // Request validation schemas
 const createGroupSchema = z.object({
@@ -22,10 +28,6 @@ const createGroupSchema = z.object({
   memberConcepts: z.array(z.string()).optional(),
 });
 
-const addConceptsSchema = z.object({
-  groupId: z.string().min(1),
-  conceptIds: z.array(z.string()).min(1),
-});
 
 // GET /api/concept-groups - Fetch concept groups with hierarchy
 export async function GET(request: NextRequest) {
@@ -37,10 +39,8 @@ export async function GET(request: NextRequest) {
     const level = searchParams.get("level");
     const includeHierarchy = searchParams.get("includeHierarchy") !== "false";
 
-    const conceptManager = new ConceptManagerEnhanced();
-    
     // Build query
-    const query: any = { isActive: true };
+    const query: { isActive: boolean; groupType?: string; level?: number } = { isActive: true };
     if (groupType) query.groupType = groupType;
     if (level) query.level = parseInt(level);
 
@@ -131,9 +131,9 @@ export async function POST(request: NextRequest) {
 }
 
 // Helper function to build hierarchy tree structure
-function buildHierarchy(groups: any[]): any[] {
+function buildHierarchy(groups: IConceptGroup[]): GroupWithChildren[] {
   const groupMap = new Map(groups.map(g => [g.id, { ...g, children: [] }]));
-  const rootGroups: any[] = [];
+  const rootGroups: GroupWithChildren[] = [];
 
   for (const group of groups) {
     const groupWithChildren = groupMap.get(group.id)!;

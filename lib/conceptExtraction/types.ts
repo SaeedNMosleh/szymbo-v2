@@ -23,6 +23,12 @@ export interface SimilarityMatch {
   category: ConceptCategory;
   description: string;
   examples?: string[];
+  reasoning?: string; // explanation of similarity
+  concept?: {
+    name: string;
+    category: ConceptCategory;
+    difficulty: QuestionLevel;
+  };
 }
 
 /**

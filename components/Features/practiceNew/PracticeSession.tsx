@@ -445,9 +445,7 @@ export function PracticeSession({
               Mode:{" "}
               {mode === PracticeMode.NORMAL
                 ? "Smart Practice"
-                : mode === PracticeMode.PREVIOUS
-                  ? "Previous Questions"
-                  : "Drill Session"}
+                : "Drill Session"}
             </p>
           </div>
 

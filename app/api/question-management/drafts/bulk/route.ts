@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import dbConnect from "@/lib/dbConnect";
 import QuestionDraft from "@/datamodels/questionDraft.model";
 import { createApiResponse, createErrorResponse } from "@/lib/utils/apiResponse";

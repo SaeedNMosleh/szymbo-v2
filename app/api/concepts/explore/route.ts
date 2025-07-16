@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/dbConnect";
 import { ConceptManagerEnhanced } from "@/lib/conceptExtraction/conceptManagerEnhanced";
 import { ConceptLLMService } from "@/lib/conceptExtraction/conceptLLM";
+import { ConceptCategory, QuestionLevel } from "@/lib/enum";
 import { z } from "zod";
 
 // Request validation schema for LLM exploration
@@ -123,8 +124,11 @@ async function handleSimilarityExploration(
     const queryAsConcept = {
       name: query,
       description: query,
-      category: 'vocabulary', // Default, will be analyzed by LLM
+      category: ConceptCategory.VOCABULARY,
       examples: [],
+      sourceContent: 'User query',
+      confidence: 0.8,
+      suggestedDifficulty: QuestionLevel.B1,
     };
 
     // Use LLM to find similar concepts
@@ -140,11 +144,11 @@ async function handleSimilarityExploration(
       .slice(0, maxResults)
       .map(match => ({
         id: match.conceptId,
-        name: match.concept.name,
+        name: match.concept?.name || match.name,
         similarity: match.similarity,
         reasoning: match.reasoning || 'Semantic similarity based on content analysis',
-        category: match.concept.category,
-        difficulty: match.concept.difficulty,
+        category: match.concept?.category || match.category,
+        difficulty: match.concept?.difficulty || 'B1',
       }));
 
     // Generate analysis using LLM

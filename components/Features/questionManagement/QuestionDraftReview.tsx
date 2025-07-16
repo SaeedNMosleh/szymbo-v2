@@ -37,6 +37,8 @@ interface QuestionDraft {
   imageUrl?: string;
   source: "generated" | "manual";
   createdDate: string;
+  status?: "draft" | "approved" | "rejected";
+  reviewNotes?: string;
 }
 
 interface QuestionDraftReviewProps {
@@ -509,7 +511,7 @@ export default function QuestionDraftReview({
                       return {
                         ...prev,
                         questionType: newType,
-                        options: needsOptions ? (prev.options?.length > 0 ? prev.options : ['', '']) : [],
+                        options: needsOptions ? (prev.options && prev.options.length > 0 ? prev.options : ['', '']) : [],
                         correctAnswer: (!needsOptions && hadOptions) ? '' : prev.correctAnswer,
                       };
                     });

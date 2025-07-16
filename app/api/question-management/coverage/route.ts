@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import dbConnect from "@/lib/dbConnect";
 import Concept from "@/datamodels/concept.model";
 import QuestionBank from "@/datamodels/questionBank.model";
