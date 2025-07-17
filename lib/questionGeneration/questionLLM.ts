@@ -174,7 +174,7 @@ export class QuestionLLMService {
         
         // Try to extract partial JSON as fallback
         const partialData = extractPartialJSON(rawResponse);
-        if (partialData && partialData.questions) {
+        if (partialData && typeof partialData === 'object' && 'questions' in partialData && Array.isArray(partialData.questions)) {
           console.warn('Using partial JSON extraction as fallback');
           return this.validateAndFormatQuestions(partialData.questions, request);
         }
@@ -188,7 +188,8 @@ export class QuestionLLMService {
         throw new Error('LLM returned invalid question structure');
       }
 
-      return this.validateAndFormatQuestions(parseResult.data.questions || [], request);
+      const questionData = parseResult.data as { questions?: unknown[] };
+      return this.validateAndFormatQuestions(questionData.questions || [], request);
       
     } catch (error) {
       console.error("Error generating questions:", error);
@@ -209,7 +210,7 @@ export class QuestionLLMService {
     const typeInfo = questionTypePrompts[questionType];
     const conceptNames = concepts.map(c => c.name).join(", ");
     const conceptDescriptions = concepts.map(c => `${c.name}: ${c.description}`).join("\n");
-    const conceptIds = concepts.map(c => c.id);
+    // const conceptIds = concepts.map(c => c.id);
 
     return `You are an expert Polish language teacher creating ${questionType} questions.
 
@@ -287,7 +288,7 @@ Generate exactly ${quantity} questions. Return ONLY the JSON object above with n
   }
 
   private validateAndFormatQuestions(
-    questions: any[], 
+    questions: unknown[], 
     request: QuestionGenerationRequest
   ): GeneratedQuestion[] {
     const validQuestions: GeneratedQuestion[] = [];
@@ -297,7 +298,9 @@ Generate exactly ${quantity} questions. Return ONLY the JSON object above with n
     const conceptNameToIdMap = new Map(request.concepts.map(c => [c.name, c.id]));
 
     for (const q of questions) {
-      if (!q.question || !q.correctAnswer) {
+      const question = q as { question?: string; correctAnswer?: string; targetConcepts?: unknown[]; options?: string[] };
+      
+      if (!question.question || !question.correctAnswer) {
         console.warn("Skipping invalid question:", q);
         continue;
       }
@@ -305,10 +308,10 @@ Generate exactly ${quantity} questions. Return ONLY the JSON object above with n
       // Convert LLM-provided concept names to concept IDs for database storage
       let targetConceptIds: string[] = conceptIds; // Default to all concept IDs
       
-      if (q.targetConcepts?.length > 0) {
+      if (question.targetConcepts && Array.isArray(question.targetConcepts) && question.targetConcepts.length > 0) {
         // Convert concept names from LLM to concept IDs for internal storage
-        targetConceptIds = q.targetConcepts
-          .map((conceptName: string) => conceptNameToIdMap.get(conceptName))
+        targetConceptIds = question.targetConcepts
+          .map((conceptName: unknown) => conceptNameToIdMap.get(conceptName as string))
           .filter((id: string | undefined) => id !== undefined) as string[];
         
         // If no valid concepts found after mapping, fallback to all concept IDs
@@ -317,15 +320,15 @@ Generate exactly ${quantity} questions. Return ONLY the JSON object above with n
         }
       }
 
-      console.log(`LLM returned concept names: ${JSON.stringify(q.targetConcepts)}, storing as IDs: ${JSON.stringify(targetConceptIds)}`);
+      console.log(`LLM returned concept names: ${JSON.stringify(question.targetConcepts)}, storing as IDs: ${JSON.stringify(targetConceptIds)}`);
 
       const formattedQuestion: GeneratedQuestion = {
-        question: q.question.trim(),
-        correctAnswer: q.correctAnswer.trim(),
+        question: question.question.trim(),
+        correctAnswer: question.correctAnswer.trim(),
         questionType: request.questionType,
         difficulty: request.difficulty,
         targetConcepts: targetConceptIds, // Always concept IDs for database storage
-        options: q.options || undefined,
+        options: question.options || undefined,
       };
 
       // Validate question type specific requirements
@@ -356,7 +359,7 @@ Generate exactly ${quantity} questions. Return ONLY the JSON object above with n
   }
 
   async regenerateQuestion(
-    originalQuestion: any,
+    originalQuestion: GeneratedQuestion,
     concepts: IConcept[],
     specialInstructions?: string
   ): Promise<GeneratedQuestion> {
@@ -384,7 +387,8 @@ Generate exactly ${quantity} questions. Return ONLY the JSON object above with n
       }
 
       // Extract the question from the response
-      const questionData = parseResult.data.question || parseResult.data;
+      const responseData = parseResult.data as { question?: unknown };
+      const questionData = responseData.question || parseResult.data;
       const questions = this.validateAndFormatQuestions([questionData], {
         concepts,
         questionType: originalQuestion.questionType,
@@ -405,7 +409,7 @@ Generate exactly ${quantity} questions. Return ONLY the JSON object above with n
   }
 
   private buildRegenerationPrompt(
-    originalQuestion: any,
+    originalQuestion: GeneratedQuestion,
     concepts: IConcept[],
     specialInstructions?: string
   ): string {

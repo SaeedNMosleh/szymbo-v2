@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import dbConnect from "@/lib/dbConnect";
 import QuestionDraft from "@/datamodels/questionDraft.model";
-import Concept from "@/datamodels/concept.model";
+import Concept, { IConcept } from "@/datamodels/concept.model";
 import { QuestionLLMService } from "@/lib/questionGeneration/questionLLM";
 import { createApiResponse, createErrorResponse } from "@/lib/utils/apiResponse";
 import { QuestionType, QuestionLevel } from "@/lib/enum";
@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
     await dbConnect();
     
     const body: RegenerateRequest = await request.json();
-    const { draftId, conceptIds, questionType, difficulty, specialInstructions } = body;
+    const { draftId, conceptIds, specialInstructions } = body;
 
     // Validation
     if (!draftId) {
@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
     console.log("Looking for concepts with IDs/names:", conceptIds); // Debug log
     
     const conceptMap = new Map();
-    const allFoundConcepts: any[] = [];
+    const allFoundConcepts: IConcept[] = [];
     
     // First try to find by ID
     const conceptsByIds = await Concept.find({ 

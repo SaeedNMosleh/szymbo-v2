@@ -36,17 +36,43 @@ interface BulkOperation {
     | "difficulty-change"
     | "relationship-suggestions";
   conceptIds: string[];
-  parameters: Record<string, any>;
+  parameters: Record<string, unknown>;
   preview: boolean;
+}
+
+interface OperationChange {
+  conceptName: string;
+  oldValue: unknown;
+  newValue: unknown;
+  applied: boolean;
+  error?: string;
+}
+
+interface RelationshipSuggestion {
+  fromConceptName: string;
+  toConceptName: string;
+  relationshipType: string;
+  strength: number;
+  reasoning: string;
+  applied: boolean;
 }
 
 interface BulkOperationResult {
   operation: string;
   conceptsProcessed: number;
   preview: boolean;
-  changes?: any[];
-  suggestions?: any[];
-  summary: Record<string, any>;
+  changes?: OperationChange[];
+  suggestions?: RelationshipSuggestion[];
+  summary: Record<string, unknown>;
+}
+
+interface OperationParams {
+  tags?: string[];
+  newCategory?: string;
+  newDifficulty?: string;
+  analysisPrompt?: string;
+  autoApprove?: boolean;
+  [key: string]: unknown;
 }
 
 interface ConceptSummary {
@@ -68,11 +94,10 @@ interface BulkOperationsPanelProps {
 export const BulkOperationsPanel: React.FC<BulkOperationsPanelProps> = ({
   selectedConcepts,
   onExecuteOperation,
-  onConceptSelect,
 }) => {
   const [activeOperation, setActiveOperation] =
     useState<BulkOperation["type"]>("tag-assignment");
-  const [operationParams, setOperationParams] = useState<Record<string, any>>(
+  const [operationParams, setOperationParams] = useState<OperationParams>(
     {}
   );
   const [isLoading, setIsLoading] = useState(false);

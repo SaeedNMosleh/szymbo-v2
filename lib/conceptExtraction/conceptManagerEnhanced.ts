@@ -1,12 +1,11 @@
 // lib/conceptExtraction/conceptManagerEnhanced.ts - Enhanced Concept Management Hub
 import { ConceptManager } from "./conceptManager";
-import Concept, { IConcept, IVocabularyData } from "@/datamodels/concept.model";
+import { IConcept } from "@/datamodels/concept.model";
 import ConceptGroup, { IConceptGroup } from "@/datamodels/conceptGroup.model";
-import ConceptRelationship, { IConceptRelationship, RelationshipType } from "@/datamodels/conceptRelationship.model";
+import ConceptRelationship, { IConceptRelationship } from "@/datamodels/conceptRelationship.model";
 import CourseConcept from "@/datamodels/courseConcept.model";
 import { ConceptLLMService } from "./conceptLLM";
-import { ConceptCategory, QuestionLevel } from "@/lib/enum";
-import { SRSCalculator } from "@/lib/practiceEngine/srsCalculator";
+import { QuestionLevel } from "@/lib/enum";
 import { v4 as uuidv4 } from "uuid";
 
 /**
@@ -453,6 +452,7 @@ export class ConceptManagerEnhanced extends ConceptManager {
       throw new Error(`Concept group ${groupId} not found`);
     }
 
+    // eslint-disable-next-line prefer-const
     let allConceptIds = [...group.memberConcepts];
 
     // Recursively collect concepts from child groups

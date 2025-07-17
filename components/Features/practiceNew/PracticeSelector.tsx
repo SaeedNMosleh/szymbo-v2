@@ -13,9 +13,7 @@ import { Button } from "@/components/ui/button";
 import { PracticeMode } from "@/lib/enum";
 import {
   Brain,
-  RotateCcw,
   Target,
-  BookOpen,
   Info,
   CheckCircle,
   AlertTriangle,

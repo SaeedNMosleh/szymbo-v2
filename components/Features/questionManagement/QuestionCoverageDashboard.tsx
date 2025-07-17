@@ -18,7 +18,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { QuestionType, QuestionLevel, ConceptCategory } from "@/lib/enum";
+import { QuestionType, ConceptCategory } from "@/lib/enum";
 import { Progress } from "@/components/ui/progress";
 
 interface CoverageData {
@@ -72,7 +72,7 @@ export default function QuestionCoverageDashboard({
 
       setCoverageData(coverage);
       setStats(stats);
-    } catch (err) {
+    } catch {
       setError("Failed to load coverage data");
     } finally {
       setIsLoading(false);
@@ -207,7 +207,7 @@ export default function QuestionCoverageDashboard({
       <div className="flex items-center space-x-4">
         <Select
           value={filterCategory}
-          onValueChange={(value) => setFilterCategory(value as any)}
+          onValueChange={(value) => setFilterCategory(value as ConceptCategory | "all")}
         >
           <SelectTrigger className="w-48">
             <SelectValue />

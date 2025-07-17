@@ -64,7 +64,6 @@ export const HierarchyBuilder: React.FC<HierarchyBuilderProps> = ({
   onNodeMove,
   onNodeClick,
   onPathCreate,
-  onPathUpdate,
 }) => {
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
   const [selectedNode, setSelectedNode] = useState<string | null>(null);

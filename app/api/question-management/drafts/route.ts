@@ -4,7 +4,7 @@ import dbConnect from "@/lib/dbConnect";
 import QuestionDraft from "@/datamodels/questionDraft.model";
 import { createApiResponse, createErrorResponse } from "@/lib/utils/apiResponse";
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     await dbConnect();
     
@@ -118,7 +118,7 @@ export async function DELETE(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
 
-    let deleteQuery: any = {};
+    let deleteQuery: Record<string, unknown> = {};
     
     if (id) {
       deleteQuery.id = id;

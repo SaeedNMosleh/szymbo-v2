@@ -5,9 +5,7 @@ import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -73,7 +71,7 @@ export default function QuestionDraftReview({
       const concepts = data.data || data.concepts || [];
       
       const map = new Map<string, string>();
-      concepts.forEach((concept: any) => {
+      concepts.forEach((concept: { id: string; name: string }) => {
         map.set(concept.id, concept.name);
         map.set(concept.name, concept.name); // Handle cases where names are used
       });
@@ -127,7 +125,7 @@ export default function QuestionDraftReview({
           draft.id === id ? { ...draft, ...updates } : draft
         )
       );
-    } catch (err) {
+    } catch {
       setError("Failed to update question draft");
     }
   };
@@ -229,7 +227,7 @@ export default function QuestionDraftReview({
       setDrafts((prev) => prev.filter((draft) => !selectedDrafts.includes(draft.id)));
       setSelectedDrafts([]);
       setSuccess(`Successfully deleted ${result.deletedCount || selectedDrafts.length} draft questions`);
-    } catch (err) {
+    } catch {
       setError("Failed to delete selected drafts");
     } finally {
       setIsLoading(false);

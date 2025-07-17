@@ -43,6 +43,11 @@ interface QuestionGenerationPlannerProps {
   onSwitchToDrafts?: () => void;
 }
 
+interface GenerationBreakdown {
+  type: string;
+  generated: number;
+}
+
 export default function QuestionGenerationPlanner({
   onGenerationComplete,
   onSwitchToDrafts,
@@ -84,7 +89,7 @@ export default function QuestionGenerationPlanner({
       }));
 
       setConcepts(conceptSelections);
-    } catch (err) {
+    } catch {
       setError("Failed to load concepts");
     } finally {
       setIsLoading(false);
@@ -130,7 +135,7 @@ export default function QuestionGenerationPlanner({
       );
       setShowClearConfirm(false);
       onGenerationComplete();
-    } catch (err) {
+    } catch {
       setError("Failed to clear existing drafts");
     } finally {
       setIsCheckingDrafts(false);
@@ -215,10 +220,10 @@ export default function QuestionGenerationPlanner({
       const result = await response.json();
 
       // Show detailed success message with breakdown
-      const breakdown = result.summary?.breakdown || [];
+      const breakdown: GenerationBreakdown[] = result.summary?.breakdown || [];
       const successDetails = breakdown
-        .filter((b: any) => b.generated > 0)
-        .map((b: any) => `${b.generated} ${b.type.replace(/_/g, " ")}`)
+        .filter((b: GenerationBreakdown) => b.generated > 0)
+        .map((b: GenerationBreakdown) => `${b.generated} ${b.type.replace(/_/g, " ")}`)
         .join(", ");
 
       setSuccess(

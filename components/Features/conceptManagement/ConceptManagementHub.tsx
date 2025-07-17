@@ -39,27 +39,36 @@ interface ConceptSummary {
 
 interface ConceptManagementHubProps {
   initialConcepts?: ConceptSummary[];
-  onConceptUpdate?: (conceptId: string, updates: any) => void;
-  onConceptDelete?: (conceptId: string) => void;
+}
+
+type HubTab = "overview" | "map" | "hierarchy" | "bulk" | "import";
+
+interface BulkOperation {
+  type: string;
+  conceptIds: string[];
+  parameters: Record<string, unknown>;
+  preview: boolean;
+}
+
+interface BulkConcept {
+  id: string;
+  name: string;
+  category: string;
+  difficulty: string;
+  tags: string[];
 }
 
 export const ConceptManagementHub: React.FC<ConceptManagementHubProps> = ({
   initialConcepts = [],
-  onConceptUpdate,
-  onConceptDelete,
 }) => {
-  const [activeTab, setActiveTab] = useState<
-    "overview" | "map" | "hierarchy" | "bulk" | "import"
-  >("overview");
+  const [activeTab, setActiveTab] = useState<HubTab>("overview");
   const [concepts, setConcepts] = useState<ConceptSummary[]>(initialConcepts);
   const [selectedConcepts, setSelectedConcepts] = useState<string[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterCategory, setFilterCategory] = useState<string>("");
-  const [isLoading, setIsLoading] = useState(false);
 
   // Load concepts from API
   const loadConcepts = useCallback(async () => {
-    setIsLoading(true);
     try {
       const response = await fetch("/api/concepts?limit=1000");
       const data = await response.json();
@@ -69,8 +78,6 @@ export const ConceptManagementHub: React.FC<ConceptManagementHubProps> = ({
       }
     } catch (error) {
       console.error("Failed to load concepts:", error);
-    } finally {
-      setIsLoading(false);
     }
   }, []);
 
@@ -114,7 +121,7 @@ export const ConceptManagementHub: React.FC<ConceptManagementHubProps> = ({
 
   // Handle bulk operations
   const handleBulkOperation = useCallback(
-    async (operation: any) => {
+    async (operation: BulkOperation) => {
       try {
         const response = await fetch("/api/concepts/bulk-update", {
           method: "POST",
@@ -424,7 +431,7 @@ export const ConceptManagementHub: React.FC<ConceptManagementHubProps> = ({
       <div className="flex-1 overflow-hidden">
         <Tabs
           value={activeTab}
-          onValueChange={(value) => setActiveTab(value as any)}
+          onValueChange={(value) => setActiveTab(value as HubTab)}
           className="h-full"
         >
           <div className="border-b bg-gray-50 px-4">
@@ -501,7 +508,7 @@ export const ConceptManagementHub: React.FC<ConceptManagementHubProps> = ({
                           }
                         : null;
                     })
-                    .filter(Boolean) as any
+                    .filter(Boolean) as BulkConcept[]
                 }
                 onExecuteOperation={handleBulkOperation}
                 onConceptSelect={setSelectedConcepts}

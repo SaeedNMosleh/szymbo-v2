@@ -132,7 +132,13 @@ export async function POST(request: NextRequest) {
 
 // Helper function to build hierarchy tree structure
 function buildHierarchy(groups: IConceptGroup[]): GroupWithChildren[] {
-  const groupMap = new Map(groups.map(g => [g.id, { ...g, children: [] }]));
+  const groupMap = new Map<string, GroupWithChildren>();
+  
+  // First pass: create all groups with empty children arrays
+  for (const group of groups) {
+    groupMap.set(group.id, { ...group, children: [] as GroupWithChildren[] });
+  }
+  
   const rootGroups: GroupWithChildren[] = [];
 
   for (const group of groups) {

@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { v4 as uuidv4 } from "uuid";
 import dbConnect from "@/lib/dbConnect";
 import Concept from "@/datamodels/concept.model";
-import QuestionDraft from "@/datamodels/questionDraft.model";
+import QuestionDraft, { IQuestionDraft } from "@/datamodels/questionDraft.model";
 import { QuestionLLMService } from "@/lib/questionGeneration/questionLLM";
 import { QuestionType, QuestionLevel } from "@/lib/enum";
 import { createApiResponse, createErrorResponse } from "@/lib/utils/apiResponse";
@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
     // Generate batch ID
     const generationBatch = uuidv4();
     const questionLLM = new QuestionLLMService();
-    const allGeneratedQuestions: any[] = [];
+    const allGeneratedQuestions: IQuestionDraft[] = [];
 
     // Generate questions for each type
     for (const { type, quantity } of questionTypes) {
@@ -77,6 +77,7 @@ export async function POST(request: NextRequest) {
               id: uuidv4(),
               ...question,
               source: "generated" as const,
+              createdDate: new Date(),
             };
 
             allGeneratedQuestions.push(draftQuestion);

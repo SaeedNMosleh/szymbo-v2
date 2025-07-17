@@ -19,6 +19,7 @@ interface ChangeBase {
 
 interface TagAssignmentChange extends ChangeBase {
   operation: 'tag-assignment';
+  oldValue: string[];
   newValue: string[];
 }
 
@@ -355,7 +356,7 @@ async function handleRelationshipSuggestions(
             description: concept1.description,
             category: concept1.category,
             examples: concept1.examples || [],
-            sourceContent: concept1.sourceContent || 'Bulk update analysis',
+            sourceContent: `Concept from ${concept1.sourceType || 'unknown'} source`,
             confidence: concept1.confidence || 0.8,
             suggestedDifficulty: concept1.difficulty || QuestionLevel.B1,
           },

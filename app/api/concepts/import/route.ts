@@ -5,6 +5,23 @@ import { ConceptLLMService } from "@/lib/conceptExtraction/conceptLLM";
 import { z } from "zod";
 import { ConceptCategory, QuestionLevel } from "@/lib/enum";
 
+// Type definitions for extraction settings
+interface ExtractionSettings {
+  targetCategory?: ConceptCategory | 'both';
+  difficulty?: QuestionLevel;
+  maxConcepts: number;
+  extractionPrompt?: string;
+}
+
+interface ExtractedConcept {
+  name: string;
+  category: string;
+  description: string;
+  examples: string[];
+  confidence: number;
+  difficulty?: string;
+}
+
 // Request validation schemas
 const csvImportSchema = z.object({
   data: z.string(), // CSV content as string
@@ -132,7 +149,7 @@ export async function POST(request: NextRequest) {
 // Handle CSV import
 async function handleCSVImport(
   conceptManager: ConceptManagerEnhanced,
-  data: any
+  data: unknown
 ) {
   const validatedData = csvImportSchema.parse(data);
   
@@ -217,7 +234,7 @@ async function handleCSVImport(
 // Handle manual import
 async function handleManualImport(
   conceptManager: ConceptManagerEnhanced,
-  data: any
+  data: unknown
 ) {
   const validatedData = manualImportSchema.parse(data);
   
@@ -263,7 +280,7 @@ async function handleManualImport(
 // Handle document import with LLM extraction
 async function handleDocumentImport(
   conceptManager: ConceptManagerEnhanced,
-  data: any
+  data: unknown
 ) {
   const validatedData = documentImportSchema.parse(data);
   
@@ -284,10 +301,10 @@ async function handleDocumentImport(
       try {
         const concept = await conceptManager.createOrFindConcept({
           name: extractedConcept.name,
-          category: extractedConcept.category,
+          category: extractedConcept.category as ConceptCategory,
           description: extractedConcept.description,
           examples: extractedConcept.examples || [],
-          difficulty: extractedConcept.difficulty || validatedData.extractionSettings.difficulty || QuestionLevel.A1,
+          difficulty: (extractedConcept.difficulty as QuestionLevel) || validatedData.extractionSettings.difficulty || QuestionLevel.A1,
           confidence: extractedConcept.confidence || 0.8,
           sourceType: 'document',
           tags: ['document-import', 'llm-extracted'],
@@ -360,8 +377,8 @@ function parseArrayField(value: string): string[] {
 async function extractConceptsFromDocument(
   llmService: ConceptLLMService,
   content: string,
-  settings: any
-): Promise<any[]> {
+  settings: ExtractionSettings
+): Promise<ExtractedConcept[]> {
   // This would use the existing ConceptLLMService to extract concepts
   // For now, returning a mock implementation
   

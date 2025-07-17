@@ -21,24 +21,19 @@ import {
   Wand2,
   Upload,
   Search,
-  Filter,
   BarChart3,
   Brain,
   Tags,
   Eye,
-  Layers,
   TrendingUp,
   Users,
   BookOpen,
   Target,
   Zap,
   Globe,
-  Star,
-  ArrowRight,
   Plus,
   MoreVertical,
   Edit,
-  Trash2,
   Merge,
   Split,
 } from "lucide-react";
@@ -71,6 +66,23 @@ interface ConceptData {
     pronunciation?: string;
   };
 }
+
+interface BulkOperation {
+  type: "tag-assignment" | "category-change" | "difficulty-change" | "relationship-suggestions";
+  conceptIds: string[];
+  parameters: Record<string, unknown>;
+  preview: boolean;
+}
+
+interface BulkConcept {
+  id: string;
+  name: string;
+  category: string;
+  difficulty: string;
+  tags: string[];
+}
+
+type TabValue = "dashboard" | "explorer" | "map" | "hierarchy" | "bulk" | "import";
 
 interface ConceptStats {
   total: number;
@@ -123,24 +135,6 @@ export default function ConceptManagementPage() {
     string[]
   >([]);
 
-  // Load concepts from API
-  const loadConcepts = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      const response = await fetch("/api/concepts?limit=2000");
-      const data = await response.json();
-
-      if (data.success) {
-        setConcepts(data.data);
-        calculateStats(data.data);
-      }
-    } catch (error) {
-      console.error("Failed to load concepts:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [calculateStats]);
-
   // Calculate statistics
   const calculateStats = useCallback((conceptData: ConceptData[]) => {
     const stats: ConceptStats = {
@@ -179,6 +173,24 @@ export default function ConceptManagementPage() {
 
     setStats(stats);
   }, []);
+
+  // Load concepts from API
+  const loadConcepts = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const response = await fetch("/api/concepts?limit=2000");
+      const data = await response.json();
+
+      if (data.success) {
+        setConcepts(data.data);
+        calculateStats(data.data);
+      }
+    } catch (error) {
+      console.error("Failed to load concepts:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [calculateStats]);
 
   // Filter concepts based on current filters
   const filteredConcepts = useMemo(() => {
@@ -313,7 +325,7 @@ export default function ConceptManagementPage() {
 
   // Handle bulk operations
   const handleBulkOperation = useCallback(
-    async (operation: any) => {
+    async (operation: BulkOperation) => {
       try {
         const response = await fetch("/api/concepts/bulk-update", {
           method: "POST",
@@ -1028,7 +1040,7 @@ export default function ConceptManagementPage() {
       <div className="container mx-auto p-6">
         <Tabs
           value={activeTab}
-          onValueChange={(value) => setActiveTab(value as any)}
+          onValueChange={(value) => setActiveTab(value as TabValue)}
           className="space-y-6"
         >
           {/* Tab Navigation */}
@@ -1125,7 +1137,7 @@ export default function ConceptManagementPage() {
                         }
                       : null;
                   })
-                  .filter(Boolean) as any
+                  .filter(Boolean) as BulkConcept[]
               }
               onExecuteOperation={handleBulkOperation}
               onConceptSelect={setSelectedConcepts}

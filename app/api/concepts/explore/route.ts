@@ -3,7 +3,48 @@ import { connectToDatabase } from "@/lib/dbConnect";
 import { ConceptManagerEnhanced } from "@/lib/conceptExtraction/conceptManagerEnhanced";
 import { ConceptLLMService } from "@/lib/conceptExtraction/conceptLLM";
 import { ConceptCategory, QuestionLevel } from "@/lib/enum";
+import { IConcept } from "@/datamodels/concept.model";
+import { IConceptIndex } from "@/datamodels/conceptIndex.model";
 import { z } from "zod";
+
+// Type definitions for the exploration API
+interface RelatedConcept {
+  id: string;
+  name: string;
+  similarity: number;
+  reasoning: string;
+  category: ConceptCategory;
+  difficulty: string;
+}
+
+interface ExplorationResult {
+  query: string;
+  mode: string;
+  relatedConcepts?: RelatedConcept[];
+  suggestedTags?: string[];
+  categoryAnalysis?: string;
+  difficultyAnalysis?: string;
+  relationships?: unknown[];
+  [key: string]: unknown;
+}
+
+interface RecommendationItem {
+  conceptId?: string;
+  name: string;
+  priority: number;
+  reasoning: string;
+  category: ConceptCategory;
+  id?: string | null;
+  matched?: boolean;
+  difficulty?: string;
+}
+
+interface LearningPathStep {
+  step: number;
+  concept: string;
+  reasoning: string;
+  difficulty: string;
+}
 
 // Request validation schema for LLM exploration
 const exploreConceptsSchema = z.object({
@@ -26,7 +67,7 @@ export async function POST(request: NextRequest) {
     const conceptManager = new ConceptManagerEnhanced();
     const llmService = new ConceptLLMService();
 
-    let result: any = {
+    let result: ExplorationResult = {
       query: validatedData.query,
       mode: validatedData.mode,
       relatedConcepts: [],
@@ -115,7 +156,7 @@ export async function POST(request: NextRequest) {
 // Handle similarity-based exploration
 async function handleSimilarityExploration(
   llmService: ConceptLLMService,
-  conceptIndex: any[],
+  conceptIndex: IConceptIndex[],
   query: string,
   maxResults: number
 ) {
@@ -207,7 +248,7 @@ async function handleSimilarityExploration(
 async function handleRelationshipExploration(
   conceptManager: ConceptManagerEnhanced,
   llmService: ConceptLLMService,
-  conceptIndex: any[],
+  conceptIndex: IConceptIndex[],
   query: string,
   conceptId?: string
 ) {
@@ -267,7 +308,7 @@ async function handleRelationshipExploration(
 // Handle recommendation exploration
 async function handleRecommendationExploration(
   llmService: ConceptLLMService,
-  conceptIndex: any[],
+  conceptIndex: IConceptIndex[],
   query: string,
   maxResults: number
 ) {
@@ -290,8 +331,8 @@ async function handleRecommendationExploration(
     // Match recommendations with actual concepts
     const matchedRecommendations = recommendations.recommendedConcepts
       ?.slice(0, maxResults)
-      .map((rec: any) => {
-        const matchingConcept = conceptIndex.find(c => 
+      .map((rec: RecommendationItem) => {
+        const matchingConcept = conceptIndex.find((c: IConceptIndex) => 
           c.name.toLowerCase().includes(rec.name.toLowerCase()) ||
           rec.name.toLowerCase().includes(c.name.toLowerCase())
         );
@@ -326,7 +367,7 @@ async function handleRecommendationExploration(
 // Handle analysis exploration
 async function handleAnalysisExploration(
   llmService: ConceptLLMService,
-  allConcepts: any[],
+  allConcepts: IConcept[],
   query: string
 ) {
   const analysisPrompt = `
@@ -354,12 +395,12 @@ async function handleAnalysisExploration(
       concept.tags?.some((tag: string) => tag.toLowerCase().includes(query.toLowerCase()))
     );
 
-    const difficultyDistribution = relevantConcepts.reduce((acc: any, concept) => {
+    const difficultyDistribution = relevantConcepts.reduce((acc: Record<string, number>, concept: IConcept) => {
       acc[concept.difficulty] = (acc[concept.difficulty] || 0) + 1;
       return acc;
     }, {});
 
-    const categoryDistribution = relevantConcepts.reduce((acc: any, concept) => {
+    const categoryDistribution = relevantConcepts.reduce((acc: Record<string, number>, concept: IConcept) => {
       acc[concept.category] = (acc[concept.category] || 0) + 1;
       return acc;
     }, {});
@@ -375,7 +416,7 @@ async function handleAnalysisExploration(
         difficultyDistribution,
         categoryDistribution,
       },
-      recommendations: generateAnalysisRecommendations(relevantConcepts, query),
+      recommendations: generateAnalysisRecommendations(relevantConcepts),
     };
   } catch (error) {
     console.error('Analysis exploration failed:', error);
@@ -407,19 +448,19 @@ function extractKeywords(query: string): string[] {
 }
 
 // Helper function to generate learning path
-function generateLearningPath(recommendations: any[]): any[] {
+function generateLearningPath(recommendations: RecommendationItem[]): LearningPathStep[] {
   return recommendations
     .sort((a, b) => a.priority - b.priority)
-    .map((rec, index) => ({
+    .map((rec: RecommendationItem, index) => ({
       step: index + 1,
       concept: rec.name,
       reasoning: rec.reasoning,
-      difficulty: rec.difficulty,
+      difficulty: rec.difficulty || 'B1',
     }));
 }
 
 // Helper function to generate analysis recommendations
-function generateAnalysisRecommendations(concepts: any[], query: string): string[] {
+function generateAnalysisRecommendations(concepts: IConcept[]): string[] {
   const recommendations = [];
   
   if (concepts.length === 0) {
@@ -430,12 +471,12 @@ function generateAnalysisRecommendations(concepts: any[], query: string): string
     recommendations.push('This topic appears to have limited coverage in the database');
   }
   
-  const hasBasicLevel = concepts.some((c: any) => ['A1', 'A2'].includes(c.difficulty));
+  const hasBasicLevel = concepts.some((c: IConcept) => ['A1', 'A2'].includes(c.difficulty));
   if (!hasBasicLevel) {
     recommendations.push('Consider adding beginner-level concepts for this topic');
   }
   
-  const hasAdvancedLevel = concepts.some((c: any) => ['C1', 'C2'].includes(c.difficulty));
+  const hasAdvancedLevel = concepts.some((c: IConcept) => ['C1', 'C2'].includes(c.difficulty));
   if (!hasAdvancedLevel) {
     recommendations.push('Advanced concepts for this topic could be added');
   }

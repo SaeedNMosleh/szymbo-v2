@@ -46,7 +46,7 @@ interface ConceptOption {
 
 interface QuestionEditorProps {
   onQuestionSaved: () => void;
-  editingQuestion?: any; // For future edit functionality
+  editingQuestion?: QuestionData; // For future edit functionality
 }
 
 const initialQuestionData: QuestionData = {
@@ -114,7 +114,7 @@ export default function QuestionEditor({
       }));
 
       setConcepts(conceptOptions);
-    } catch (err) {
+    } catch {
       setError("Failed to load concepts");
     } finally {
       setIsLoading(false);
@@ -156,7 +156,7 @@ export default function QuestionEditor({
     return errors;
   };
 
-  const handleInputChange = (field: keyof QuestionData, value: any) => {
+  const handleInputChange = (field: keyof QuestionData, value: string | string[]) => {
     setQuestionData((prev) => ({
       ...prev,
       [field]: value,

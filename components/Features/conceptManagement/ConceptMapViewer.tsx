@@ -313,7 +313,7 @@ export const ConceptMapViewer: React.FC<ConceptMapViewerProps> = ({
                 fill={getNodeColor(node.category, selectedNode === node.id)}
                 stroke="#374151"
                 strokeWidth="2"
-                className="hover:stroke-4 cursor-pointer"
+                className="cursor-pointer hover:stroke-[4]"
                 onMouseDown={(e) => handleMouseDown(e, node.id)}
                 onClick={() => {
                   setSelectedNode(node.id);

@@ -85,7 +85,7 @@ export async function GET(request: NextRequest) {
       .reduce((acc, concept) => {
         acc[concept!.id] = concept;
         return acc;
-      }, {} as Record<string, any>);
+      }, {} as Record<string, unknown>);
 
     return NextResponse.json(
       {

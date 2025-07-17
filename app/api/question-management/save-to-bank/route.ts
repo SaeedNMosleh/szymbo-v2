@@ -57,9 +57,9 @@ export async function POST(request: NextRequest) {
     for (const draft of drafts) {
       try {
         // Convert concept names/IDs to proper concept IDs (STRICT: Must resolve to valid IDs)
-        const targetConceptIds = draft.targetConcepts
-          .map((concept: any) => conceptMap.get(concept))
-          .filter((id: any) => id !== undefined) as string[];
+        const targetConceptIds = (draft.targetConcepts as string[])
+          .map((concept: string) => conceptMap.get(concept))
+          .filter((id: unknown) => id !== undefined) as string[];
         
         if (targetConceptIds.length === 0) {
           console.warn(`Draft ${draft.id} has no valid target concepts - rejecting question`);

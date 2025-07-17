@@ -1,4 +1,3 @@
-import { NextRequest } from "next/server";
 import dbConnect from "@/lib/dbConnect";
 import Concept from "@/datamodels/concept.model";
 import QuestionBank from "@/datamodels/questionBank.model";
@@ -23,7 +22,7 @@ interface CoverageStats {
   coverageByCategory: Record<ConceptCategory, number>;
 }
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     await dbConnect();
     

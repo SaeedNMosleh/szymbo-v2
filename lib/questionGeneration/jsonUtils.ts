@@ -4,7 +4,7 @@
 
 export interface JSONSanitizationResult {
   success: boolean;
-  data?: any;
+  data?: unknown;
   error?: string;
   originalResponse?: string;
   sanitizedResponse?: string;
@@ -20,7 +20,7 @@ export function sanitizeAndParseJSON(response: string): JSONSanitizationResult {
     // First, try parsing as-is
     const data = JSON.parse(originalResponse);
     return { success: true, data, originalResponse };
-  } catch (initialError) {
+  } catch {
     // If that fails, try sanitization
     try {
       const sanitized = sanitizeJSONString(originalResponse);
@@ -78,7 +78,7 @@ function sanitizeJSONString(jsonString: string): string {
   // Ensure the JSON starts and ends properly
   if (!sanitized.startsWith('{') && !sanitized.startsWith('[')) {
     // Try to find the start of JSON
-    const jsonStart = sanitized.search(/[{\[]/);
+    const jsonStart = sanitized.search(/[{[]/);
     if (jsonStart !== -1) {
       sanitized = sanitized.substring(jsonStart);
     }
@@ -90,18 +90,28 @@ function sanitizeJSONString(jsonString: string): string {
 /**
  * Validates that a parsed object matches expected question generation schema
  */
-export function validateQuestionResponse(data: any): boolean {
+interface QuestionResponseData {
+  questions: Array<{
+    question: string;
+    correctAnswer: string;
+    targetConcepts: unknown[];
+  }>;
+}
+
+export function validateQuestionResponse(data: unknown): data is QuestionResponseData {
   if (!data || typeof data !== 'object') {
     return false;
   }
 
+  const questionData = data as QuestionResponseData;
+
   // Check if it has questions array
-  if (!Array.isArray(data.questions)) {
+  if (!Array.isArray(questionData.questions)) {
     return false;
   }
 
   // Validate each question has required fields
-  return data.questions.every((question: any) => 
+  return questionData.questions.every((question: { question?: unknown; correctAnswer?: unknown; targetConcepts?: unknown }) => 
     question &&
     typeof question.question === 'string' &&
     typeof question.correctAnswer === 'string' &&
@@ -112,7 +122,7 @@ export function validateQuestionResponse(data: any): boolean {
 /**
  * Attempts to extract and fix partial JSON responses
  */
-export function extractPartialJSON(response: string): any {
+export function extractPartialJSON(response: string): unknown {
   const trimmed = response.trim();
   
   // Try to find incomplete JSON and complete it

@@ -29,12 +29,18 @@ import {
 } from "lucide-react";
 
 // Types for import functionality
+interface ImportError {
+  row?: number;
+  concept?: string;
+  error: string;
+}
+
 interface ImportResult {
   success: boolean;
   data?: {
-    imported: any[];
-    errors: any[];
-    summary: Record<string, any>;
+    imported: unknown[];
+    errors: ImportError[];
+    summary: Record<string, unknown>;
   };
   error?: string;
   message?: string;
@@ -70,10 +76,22 @@ interface ConceptImporterProps {
   onImportComplete?: (result: ImportResult) => void;
 }
 
+type ImportTab = "csv" | "manual" | "document";
+
+interface ImportRequestBody {
+  type: string;
+  data?: string;
+  mapping?: CSVMapping;
+  hasHeader?: boolean;
+  concepts?: ManualConcept[];
+  content?: string;
+  extractionSettings?: Record<string, unknown>;
+}
+
 export const ConceptImporter: React.FC<ConceptImporterProps> = ({
   onImportComplete,
 }) => {
-  const [activeTab, setActiveTab] = useState<"csv" | "manual" | "document">(
+  const [activeTab, setActiveTab] = useState<ImportTab>(
     "csv"
   );
   const [isLoading, setIsLoading] = useState(false);
@@ -104,6 +122,15 @@ export const ConceptImporter: React.FC<ConceptImporterProps> = ({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Update CSV preview when data or settings change
+  const updateCSVPreview = useCallback((data: string) => {
+    const lines = data.trim().split("\n").slice(0, 5); // Show first 5 rows
+    const preview = lines.map((line) =>
+      line.split(",").map((cell) => cell.trim().replace(/^"|"$/g, ""))
+    );
+    setCsvPreview(preview);
+  }, []);
+
   // Handle file upload
   const handleFileUpload = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -129,21 +156,12 @@ export const ConceptImporter: React.FC<ConceptImporterProps> = ({
     [updateCSVPreview]
   );
 
-  // Update CSV preview when data or settings change
-  const updateCSVPreview = useCallback((data: string) => {
-    const lines = data.trim().split("\n").slice(0, 5); // Show first 5 rows
-    const preview = lines.map((line) =>
-      line.split(",").map((cell) => cell.trim().replace(/^"|"$/g, ""))
-    );
-    setCsvPreview(preview);
-  }, []);
-
   // Execute import
   const executeImport = useCallback(async () => {
     setIsLoading(true);
 
     try {
-      let requestBody: any;
+      let requestBody: ImportRequestBody;
 
       switch (activeTab) {
         case "csv":
@@ -561,7 +579,7 @@ export const ConceptImporter: React.FC<ConceptImporterProps> = ({
 
           {manualConcepts.length === 0 && (
             <div className="py-8 text-center text-gray-500">
-              No concepts added yet. Click "Add Concept" to get started.
+              No concepts added yet. Click &quot;Add Concept&quot; to get started.
             </div>
           )}
         </div>
@@ -790,7 +808,7 @@ export const ConceptImporter: React.FC<ConceptImporterProps> = ({
         <CardContent>
           <Tabs
             value={activeTab}
-            onValueChange={(value) => setActiveTab(value as any)}
+            onValueChange={(value) => setActiveTab(value as ImportTab)}
           >
             <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="csv">
