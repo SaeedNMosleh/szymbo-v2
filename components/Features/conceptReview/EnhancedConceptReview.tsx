@@ -84,7 +84,7 @@ export function EnhancedConceptReview({
       examples: [""],
       sourceContent: "",
       confidence: 0,
-      suggestedDifficulty: QuestionLevel.EASY,
+      suggestedDifficulty: QuestionLevel.A1,
     },
   });
 
@@ -98,7 +98,7 @@ export function EnhancedConceptReview({
       examples: [""],
       sourceContent: "Manual addition",
       confidence: 1.0,
-      suggestedDifficulty: QuestionLevel.MEDIUM,
+      suggestedDifficulty: QuestionLevel.A2,
     },
   });
 
@@ -185,6 +185,7 @@ export function EnhancedConceptReview({
                 decisions: [],
                 isDraft: true,
               },
+              newTagsCreated: [],
               extractionMetadata: {
                 llmModel: "legacy",
                 totalProcessingTime: 0,
@@ -335,10 +336,11 @@ export function EnhancedConceptReview({
   );
 
   const handleManualAdd = useCallback(
-    (values: ExtractedConcept) => {
+    (values: any) => {
       const manualConcept: ExtractedConcept = {
         ...values,
         sourceContent: "Manual addition",
+        suggestedTags: [],
       };
 
       // Add to session concepts temporarily for display

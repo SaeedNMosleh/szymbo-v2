@@ -24,7 +24,6 @@ interface ExplorationResult {
   suggestedTags?: string[];
   categoryAnalysis?: string;
   difficultyAnalysis?: string;
-  relationships?: unknown[];
   [key: string]: unknown;
 }
 
@@ -49,7 +48,7 @@ interface LearningPathStep {
 // Request validation schema for LLM exploration
 const exploreConceptsSchema = z.object({
   query: z.string().min(3, "Query must be at least 3 characters"),
-  mode: z.enum(['similarity', 'relationships', 'recommendations', 'analysis']).default('similarity'),
+  mode: z.enum(['similarity', 'recommendations', 'analysis']).default('similarity'),
   conceptId: z.string().optional(), // For concept-specific exploration
   includeAnalysis: z.boolean().default(true),
   maxResults: z.number().min(1).max(50).default(10),
@@ -74,7 +73,6 @@ export async function POST(request: NextRequest) {
       suggestedTags: [],
       categoryAnalysis: '',
       difficultyAnalysis: '',
-      relationships: [],
     };
 
     // Get all concepts for analysis
@@ -88,16 +86,6 @@ export async function POST(request: NextRequest) {
           conceptIndex,
           validatedData.query,
           validatedData.maxResults
-        );
-        break;
-
-      case 'relationships':
-        result = await handleRelationshipExploration(
-          conceptManager,
-          llmService,
-          conceptIndex,
-          validatedData.query,
-          validatedData.conceptId
         );
         break;
 
@@ -170,6 +158,7 @@ async function handleSimilarityExploration(
       sourceContent: 'User query',
       confidence: 0.8,
       suggestedDifficulty: QuestionLevel.B1,
+      suggestedTags: [],
     };
 
     // Use LLM to find similar concepts
@@ -185,11 +174,11 @@ async function handleSimilarityExploration(
       .slice(0, maxResults)
       .map(match => ({
         id: match.conceptId,
-        name: match.concept?.name || match.name,
+        name: match.name,
         similarity: match.similarity,
-        reasoning: match.reasoning || 'Semantic similarity based on content analysis',
-        category: match.concept?.category || match.category,
-        difficulty: match.concept?.difficulty || 'B1',
+        reasoning: 'Semantic similarity based on content analysis',
+        category: match.category,
+        difficulty: 'B1',
       }));
 
     // Generate analysis using LLM
@@ -244,66 +233,6 @@ async function handleSimilarityExploration(
   }
 }
 
-// Handle relationship exploration
-async function handleRelationshipExploration(
-  conceptManager: ConceptManagerEnhanced,
-  llmService: ConceptLLMService,
-  conceptIndex: IConceptIndex[],
-  query: string,
-  conceptId?: string
-) {
-  const relationships = [];
-  
-  if (conceptId) {
-    // Get existing relationships for specific concept
-    const existingRelationships = await conceptManager.getConceptRelationships(conceptId);
-    
-    relationships.push(...existingRelationships.map(rel => ({
-      type: rel.relationshipType,
-      fromConcept: rel.fromConceptId,
-      toConcept: rel.toConceptId,
-      strength: rel.strength,
-      description: rel.description,
-      source: rel.createdBy,
-    })));
-  }
-
-  // Use LLM to suggest new relationships based on query
-  const suggestionPrompt = `
-    Analyze these Polish learning concepts and suggest meaningful relationships for: "${query}"
-    
-    Consider these relationship types:
-    - prerequisite: A must be learned before B
-    - related: A and B are conceptually connected
-    - similar: A and B are alike or synonymous
-    - opposite: A and B are contrasting
-    - progression: A naturally leads to learning B
-    
-    Return JSON array with: { fromConcept, toConcept, relationshipType, reasoning, strength }
-  `;
-
-  try {
-    const suggestionResponse = await llmService.analyzeText(suggestionPrompt);
-    const suggestedRelationships = JSON.parse(suggestionResponse);
-    
-    return {
-      query,
-      mode: 'relationships',
-      existingRelationships: relationships,
-      suggestedRelationships: suggestedRelationships || [],
-      analysis: `Found ${relationships.length} existing relationships and ${suggestedRelationships?.length || 0} suggested new relationships.`,
-    };
-  } catch (error) {
-    console.error('Relationship exploration failed:', error);
-    return {
-      query,
-      mode: 'relationships',
-      existingRelationships: relationships,
-      suggestedRelationships: [],
-      analysis: 'Error occurred while analyzing relationships.',
-    };
-  }
-}
 
 // Handle recommendation exploration
 async function handleRecommendationExploration(

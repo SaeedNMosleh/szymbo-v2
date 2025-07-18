@@ -11,10 +11,15 @@ export interface ExtractedConcept {
   sourceContent: string; // where in course this was found
   confidence: number; // 0-1 LLM confidence
   suggestedDifficulty: QuestionLevel;
+  suggestedTags: Array<{
+    tag: string;
+    source: 'existing' | 'new';
+    confidence: number;
+  }>;
 }
 
 /**
- * Represents a match between an extracted concept and an existing concept
+ * Represents a match between an extracted concept and an existing concept for merge potential
  */
 export interface SimilarityMatch {
   conceptId: string;
@@ -22,12 +27,12 @@ export interface SimilarityMatch {
   similarity: number; // 0-1 score
   category: ConceptCategory;
   description: string;
-  examples?: string[];
-  reasoning?: string; // explanation of similarity
-  concept?: {
-    name: string;
-    category: ConceptCategory;
-    difficulty: QuestionLevel;
+  examples: string[];
+  mergeScore: number; // 0-1 score indicating merge potential
+  mergeSuggestion?: {
+    reason: string;
+    conflictingFields: string[];
+    suggestedMergedDescription?: string;
   };
 }
 
@@ -57,10 +62,10 @@ export interface ExtractionResult {
  * Review decision for human-in-the-loop concept approval
  */
 export interface ReviewDecision {
-  action: "approve" | "link" | "edit" | "reject";
+  action: "approve" | "edit" | "reject" | "link";
   extractedConcept: ExtractedConcept;
-  targetConceptId?: string; // for link action
   editedConcept?: Partial<ExtractedConcept>; // for edit action
+  targetConceptId?: string; // for link action
   courseId: number;
 }
 

@@ -4,20 +4,33 @@ import { ConceptCategory, QuestionLevel } from "@/lib/enum";
 import type { IConcept } from "./concept.model";
 
 /**
- * Enhanced review decision interface with additional actions
+ * Enhanced review decision interface - removed 'link' action, focus on merge for similarity
  */
 export interface ReviewDecision {
-  action: "approve" | "link" | "edit" | "reject" | "manual_add" | "merge";
+  action: "approve" | "edit" | "reject" | "merge" | "link" | "manual_add";
   extractedConcept: ExtractedConcept;
-  targetConceptId?: string; // for link action
   editedConcept?: Partial<ExtractedConcept>; // for edit action
+  targetConceptId?: string; // for link action
   mergeData?: {
     primaryConceptId: string;
-    additionalData: Partial<IConcept>;
+    additionalData: {
+      description?: string;
+      examples?: string[];
+      tags?: string[];
+    };
   };
   courseId: number;
   reviewedAt: Date;
   reviewerId?: string; // for future multi-user support
+}
+
+/**
+ * Suggested tag with metadata
+ */
+export interface SuggestedTag {
+  tag: string;
+  source: 'existing' | 'new';
+  confidence: number;
 }
 
 /**
@@ -31,6 +44,7 @@ export interface ExtractedConcept {
   sourceContent: string;
   confidence: number;
   suggestedDifficulty: QuestionLevel;
+  suggestedTags: SuggestedTag[];
   extractionMetadata?: {
     model: string;
     timestamp: Date;
@@ -39,7 +53,7 @@ export interface ExtractedConcept {
 }
 
 /**
- * Similarity analysis data
+ * Similarity match focused on merge potential
  */
 export interface SimilarityMatch {
   conceptId: string;
@@ -48,6 +62,12 @@ export interface SimilarityMatch {
   category: ConceptCategory;
   description: string;
   examples: string[];
+  mergeScore: number; // Score indicating merge potential (0-1)
+  mergeSuggestion?: {
+    reason: string;
+    conflictingFields: string[];
+    suggestedMergedDescription?: string;
+  };
 }
 
 export interface SimilarityData {
@@ -78,6 +98,7 @@ export interface IConceptExtractionSession {
   extractedConcepts: ExtractedConcept[];
   similarityMatches: SimilarityData[];
   reviewProgress: ReviewProgress;
+  newTagsCreated: string[]; // Session-level tracking of newly created tags
   extractionMetadata: {
     llmModel: string;
     totalProcessingTime: number;
@@ -89,6 +110,12 @@ export interface IConceptExtractionSession {
 }
 
 // Zod validation schemas
+export const SuggestedTagSchema = z.object({
+  tag: z.string().min(1, "Tag cannot be empty"),
+  source: z.enum(['existing', 'new']),
+  confidence: z.number().min(0).max(1)
+});
+
 export const ExtractedConceptSchema = z.object({
   name: z.string().min(1, "Concept name is required"),
   category: z.nativeEnum(ConceptCategory),
@@ -97,6 +124,7 @@ export const ExtractedConceptSchema = z.object({
   sourceContent: z.string().min(1, "Source content is required"),
   confidence: z.number().min(0).max(1),
   suggestedDifficulty: z.nativeEnum(QuestionLevel),
+  suggestedTags: z.array(SuggestedTagSchema),
   extractionMetadata: z.object({
     model: z.string(),
     timestamp: z.string().datetime().transform(date => new Date(date)),
@@ -110,7 +138,13 @@ export const SimilarityMatchSchema = z.object({
   similarity: z.number().min(0).max(1),
   category: z.nativeEnum(ConceptCategory),
   description: z.string().min(1),
-  examples: z.array(z.string())
+  examples: z.array(z.string()),
+  mergeScore: z.number().min(0).max(1),
+  mergeSuggestion: z.object({
+    reason: z.string(),
+    conflictingFields: z.array(z.string()),
+    suggestedMergedDescription: z.string().optional()
+  }).optional()
 });
 
 export const SimilarityDataSchema = z.object({
@@ -119,17 +153,16 @@ export const SimilarityDataSchema = z.object({
 });
 
 export const ReviewDecisionSchema = z.object({
-  action: z.enum(["approve", "link", "edit", "reject", "manual_add", "merge"]),
+  action: z.enum(["approve", "edit", "reject", "merge", "link", "manual_add"]),
   extractedConcept: ExtractedConceptSchema,
-  targetConceptId: z.string().optional(),
   editedConcept: ExtractedConceptSchema.partial().optional(),
+  targetConceptId: z.string().optional(),
   mergeData: z.object({
     primaryConceptId: z.string(),
     additionalData: z.object({
       description: z.string().optional(),
       examples: z.array(z.string()).optional(),
-      prerequisites: z.array(z.string()).optional(),
-      relatedConcepts: z.array(z.string()).optional()
+      tags: z.array(z.string()).optional()
     })
   }).optional(),
   courseId: z.number(),
@@ -154,6 +187,7 @@ export const ConceptExtractionSessionSchema = z.object({
   extractedConcepts: z.array(ExtractedConceptSchema),
   similarityMatches: z.array(SimilarityDataSchema),
   reviewProgress: ReviewProgressSchema,
+  newTagsCreated: z.array(z.string()),
   extractionMetadata: z.object({
     llmModel: z.string(),
     totalProcessingTime: z.number(),
@@ -194,6 +228,11 @@ const ConceptExtractionSessionMongooseSchema = new Schema<IConceptExtractionSess
         enum: Object.values(QuestionLevel),
         required: true
       },
+      suggestedTags: [{
+        tag: { type: String, required: true },
+        source: { type: String, enum: ['existing', 'new'], required: true },
+        confidence: { type: Number, required: true, min: 0, max: 1 }
+      }],
       extractionMetadata: {
         model: { type: String },
         timestamp: { type: Date },
@@ -212,7 +251,13 @@ const ConceptExtractionSessionMongooseSchema = new Schema<IConceptExtractionSess
           required: true
         },
         description: { type: String, required: true },
-        examples: { type: [String], required: true }
+        examples: { type: [String], required: true },
+        mergeScore: { type: Number, required: true, min: 0, max: 1 },
+        mergeSuggestion: {
+          reason: { type: String },
+          conflictingFields: { type: [String] },
+          suggestedMergedDescription: { type: String }
+        }
       }]
     }],
     reviewProgress: {
@@ -221,7 +266,7 @@ const ConceptExtractionSessionMongooseSchema = new Schema<IConceptExtractionSess
       decisions: [{
         action: {
           type: String,
-          enum: ["approve", "link", "edit", "reject", "manual_add", "merge"],
+          enum: ["approve", "edit", "reject", "merge", "link", "manual_add"],
           required: true
         },
         extractedConcept: {
@@ -239,10 +284,15 @@ const ConceptExtractionSessionMongooseSchema = new Schema<IConceptExtractionSess
             type: String,
             enum: Object.values(QuestionLevel),
             required: true
-          }
+          },
+          suggestedTags: [{
+            tag: { type: String, required: true },
+            source: { type: String, enum: ['existing', 'new'], required: true },
+            confidence: { type: Number, required: true, min: 0, max: 1 }
+          }]
         },
-        targetConceptId: { type: String },
         editedConcept: { type: Schema.Types.Mixed },
+        targetConceptId: { type: String },
         mergeData: {
           primaryConceptId: { type: String },
           additionalData: { type: Schema.Types.Mixed }
@@ -254,6 +304,7 @@ const ConceptExtractionSessionMongooseSchema = new Schema<IConceptExtractionSess
       lastReviewedAt: { type: Date },
       isDraft: { type: Boolean, default: true }
     },
+    newTagsCreated: { type: [String], default: [] },
     extractionMetadata: {
       llmModel: { type: String, required: true },
       totalProcessingTime: { type: Number, required: true },

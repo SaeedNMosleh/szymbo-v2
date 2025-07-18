@@ -1,73 +1,148 @@
 import { Schema, model, models } from "mongoose";
-import { CourseType, ConceptExtractionStatus } from "@/lib/enum";
+import { CourseType } from "@/lib/enum";
 
+/**
+ * Clean Course interface - Content input only
+ * @interface ICourse
+ */
 export interface ICourse {
-  courseId: number;
-  date: Date;
-  keywords: string[];
-  mainSubjects?: string[];
-  courseType: CourseType;
-  newSubjects?: string[];
-  reviewSubjects?: string[];
-  weaknesses?: string[];
-  strengths?: string[];
-  notes: string;
-  practice: string;
-  homework?: string;
-  nextPracticeDate?: Date;
-  newWords: string[];
-  practiceIds?: string[];
-  numberOfPractices?: number;
-  fluency?: number;
-  easinessFactor?: number;
+  // === CORE IDENTIFICATION ===
+  courseId: number;              // Unique identifier (required)
+  date: Date;                    // Course date (required)
   
-  // NEW: Concept-related fields
-  extractedConcepts?: string[]; // concept IDs extracted from this course
-  conceptExtractionDate?: Date;
-  conceptExtractionStatus?: ConceptExtractionStatus;
+  // === COURSE CONTENT (Required) ===
+  courseType: CourseType;        // "new" | "review" | "mixed"
+  keywords: string[];            // Key terms covered
+  notes: string;                 // Main course content  
+  practice: string;              // Practice exercises
+  newWords: string[];            // New vocabulary introduced
+  
+  // === OPTIONAL COURSE METADATA ===
+  mainSubjects?: string[];       // Main topics covered
+  newSubjects?: string[];        // New topics introduced  
+  reviewSubjects?: string[];     // Topics reviewed
+  weaknesses?: string[];         // Areas of difficulty noted
+  strengths?: string[];          // Areas of strength noted
+  homework?: string;             // Assigned homework content
 }
 
 const CourseSchema = new Schema<ICourse>(
   {
-    courseId: { type: Number, required: true, unique: true },
-    date: { type: Date, required: true },
-    keywords: { type: [String], required: true },
-    mainSubjects: { type: [String], required: false },
+    // Core identification (required)
+    courseId: { 
+      type: Number, 
+      required: true, 
+      unique: true,
+      index: true 
+    },
+    date: { 
+      type: Date, 
+      required: true,
+      index: true  // For date-based queries
+    },
+    
+    // Course content (required)
     courseType: {
       type: String,
-      enum: Object.values(CourseType),
+      enum: Object.values(CourseType), // "new", "review", "mixed"
       required: true,
+      index: true  // For filtering by type
     },
-    newSubjects: { type: [String], required: false },
-    reviewSubjects: { type: [String], required: false },
-    weaknesses: { type: [String], required: false },
-    strengths: { type: [String], required: false },
-    notes: { type: String, required: true },
-    practice: { type: String, required: true },
-    homework: { type: String, required: false },
-    newWords: { type: [String], required: true },
-    practiceIds: { type: [String], default: [] },
-    numberOfPractices: { type: Number, default: 0 },
-    fluency: { type: Number, min: 0, max: 10, default: 0 },
-    nextPracticeDate: { type: Date, default: null },
-    easinessFactor: { type: Number, default: 2.5, min: 1.3, max: 2.5 },
+    keywords: { 
+      type: [String], 
+      required: true,
+      validate: {
+        validator: (v: string[]) => v.length > 0,
+        message: "At least one keyword is required"
+      }
+    },
+    notes: { 
+      type: String, 
+      required: true,
+      trim: true,
+      minlength: [10, "Notes must be at least 10 characters"]
+    },
+    practice: { 
+      type: String, 
+      required: true,
+      trim: true,
+      minlength: [5, "Practice must be at least 5 characters"]
+    },
+    newWords: { 
+      type: [String], 
+      required: true,
+      default: []
+    },
     
-    // NEW: Concept-related fields
-    extractedConcepts: { type: [String], default: [], ref: "Concept" },
-    conceptExtractionDate: { type: Date, default: null },
-    conceptExtractionStatus: {
-      type: String,
-      enum: Object.values(ConceptExtractionStatus),
-      default: ConceptExtractionStatus.PENDING,
+    // Optional metadata
+    mainSubjects: { 
+      type: [String], 
+      required: false,
+      default: []
+    },
+    newSubjects: { 
+      type: [String], 
+      required: false,
+      default: []
+    },
+    reviewSubjects: { 
+      type: [String], 
+      required: false,
+      default: []
+    },
+    weaknesses: { 
+      type: [String], 
+      required: false,
+      default: []
+    },
+    strengths: { 
+      type: [String], 
+      required: false,
+      default: []
+    },
+    homework: { 
+      type: String, 
+      required: false,
+      trim: true
     },
   },
   {
-    timestamps: true,
+    timestamps: true, // Adds createdAt, updatedAt
+    collection: 'courses' // Explicit collection name
   }
 );
 
-// Add index for concept extraction status filtering
-CourseSchema.index({ conceptExtractionStatus: 1 });
+// === INDEXES FOR PERFORMANCE ===
+CourseSchema.index({ courseType: 1, date: -1 }); // Compound index for type + date queries
+CourseSchema.index({ keywords: 1 });             // Text searches on keywords
+CourseSchema.index({ createdAt: -1 });           // Recent courses first
+
+// === INSTANCE METHODS ===
+CourseSchema.methods.getKeywordString = function(): string {
+  return this.keywords.join(', ');
+};
+
+CourseSchema.methods.getAllSubjects = function(): string[] {
+  return [
+    ...(this.mainSubjects || []),
+    ...(this.newSubjects || []),
+    ...(this.reviewSubjects || [])
+  ];
+};
+
+// === STATIC METHODS ===
+CourseSchema.statics.findByKeyword = function(keyword: string) {
+  return this.find({ keywords: { $in: [keyword] } });
+};
+
+CourseSchema.statics.findByDateRange = function(startDate: Date, endDate: Date) {
+  return this.find({ 
+    date: { 
+      $gte: startDate, 
+      $lte: endDate 
+    } 
+  }).sort({ date: -1 });
+};
 
 const Course = models?.Course || model<ICourse>("Course", CourseSchema);
 

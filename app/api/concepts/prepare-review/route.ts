@@ -42,7 +42,12 @@ export async function POST(request: NextRequest) {
           examples: concept.examples || [],
           sourceContent: `Previously extracted concept from course ${courseId}`,
           confidence: concept.confidence || 0.8,
-          suggestedDifficulty: concept.difficulty
+          suggestedDifficulty: concept.difficulty,
+          suggestedTags: concept.tags.map(tag => ({
+            tag,
+            source: 'existing' as const,
+            confidence: 1.0
+          }))
         }));
 
         // Create mock review data

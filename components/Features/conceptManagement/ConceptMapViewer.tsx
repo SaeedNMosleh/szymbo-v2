@@ -30,16 +30,17 @@ interface ConceptEdge {
   id: string;
   fromConceptId: string;
   toConceptId: string;
-  relationshipType:
-    | "prerequisite"
-    | "related"
-    | "similar"
-    | "opposite"
-    | "parent-child"
-    | "example-of"
-    | "progression";
+  connectionType:
+    | "group-membership"
+    | "same-group"
+    | "related-group"
+    | "thematic-connection"
+    | "difficulty-level"
+    | "category-based";
   strength: number;
   bidirectional: boolean;
+  groupId?: string;
+  groupName?: string;
 }
 
 interface ConceptMapData {
@@ -95,17 +96,16 @@ export const ConceptMapViewer: React.FC<ConceptMapViewerProps> = ({
     return colors[category as keyof typeof colors] || "#6b7280";
   };
 
-  const getEdgeColor = (relationshipType: string) => {
+  const getEdgeColor = (connectionType: string) => {
     const colors = {
-      prerequisite: "#ef4444",
-      related: "#8b5cf6",
-      similar: "#10b981",
-      opposite: "#f97316",
-      "parent-child": "#3b82f6",
-      "example-of": "#06b6d4",
-      progression: "#84cc16",
+      "group-membership": "#10b981", // Green for group membership
+      "same-group": "#3b82f6", // Blue for same group connections
+      "related-group": "#8b5cf6", // Purple for related groups
+      "thematic-connection": "#f59e0b", // Orange for thematic connections
+      "difficulty-level": "#ef4444", // Red for difficulty-based connections
+      "category-based": "#06b6d4", // Cyan for category-based connections
     };
-    return colors[relationshipType as keyof typeof colors] || "#6b7280";
+    return colors[connectionType as keyof typeof colors] || "#6b7280";
   };
 
   // Handle mouse events for dragging
@@ -269,7 +269,7 @@ export const ConceptMapViewer: React.FC<ConceptMapViewerProps> = ({
             if (!fromNode || !toNode) return null;
 
             const strokeWidth = Math.max(1, edge.strength * 3);
-            const color = getEdgeColor(edge.relationshipType);
+            const color = getEdgeColor(edge.connectionType);
 
             return (
               <g key={edge.id}>
@@ -369,19 +369,23 @@ export const ConceptMapViewer: React.FC<ConceptMapViewerProps> = ({
               <span className="text-xs">Vocabulary</span>
             </div>
             <div className="border-t pt-2">
-              <div className="mb-1 text-xs font-medium">Relationships:</div>
+              <div className="mb-1 text-xs font-medium">Connections:</div>
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
-                  <div className="h-0.5 w-4 bg-red-500"></div>
-                  <span className="text-xs">Prerequisite</span>
+                  <div className="h-0.5 w-4 bg-green-500"></div>
+                  <span className="text-xs">Group Member</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="h-0.5 w-4 bg-blue-500"></div>
+                  <span className="text-xs">Same Group</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="h-0.5 w-4 bg-purple-500"></div>
-                  <span className="text-xs">Related</span>
+                  <span className="text-xs">Related Group</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <div className="h-0.5 w-4 bg-green-500"></div>
-                  <span className="text-xs">Similar</span>
+                  <div className="h-0.5 w-4 bg-orange-500"></div>
+                  <span className="text-xs">Thematic</span>
                 </div>
               </div>
             </div>

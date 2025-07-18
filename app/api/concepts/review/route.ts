@@ -24,6 +24,11 @@ const extractedConceptSchema = z.object({
       QuestionLevel.C2,
     ])
     .optional(),
+  suggestedTags: z.array(z.object({
+    tag: z.string(),
+    source: z.enum(['existing', 'new']),
+    confidence: z.number().min(0).max(1),
+  })).optional(),
 });
 
 const reviewDecisionSchema = z.object({
@@ -84,11 +89,12 @@ export async function POST(request: NextRequest) {
     for (const decision of decisions) {
       try {
         if (decision.action === "approve") {
-          // Ensure suggestedDifficulty is always defined
+          // Ensure suggestedDifficulty and suggestedTags are always defined
           const concept = {
             ...decision.extractedConcept,
             suggestedDifficulty:
               decision.extractedConcept.suggestedDifficulty || QuestionLevel.A1,
+            suggestedTags: decision.extractedConcept.suggestedTags || [],
           };
 
           approvedConcepts.push({
@@ -116,6 +122,7 @@ export async function POST(request: NextRequest) {
               decision.editedConcept?.difficulty ||
               decision.extractedConcept.suggestedDifficulty ||
               QuestionLevel.A1,
+            suggestedTags: decision.extractedConcept.suggestedTags || [],
           };
 
           approvedConcepts.push({

@@ -14,7 +14,7 @@ export interface ConceptSummary {
 
 export interface SmartContext {
   targetConcepts: ConceptSummary[];
-  relatedConcepts: ConceptSummary[];
+  contextConcepts: ConceptSummary[]; // Group-based and category-based context concepts
   sessionObjectives: string[];
   interleaving: boolean;
 }
@@ -31,13 +31,13 @@ export class ContextBuilder {
     // Get target concepts
     const targetConcepts = await this.getConceptSummaries(conceptIds);
 
-    // Get related concepts for richer context
-    const relatedConcepts = await this.getRelatedConcepts(conceptIds);
+    // Get context concepts for richer context (group-based and category-based)
+    const contextConcepts = await this.getContextConcepts(conceptIds);
 
     // Build smart context
     const smartContext: SmartContext = {
       targetConcepts,
-      relatedConcepts,
+      contextConcepts,
       sessionObjectives: this.generateSessionObjectives(targetConcepts),
       interleaving: targetConcepts.length > 1,
     };
@@ -67,9 +67,9 @@ export class ContextBuilder {
   }
 
   /**
-   * Get related concepts for cross-reinforcement
+   * Get context concepts for cross-reinforcement (group-based and category-based)
    */
-  async getRelatedConcepts(conceptIds: string[]): Promise<ConceptSummary[]> {
+  async getContextConcepts(conceptIds: string[]): Promise<ConceptSummary[]> {
     const targetConcepts = await Concept.find({
       id: { $in: conceptIds },
       isActive: true,
@@ -77,22 +77,33 @@ export class ContextBuilder {
 
     if (targetConcepts.length === 0) return [];
 
-    // Collect all related concept IDs
-    const relatedIds = new Set<string>();
-
-    for (const concept of targetConcepts) {
-      // Add prerequisites
-      concept.prerequisites?.forEach((id: string) => relatedIds.add(id));
-
-      // Add explicitly related concepts
-      concept.relatedConcepts?.forEach((id: string) => relatedIds.add(id));
+    // Find concepts from same groups as target concepts
+    const contextIds = new Set<string>();
+    
+    try {
+      // Import ConceptGroup dynamically to avoid circular dependencies
+      const { default: ConceptGroup } = await import("@/datamodels/conceptGroup.model");
+      
+      // Find groups containing target concepts
+      const groups = await ConceptGroup.find({
+        memberConcepts: { $in: conceptIds },
+        isActive: true,
+      }).lean();
+      
+      // Add other concepts from the same groups
+      for (const group of groups) {
+        for (const memberConceptId of group.memberConcepts) {
+          if (!conceptIds.includes(memberConceptId)) {
+            contextIds.add(memberConceptId);
+          }
+        }
+      }
+    } catch (error) {
+      console.warn("Could not load group-based context concepts:", error);
     }
 
-    // Remove target concepts from related set
-    conceptIds.forEach((id) => relatedIds.delete(id));
-
-    // If no explicit relationships, find concepts from same category
-    if (relatedIds.size === 0) {
+    // If no group context found, find concepts from same category
+    if (contextIds.size === 0) {
       const categories = [...new Set(targetConcepts.map((c) => c.category))];
       const sameCategoryConcepts = await Concept.find({
         category: { $in: categories },
@@ -100,12 +111,12 @@ export class ContextBuilder {
         isActive: true,
       }).limit(3);
 
-      sameCategoryConcepts.forEach((c) => relatedIds.add(c.id));
+      sameCategoryConcepts.forEach((c) => contextIds.add(c.id));
     }
 
-    // Get related concept details (limit to 3 for efficiency)
-    const relatedConceptIds = Array.from(relatedIds).slice(0, 3);
-    return await this.getConceptSummaries(relatedConceptIds);
+    // Get context concept details (limit to 3 for efficiency)
+    const contextConceptIds = Array.from(contextIds).slice(0, 3);
+    return await this.getConceptSummaries(contextConceptIds);
   }
 
   /**
@@ -168,10 +179,10 @@ export class ContextBuilder {
       formattedContext += "\n";
     }
 
-    // Related concepts for context
-    if (context.relatedConcepts.length > 0) {
-      formattedContext += "RELATED CONCEPTS (for context):\n";
-      for (const concept of context.relatedConcepts) {
+    // Context concepts for reference
+    if (context.contextConcepts.length > 0) {
+      formattedContext += "CONTEXT CONCEPTS (for reference):\n";
+      for (const concept of context.contextConcepts) {
         formattedContext += `• ${concept.name}: ${concept.description}\n`;
       }
       formattedContext += "\n";
@@ -254,11 +265,11 @@ export class ContextBuilder {
   }
 
   /**
-   * Get concept relationships for smart session planning
+   * Analyze concept organization for smart session planning (group-based)
    */
-  async analyzeConceptRelationships(conceptIds: string[]): Promise<{
+  async analyzeConceptOrganization(conceptIds: string[]): Promise<{
     clusters: string[][];
-    prerequisites: Map<string, string[]>;
+    groups: Array<{ groupId: string; groupName: string; concepts: string[] }>;
     combinations: string[][];
   }> {
     const concepts = await Concept.find({
@@ -267,7 +278,7 @@ export class ContextBuilder {
     });
 
     const clusters: string[][] = [];
-    const prerequisites = new Map<string, string[]>();
+    const groups: Array<{ groupId: string; groupName: string; concepts: string[] }> = [];
     const combinations: string[][] = [];
 
     // Group by category
@@ -285,11 +296,27 @@ export class ContextBuilder {
       clusters.push(vocabularyConcepts.map((c) => c.id));
     }
 
-    // Map prerequisites
-    for (const concept of concepts) {
-      if (concept.prerequisites && concept.prerequisites.length > 0) {
-        prerequisites.set(concept.id, concept.prerequisites);
+    // Get group-based organization
+    try {
+      const { default: ConceptGroup } = await import("@/datamodels/conceptGroup.model");
+      
+      const conceptGroups = await ConceptGroup.find({
+        memberConcepts: { $in: conceptIds },
+        isActive: true,
+      }).lean();
+
+      for (const group of conceptGroups) {
+        const conceptsInThisGroup = conceptIds.filter(id => group.memberConcepts.includes(id));
+        if (conceptsInThisGroup.length > 0) {
+          groups.push({
+            groupId: group.id,
+            groupName: group.name,
+            concepts: conceptsInThisGroup,
+          });
+        }
       }
+    } catch (error) {
+      console.warn("Could not load group organization:", error);
     }
 
     // Generate useful combinations
@@ -302,6 +329,6 @@ export class ContextBuilder {
       }
     }
 
-    return { clusters, prerequisites, combinations };
+    return { clusters, groups, combinations };
   }
 }

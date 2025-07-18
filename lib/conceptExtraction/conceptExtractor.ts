@@ -93,6 +93,7 @@ export class ConceptExtractor {
           decisions: [],
           isDraft: true,
         },
+        newTagsCreated: [],
         extractionMetadata: {
           llmModel: "current-llm-model", // TODO: Get from LLM service
           totalProcessingTime: 0, // TODO: Track actual processing time

@@ -25,16 +25,15 @@ import {
   Eye,
   Play,
   RotateCcw,
-  Brain,
 } from "lucide-react";
+import { QuestionLevel } from "@/lib/enum";
 
 // Types for bulk operations
 interface BulkOperation {
   type:
     | "tag-assignment"
     | "category-change"
-    | "difficulty-change"
-    | "relationship-suggestions";
+    | "difficulty-change";
   conceptIds: string[];
   parameters: Record<string, unknown>;
   preview: boolean;
@@ -48,21 +47,12 @@ interface OperationChange {
   error?: string;
 }
 
-interface RelationshipSuggestion {
-  fromConceptName: string;
-  toConceptName: string;
-  relationshipType: string;
-  strength: number;
-  reasoning: string;
-  applied: boolean;
-}
 
 interface BulkOperationResult {
   operation: string;
   conceptsProcessed: number;
   preview: boolean;
   changes?: OperationChange[];
-  suggestions?: RelationshipSuggestion[];
   summary: Record<string, unknown>;
 }
 
@@ -242,12 +232,11 @@ export const BulkOperationsPanel: React.FC<BulkOperationsPanelProps> = ({
               <SelectValue placeholder="Select difficulty" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="A1">A1 - Beginner</SelectItem>
-              <SelectItem value="A2">A2 - Elementary</SelectItem>
-              <SelectItem value="B1">B1 - Intermediate</SelectItem>
-              <SelectItem value="B2">B2 - Upper Intermediate</SelectItem>
-              <SelectItem value="C1">C1 - Advanced</SelectItem>
-              <SelectItem value="C2">C2 - Proficient</SelectItem>
+              {Object.values(QuestionLevel).map((level) => (
+                <SelectItem key={level} value={level}>
+                  {level}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
@@ -255,45 +244,6 @@ export const BulkOperationsPanel: React.FC<BulkOperationsPanelProps> = ({
     );
   };
 
-  // Render LLM analysis interface
-  const renderLLMAnalysis = () => {
-    return (
-      <div className="space-y-4">
-        <div>
-          <label className="mb-2 block text-sm font-medium">
-            Analysis Prompt (Optional)
-          </label>
-          <Textarea
-            placeholder="Describe what kind of relationships you're looking for..."
-            value={operationParams.analysisPrompt || ""}
-            onChange={(e) =>
-              setOperationParams({
-                ...operationParams,
-                analysisPrompt: e.target.value,
-              })
-            }
-            rows={3}
-          />
-        </div>
-
-        <div className="flex items-center space-x-2">
-          <Checkbox
-            id="autoApprove"
-            checked={operationParams.autoApprove || false}
-            onCheckedChange={(checked) =>
-              setOperationParams({ ...operationParams, autoApprove: checked })
-            }
-          />
-          <label
-            htmlFor="autoApprove"
-            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-          >
-            Auto-approve high confidence suggestions ({">"}70%)
-          </label>
-        </div>
-      </div>
-    );
-  };
 
   // Render operation results
   const renderResults = () => {
@@ -368,47 +318,6 @@ export const BulkOperationsPanel: React.FC<BulkOperationsPanelProps> = ({
               </div>
             )}
 
-            {/* Suggestions */}
-            {lastResult.suggestions && lastResult.suggestions.length > 0 && (
-              <div>
-                <h4 className="mb-2 font-medium">Relationship Suggestions</h4>
-                <ScrollArea className="h-48 rounded border">
-                  <div className="space-y-2 p-2">
-                    {lastResult.suggestions.map((suggestion, index) => (
-                      <div
-                        key={index}
-                        className="rounded bg-gray-50 p-2 text-sm"
-                      >
-                        <div className="mb-1 flex items-center gap-2">
-                          <span className="font-medium">
-                            {suggestion.fromConceptName}
-                          </span>
-                          <ArrowRight className="size-3" />
-                          <span className="font-medium">
-                            {suggestion.toConceptName}
-                          </span>
-                          <Badge variant="outline" className="text-xs">
-                            {suggestion.relationshipType}
-                          </Badge>
-                          <Badge variant="secondary" className="text-xs">
-                            {Math.round(suggestion.strength * 100)}%
-                          </Badge>
-                        </div>
-                        <div className="text-gray-600">
-                          {suggestion.reasoning}
-                        </div>
-                        {suggestion.applied && (
-                          <div className="mt-1 flex items-center gap-1 text-green-600">
-                            <CheckCircle className="size-3" />
-                            <span className="text-xs">Applied</span>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </ScrollArea>
-              </div>
-            )}
 
             {/* Actions */}
             {lastResult.preview && (
@@ -487,14 +396,11 @@ export const BulkOperationsPanel: React.FC<BulkOperationsPanelProps> = ({
                   setActiveOperation(value as BulkOperation["type"])
                 }
               >
-                <TabsList className="grid w-full grid-cols-4">
+                <TabsList className="grid w-full grid-cols-3">
                   <TabsTrigger value="tag-assignment">Tags</TabsTrigger>
                   <TabsTrigger value="category-change">Category</TabsTrigger>
                   <TabsTrigger value="difficulty-change">
                     Difficulty
-                  </TabsTrigger>
-                  <TabsTrigger value="relationship-suggestions">
-                    AI Analysis
                   </TabsTrigger>
                 </TabsList>
 
@@ -508,10 +414,6 @@ export const BulkOperationsPanel: React.FC<BulkOperationsPanelProps> = ({
 
                 <TabsContent value="difficulty-change">
                   {renderDifficultyChange()}
-                </TabsContent>
-
-                <TabsContent value="relationship-suggestions">
-                  {renderLLMAnalysis()}
                 </TabsContent>
               </Tabs>
 
@@ -540,11 +442,7 @@ export const BulkOperationsPanel: React.FC<BulkOperationsPanelProps> = ({
                   </>
                 ) : (
                   <>
-                    {activeOperation === "relationship-suggestions" ? (
-                      <Brain className="mr-2 size-4" />
-                    ) : (
-                      <Wand2 className="mr-2 size-4" />
-                    )}
+                    <Wand2 className="mr-2 size-4" />
                     {previewMode ? "Preview" : "Execute"} Operation
                   </>
                 )}

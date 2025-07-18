@@ -2,7 +2,6 @@
 import { ConceptManager } from "./conceptManager";
 import { IConcept } from "@/datamodels/concept.model";
 import ConceptGroup, { IConceptGroup } from "@/datamodels/conceptGroup.model";
-import ConceptRelationship, { IConceptRelationship } from "@/datamodels/conceptRelationship.model";
 import CourseConcept from "@/datamodels/courseConcept.model";
 import { ConceptLLMService } from "./conceptLLM";
 import { QuestionLevel } from "@/lib/enum";
@@ -10,13 +9,13 @@ import { v4 as uuidv4 } from "uuid";
 
 /**
  * Enhanced ConceptManager with advanced operations for the Concept Management Hub
- * Extends the base ConceptManager with merge, split, archive, and relationship management
+ * Extends the base ConceptManager with merge, split, archive, and group management
  */
 export class ConceptManagerEnhanced extends ConceptManager {
   
   /**
    * Merge multiple concepts into a single concept
-   * Preserves relationships and course linkages from all source concepts
+   * Preserves course linkages and tags from all source concepts
    * @param sourceConceptIds Array of concept IDs to merge
    * @param targetConceptData Data for the merged concept
    * @param preserveHistory Whether to keep merge history
@@ -65,7 +64,6 @@ export class ConceptManagerEnhanced extends ConceptManager {
         ))
       ],
       
-      
       // Merge createdFrom
       createdFrom: [
         ...(targetConceptData.createdFrom || []),
@@ -75,8 +73,8 @@ export class ConceptManagerEnhanced extends ConceptManager {
       ],
       
       // Track merge history
-      mergedFromIds: preserveHistory ? sourceConceptIds : [],
-      version: 1,
+      // mergedFromIds: preserveHistory ? sourceConceptIds : [],
+      // version: 1,
       sourceType: targetConceptData.sourceType || 'manual',
       lastUpdated: new Date(),
     };
@@ -101,9 +99,6 @@ export class ConceptManagerEnhanced extends ConceptManager {
         }
       }
     }
-
-    // Transfer concept relationships
-    await this.transferRelationships(sourceConceptIds, mergedConcept.id);
 
     // Archive source concepts instead of deleting
     for (const conceptId of sourceConceptIds) {
@@ -141,7 +136,6 @@ export class ConceptManagerEnhanced extends ConceptManager {
       const subconceptWithInheritance: Partial<IConcept> = {
         ...subconceptData,
         id: subconceptData.id || uuidv4(),
-        parentConceptId: sourceConceptId,
         
         // Inherit base properties if not specified
         category: subconceptData.category || sourceConcept.category,
@@ -150,26 +144,16 @@ export class ConceptManagerEnhanced extends ConceptManager {
         tags: [
           ...(subconceptData.tags || []),
           ...(sourceConcept.tags || []),
-          'split-concept'
+          'split-concept',
+          `split-from-${sourceConcept.name.toLowerCase().replace(/\s+/g, '-')}`
         ],
         sourceType: 'manual',
-        version: 1,
+        // version: 1,
         lastUpdated: new Date(),
       };
 
       const subconcept = await this.createConcept(subconceptWithInheritance);
       createdSubconcepts.push(subconcept);
-
-      // Create parent-child relationship
-      await this.createConceptRelationship({
-        fromConceptId: sourceConceptId,
-        toConceptId: subconcept.id,
-        relationshipType: 'parent-child',
-        strength: 1.0,
-        createdBy: 'system',
-        bidirectional: false,
-        description: `Split from parent concept: ${sourceConcept.name}`,
-      });
     }
 
     // Archive original concept if not preserving
@@ -190,8 +174,6 @@ export class ConceptManagerEnhanced extends ConceptManager {
    */
   async archiveConcept(conceptId: string, reason?: string): Promise<void> {
     const updates: Partial<IConcept> = {
-      isArchived: true,
-      archivedDate: new Date(),
       isActive: false,
       lastUpdated: new Date(),
     };
@@ -216,13 +198,11 @@ export class ConceptManagerEnhanced extends ConceptManager {
    */
   async restoreConcept(conceptId: string): Promise<void> {
     const concept = await this.getConcept(conceptId);
-    if (!concept || !concept.isArchived) {
+    if (!concept || concept.isActive) {
       throw new Error("Concept not found or not archived");
     }
 
     const updates: Partial<IConcept> = {
-      isArchived: false,
-      archivedDate: undefined,
       isActive: true,
       lastUpdated: new Date(),
     };
@@ -241,132 +221,6 @@ export class ConceptManagerEnhanced extends ConceptManager {
     );
   }
 
-  /**
-   * Create a relationship between two concepts
-   * @param relationshipData Data for the relationship
-   * @returns Created relationship
-   */
-  async createConceptRelationship(
-    relationshipData: Partial<IConceptRelationship>
-  ): Promise<IConceptRelationship> {
-    if (!relationshipData.fromConceptId || !relationshipData.toConceptId) {
-      throw new Error("Both fromConceptId and toConceptId are required");
-    }
-
-    // Validate concepts exist
-    const [fromConcept, toConcept] = await Promise.all([
-      this.getConcept(relationshipData.fromConceptId),
-      this.getConcept(relationshipData.toConceptId)
-    ]);
-
-    if (!fromConcept || !toConcept) {
-      throw new Error("One or both concepts not found");
-    }
-
-    const relationship: IConceptRelationship = {
-      id: relationshipData.id || uuidv4(),
-      fromConceptId: relationshipData.fromConceptId,
-      toConceptId: relationshipData.toConceptId,
-      relationshipType: relationshipData.relationshipType || 'related',
-      strength: relationshipData.strength || 0.5,
-      createdBy: relationshipData.createdBy || 'user',
-      description: relationshipData.description,
-      evidence: relationshipData.evidence || [],
-      bidirectional: relationshipData.bidirectional || false,
-      isActive: true,
-      isVerified: relationshipData.createdBy === 'user',
-      createdDate: new Date(),
-      lastUpdated: new Date(),
-    };
-
-    const relationshipModel = new ConceptRelationship(relationship);
-    const savedRelationship = await relationshipModel.save();
-
-    // Create reverse relationship if bidirectional
-    if (relationship.bidirectional) {
-      const reverseRelationship: IConceptRelationship = {
-        ...relationship,
-        id: uuidv4(),
-        fromConceptId: relationship.toConceptId,
-        toConceptId: relationship.fromConceptId,
-        description: relationship.description ? `Reverse: ${relationship.description}` : undefined,
-      };
-
-      const reverseModel = new ConceptRelationship(reverseRelationship);
-      await reverseModel.save();
-    }
-
-    return savedRelationship.toObject();
-  }
-
-  /**
-   * Get all relationships for a concept
-   * @param conceptId Concept ID
-   * @param includeIncoming Include relationships where this concept is the target
-   * @returns Array of relationships
-   */
-  async getConceptRelationships(
-    conceptId: string,
-    includeIncoming: boolean = true
-  ): Promise<IConceptRelationship[]> {
-    const query = {
-      $or: [
-        { fromConceptId: conceptId },
-        ...(includeIncoming ? [{ toConceptId: conceptId }] : [])
-      ],
-      isActive: true
-    };
-
-    const relationships = await ConceptRelationship.find(query);
-    return relationships.map(rel => rel.toObject());
-  }
-
-  /**
-   * Transfer relationships from source concepts to target concept
-   * @param sourceConceptIds Source concept IDs
-   * @param targetConceptId Target concept ID
-   */
-  private async transferRelationships(
-    sourceConceptIds: string[],
-    targetConceptId: string
-  ): Promise<void> {
-    for (const sourceId of sourceConceptIds) {
-      const relationships = await this.getConceptRelationships(sourceId, true);
-
-      for (const rel of relationships) {
-        try {
-          // Create new relationship with target concept
-          const newRelationship: Partial<IConceptRelationship> = {
-            fromConceptId: rel.fromConceptId === sourceId ? targetConceptId : rel.fromConceptId,
-            toConceptId: rel.toConceptId === sourceId ? targetConceptId : rel.toConceptId,
-            relationshipType: rel.relationshipType,
-            strength: rel.strength * 0.9, // Slightly reduce strength for transferred relationships
-            createdBy: 'system',
-            description: `Transferred from merged concept: ${sourceId}`,
-            bidirectional: rel.bidirectional,
-          };
-
-          // Avoid creating self-referencing relationships
-          if (newRelationship.fromConceptId !== newRelationship.toConceptId) {
-            await this.createConceptRelationship(newRelationship);
-          }
-        } catch (error) {
-          console.warn(`Failed to transfer relationship:`, error);
-        }
-      }
-
-      // Deactivate old relationships
-      await ConceptRelationship.updateMany(
-        {
-          $or: [
-            { fromConceptId: sourceId },
-            { toConceptId: sourceId }
-          ]
-        },
-        { $set: { isActive: false } }
-      );
-    }
-  }
 
   /**
    * Create a concept group following the hierarchical structure
@@ -478,6 +332,189 @@ export class ConceptManagerEnhanced extends ConceptManager {
     );
 
     return concepts.filter(c => c !== null) as IConcept[];
+  }
+
+  /**
+   * Update a concept group
+   * @param groupId Group ID
+   * @param updates Partial updates to apply
+   * @returns Updated group
+   */
+  async updateConceptGroup(
+    groupId: string,
+    updates: Partial<IConceptGroup>
+  ): Promise<IConceptGroup> {
+    const updatedGroup = await ConceptGroup.findOneAndUpdate(
+      { id: groupId },
+      { 
+        $set: { 
+          ...updates,
+          lastUpdated: new Date()
+        }
+      },
+      { new: true, runValidators: true }
+    );
+
+    if (!updatedGroup) {
+      throw new Error(`Concept group ${groupId} not found`);
+    }
+
+    return updatedGroup.toObject();
+  }
+
+  /**
+   * Remove concepts from a group
+   * @param groupId Group ID
+   * @param conceptIds Array of concept IDs to remove
+   */
+  async removeConceptsFromGroup(groupId: string, conceptIds: string[]): Promise<void> {
+    await ConceptGroup.findOneAndUpdate(
+      { id: groupId },
+      { 
+        $pull: { memberConcepts: { $in: conceptIds } },
+        $set: { lastUpdated: new Date() }
+      }
+    );
+  }
+
+  /**
+   * Get all concept groups with optional filtering
+   * @param filters Optional filters for groups
+   * @returns Array of concept groups
+   */
+  async getConceptGroups(filters?: {
+    groupType?: string;
+    parentGroup?: string;
+    isActive?: boolean;
+    level?: number;
+  }): Promise<IConceptGroup[]> {
+    const query: any = {};
+
+    if (filters?.groupType) {
+      query.groupType = filters.groupType;
+    }
+
+    if (filters?.parentGroup) {
+      query.parentGroup = filters.parentGroup;
+    }
+
+    if (filters?.isActive !== undefined) {
+      query.isActive = filters.isActive;
+    }
+
+    if (filters?.level) {
+      query.level = filters.level;
+    }
+
+    const groups = await ConceptGroup.find(query)
+      .sort({ level: 1, name: 1 })
+      .lean();
+
+    return groups as unknown as IConceptGroup[];
+  }
+
+  /**
+   * Get a specific concept group
+   * @param groupId Group ID
+   * @returns Concept group or null if not found
+   */
+  async getConceptGroup(groupId: string): Promise<IConceptGroup | null> {
+    const group = await ConceptGroup.findOne({ id: groupId, isActive: true }).lean();
+    return group as IConceptGroup | null;
+  }
+
+  /**
+   * Archive a concept group (soft delete)
+   * @param groupId Group ID
+   * @param reason Reason for archiving
+   */
+  async archiveConceptGroup(groupId: string, reason?: string): Promise<void> {
+    await ConceptGroup.findOneAndUpdate(
+      { id: groupId },
+      { 
+        $set: { 
+          isActive: false,
+          lastUpdated: new Date()
+        }
+      }
+    );
+
+    // Remove from parent group's childGroups if it has a parent
+    const group = await ConceptGroup.findOne({ id: groupId });
+    if (group?.parentGroup) {
+      await ConceptGroup.findOneAndUpdate(
+        { id: group.parentGroup },
+        { 
+          $pull: { childGroups: groupId },
+          $set: { lastUpdated: new Date() }
+        }
+      );
+    }
+  }
+
+  /**
+   * Get group hierarchy for a specific group
+   * @param groupId Root group ID
+   * @param maxDepth Maximum depth to traverse
+   * @returns Hierarchical group structure
+   */
+  async getGroupHierarchy(
+    groupId: string,
+    maxDepth: number = 5
+  ): Promise<IConceptGroup & { children?: IConceptGroup[] }> {
+    const rootGroup = await this.getConceptGroup(groupId);
+    if (!rootGroup) {
+      throw new Error(`Concept group ${groupId} not found`);
+    }
+
+    const enrichedGroup = rootGroup as IConceptGroup & { children?: IConceptGroup[] };
+
+    // Recursively get children if depth allows
+    if (maxDepth > 0 && rootGroup.childGroups.length > 0) {
+      enrichedGroup.children = [];
+      
+      for (const childGroupId of rootGroup.childGroups) {
+        try {
+          const childGroup = await this.getGroupHierarchy(childGroupId, maxDepth - 1);
+          enrichedGroup.children.push(childGroup);
+        } catch (error) {
+          console.warn(`Failed to get child group ${childGroupId}:`, error);
+        }
+      }
+    }
+
+    return enrichedGroup;
+  }
+
+  /**
+   * Move concepts between groups
+   * @param conceptIds Array of concept IDs to move
+   * @param fromGroupId Source group ID
+   * @param toGroupId Target group ID
+   */
+  async moveConceptsBetweenGroups(
+    conceptIds: string[],
+    fromGroupId: string,
+    toGroupId: string
+  ): Promise<void> {
+    // Validate concepts exist
+    const concepts = await Promise.all(
+      conceptIds.map(id => this.getConcept(id))
+    );
+
+    const validConceptIds = concepts
+      .filter(c => c !== null)
+      .map(c => c!.id);
+
+    if (validConceptIds.length === 0) {
+      throw new Error("No valid concepts found");
+    }
+
+    // Remove from source group
+    await this.removeConceptsFromGroup(fromGroupId, validConceptIds);
+
+    // Add to target group
+    await this.addConceptsToGroup(toGroupId, validConceptIds);
   }
 }
 

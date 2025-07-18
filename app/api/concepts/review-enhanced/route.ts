@@ -229,8 +229,6 @@ async function createConceptFromExtracted(
     createdFrom: [courseId.toString()],
     isActive: true,
     lastUpdated: new Date(),
-    prerequisites: [],
-    relatedConcepts: [],
   });
 
   await conceptManager.linkConceptToCourse(

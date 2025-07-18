@@ -174,7 +174,7 @@ export const ConceptManagementHub: React.FC<ConceptManagementHubProps> = ({
       tags: concept.tags,
       isActive: concept.isActive,
     })),
-    edges: [], // Would be populated from relationship API
+    edges: [], // Would be populated from concept group API
   };
 
   const hierarchyData = [

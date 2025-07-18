@@ -12,8 +12,6 @@ const updateConceptSchema = z.object({
     .optional(),
   description: z.string().min(1).max(500).optional(),
   examples: z.array(z.string()).max(10).optional(),
-  prerequisites: z.array(z.string()).optional(),
-  relatedConcepts: z.array(z.string()).optional(),
   difficulty: z
     .enum([
       QuestionLevel.A1,
@@ -24,6 +22,7 @@ const updateConceptSchema = z.object({
       QuestionLevel.C2,
     ])
     .optional(),
+  tags: z.array(z.string().min(1).max(50)).max(10).optional(),
   isActive: z.boolean().optional(),
 });
 
@@ -35,7 +34,7 @@ export async function GET(
   try {
     await connectToDatabase();
     const conceptManager = new ConceptManager();
-    
+
     // Await the params
     const { id } = await params;
 
@@ -85,7 +84,7 @@ export async function PUT(
   try {
     await connectToDatabase();
     const body = await request.json();
-    
+
     // Await the params
     const { id } = await params;
 
@@ -150,7 +149,7 @@ export async function DELETE(
   try {
     await connectToDatabase();
     const conceptManager = new ConceptManager();
-    
+
     // Await the params
     const { id } = await params;
 

@@ -3,7 +3,6 @@ import { connectToDatabase } from "@/lib/dbConnect";
 import { ConceptManagerEnhanced } from "@/lib/conceptExtraction/conceptManagerEnhanced";
 import { ConceptLLMService } from "@/lib/conceptExtraction/conceptLLM";
 import { IConcept } from "@/datamodels/concept.model";
-import { RelationshipType } from "@/datamodels/conceptRelationship.model";
 import { z } from "zod";
 import { ConceptCategory, QuestionLevel } from "@/lib/enum";
 
@@ -33,17 +32,6 @@ interface DifficultyChange extends ChangeBase {
   newValue: QuestionLevel;
 }
 
-interface RelationshipSuggestion {
-  fromConceptId: string;
-  fromConceptName: string;
-  toConceptId: string;
-  toConceptName: string;
-  relationshipType: string;
-  strength: number;
-  reasoning: string;
-  applied: boolean;
-  error?: string;
-}
 
 // Type for bulk operation results
 interface BulkOperationResult {
@@ -51,12 +39,11 @@ interface BulkOperationResult {
   conceptsProcessed: number;
   preview?: boolean;
   changes?: (TagAssignmentChange | CategoryChange | DifficultyChange)[];
-  suggestions?: RelationshipSuggestion[];
 }
 
 // Request validation schemas for bulk operations
 const bulkUpdateSchema = z.object({
-  operation: z.enum(['tag-assignment', 'category-change', 'difficulty-change', 'relationship-suggestions']),
+  operation: z.enum(['tag-assignment', 'category-change', 'difficulty-change']),
   conceptIds: z.array(z.string()).min(1),
   parameters: z.object({
     // For tag assignment
@@ -113,7 +100,6 @@ export async function POST(request: NextRequest) {
       conceptsProcessed: validConcepts.length,
       preview: validatedData.preview,
       changes: [],
-      suggestions: [],
     };
 
     switch (validatedData.operation) {
@@ -141,16 +127,6 @@ export async function POST(request: NextRequest) {
           validConcepts,
           validatedData.parameters.newDifficulty!,
           validatedData.preview
-        );
-        break;
-
-      case 'relationship-suggestions':
-        results = await handleRelationshipSuggestions(
-          conceptManager,
-          llmService,
-          validConcepts,
-          validatedData.parameters.analysisPrompt,
-          validatedData.parameters.autoApprove
         );
         break;
 
@@ -332,94 +308,3 @@ async function handleDifficultyChange(
   };
 }
 
-// Helper function for LLM relationship suggestions
-async function handleRelationshipSuggestions(
-  conceptManager: ConceptManagerEnhanced,
-  llmService: ConceptLLMService,
-  concepts: IConcept[],
-  analysisPrompt?: string,
-  autoApprove: boolean = false
-) {
-  const suggestions: RelationshipSuggestion[] = [];
-
-
-  for (let i = 0; i < concepts.length; i++) {
-    for (let j = i + 1; j < concepts.length; j++) {
-      const concept1 = concepts[i];
-      const concept2 = concepts[j];
-
-      try {
-        // Use LLM to analyze relationship
-        const similarityMatches = await llmService.checkConceptSimilarity(
-          {
-            name: concept1.name,
-            description: concept1.description,
-            category: concept1.category,
-            examples: concept1.examples || [],
-            sourceContent: `Concept from ${concept1.sourceType || 'unknown'} source`,
-            confidence: concept1.confidence || 0.8,
-            suggestedDifficulty: concept1.difficulty || QuestionLevel.B1,
-          },
-          [{
-            conceptId: concept2.id,
-            name: concept2.name,
-            category: concept2.category,
-            description: concept2.description,
-            difficulty: concept2.difficulty,
-            isActive: concept2.isActive,
-          }]
-        );
-
-        if (similarityMatches.length > 0 && similarityMatches[0].similarity > 0.3) {
-          const match = similarityMatches[0];
-          
-          const suggestion: RelationshipSuggestion = {
-            fromConceptId: concept1.id,
-            fromConceptName: concept1.name,
-            toConceptId: concept2.id,
-            toConceptName: concept2.name,
-            relationshipType: match.similarity > 0.8 ? 'similar' : 'related',
-            strength: match.similarity,
-            reasoning: match.reasoning || 'LLM similarity analysis',
-            applied: false,
-          };
-
-          // Auto-apply if requested and high confidence
-          if (autoApprove && match.similarity > 0.7) {
-            try {
-              await conceptManager.createConceptRelationship({
-                fromConceptId: concept1.id,
-                toConceptId: concept2.id,
-                relationshipType: suggestion.relationshipType as RelationshipType,
-                strength: suggestion.strength,
-                createdBy: 'llm',
-                description: suggestion.reasoning,
-                bidirectional: true,
-              });
-              suggestion.applied = true;
-            } catch (error) {
-              suggestion.error = error instanceof Error ? error.message : 'Unknown error';
-            }
-          }
-
-          suggestions.push(suggestion);
-        }
-      } catch (error) {
-        console.warn(`Failed to analyze relationship between ${concept1.name} and ${concept2.name}:`, error);
-      }
-    }
-  }
-
-  return {
-    operation: 'relationship-suggestions',
-    conceptsProcessed: concepts.length,
-    suggestions,
-    summary: {
-      totalSuggestions: suggestions.length,
-      appliedSuggestions: suggestions.filter(s => s.applied).length,
-      averageStrength: suggestions.length > 0 
-        ? suggestions.reduce((sum, s) => sum + s.strength, 0) / suggestions.length 
-        : 0,
-    },
-  };
-}

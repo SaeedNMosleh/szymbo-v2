@@ -13,17 +13,18 @@ export interface ConceptSummary {
 }
 
 /**
- * Individual question response
+ * Individual question response (updated for 3-attempt workflow)
  */
 export interface QuestionResponse {
   questionId: string;
   userAnswer: string;
   isCorrect: boolean;
-  responseTime: number;
-  attempts: number;
+  responseTime: number; // Total time across all attempts
+  attempts: number; // Number of attempts (1-3)
   conceptsTargeted: string[];
   feedback: string;
   timestamp: Date;
+  showCorrectAnswer?: boolean; // Whether to show correct answer (after 3rd attempt)
 }
 
 /**
@@ -55,10 +56,15 @@ export interface ConceptSelectionCriteria {
  */
 export interface QuestionGenerationContext {
   targetConcepts: IConcept[];
-  relatedConcepts: IConcept[];
+  contextConcepts: IConcept[]; // Group-based and category-based context concepts
   userLevel: QuestionLevel;
   previousQuestions: string[];
   sessionQuestionCount: number;
+  groupContext?: {
+    groupId: string;
+    groupName: string;
+    groupType: string;
+  };
 }
 
 /**
@@ -66,7 +72,7 @@ export interface QuestionGenerationContext {
  */
 export interface SmartContext {
   conceptSummaries: ConceptSummary[];
-  relationshipHints: string[];
+  groupHints: string[]; // Group-based organization hints
   userWeaknesses: string[];
   sessionObjectives: string[];
 }
@@ -94,7 +100,7 @@ export interface SRSResult {
 }
 
 /**
- * Practice session state
+ * Practice session state (updated for 3-attempt workflow)
  */
 export interface PracticeSessionState {
   sessionId: string;
@@ -105,10 +111,13 @@ export interface PracticeSessionState {
   responses: QuestionResponse[];
   startTime: Date;
   isCompleted: boolean;
+  completionReason?: 'completed' | 'abandoned';
+  currentAttempt?: number; // Current attempt for the active question (1-3)
+  questionsCompleted?: number; // Questions that have been completed (correct or 3 attempts)
 }
 
 /**
- * Session metrics for tracking progress
+ * Session metrics for tracking progress (updated for 3-attempt workflow)
  */
 export interface SessionMetrics {
   accuracy: number;
@@ -117,6 +126,15 @@ export interface SessionMetrics {
   strongConcepts: string[];
   weakConcepts: string[];
   recommendedReview: string[];
+  attemptsBreakdown: {
+    firstAttempt: number;
+    secondAttempt: number;
+    thirdAttempt: number;
+    failed: number;
+  };
+  questionsCompleted: number;
+  questionsAttempted: number;
+  completionReason: 'completed' | 'abandoned';
 }
 
 /**

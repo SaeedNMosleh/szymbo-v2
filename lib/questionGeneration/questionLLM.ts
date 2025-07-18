@@ -278,10 +278,7 @@ Generate exactly ${quantity} questions. Return ONLY the JSON object above with n
       [QuestionLevel.B1]: "Complex sentences, all cases, conditional mood, broader topics",
       [QuestionLevel.B2]: "Advanced grammar, nuanced vocabulary, cultural contexts",
       [QuestionLevel.C1]: "Sophisticated language, idiomatic expressions, complex concepts",
-      [QuestionLevel.C2]: "Native-level complexity, literary language, abstract concepts",
-      [QuestionLevel.EASY]: "Simplified content, clear contexts, basic structures",
-      [QuestionLevel.MEDIUM]: "Moderate complexity, mixed difficulty elements",
-      [QuestionLevel.HARD]: "Challenging vocabulary and grammar, complex contexts"
+      [QuestionLevel.C2]: "Native-level complexity, literary language, abstract concepts"
     };
     
     return guidelines[difficulty] || guidelines[QuestionLevel.A1];

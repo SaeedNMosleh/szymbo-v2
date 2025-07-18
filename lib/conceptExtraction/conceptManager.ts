@@ -23,7 +23,7 @@ import { SRSCalculator } from "@/lib/practiceEngine/srsCalculator";
 import { v4 as uuidv4 } from "uuid";
 
 /**
- * Service responsible for managing concepts and their relationships
+ * Service responsible for managing concepts and their groupings
  */
 export class ConceptManager {
   private llmService: ConceptLLMService;
@@ -104,8 +104,7 @@ export class ConceptManager {
         confidence:
           conceptData.confidence !== undefined ? conceptData.confidence : 1,
         examples: conceptData.examples || [],
-        prerequisites: conceptData.prerequisites || [],
-        relatedConcepts: conceptData.relatedConcepts || [],
+        tags: conceptData.tags || [],
         createdFrom: conceptData.createdFrom || [],
         lastUpdated: new Date(),
       } as IConcept;
@@ -227,8 +226,7 @@ export class ConceptManager {
         }
       }
 
-      // Update lastUpdated timestamp
-      updates.lastUpdated = new Date();
+      // Update timestamp is handled automatically by Mongoose timestamps
 
       // Apply updates
       const updatedConcept = await Concept.findOneAndUpdate(
@@ -707,10 +705,9 @@ export class ConceptManager {
       difficulty: extractedConcept.suggestedDifficulty,
       confidence: extractedConcept.confidence,
       createdFrom: [courseId.toString()],
+      tags: extractedConcept.suggestedTags?.map(tag => tag.tag) || [],
       isActive: true,
       lastUpdated: new Date(),
-      prerequisites: [],
-      relatedConcepts: [],
     };
 
     const concept = await this.createOrFindConcept(conceptData);
@@ -825,6 +822,202 @@ export class ConceptManager {
       extractedConcept.confidence,
       extractedConcept.sourceContent
     );
+  }
+
+  /**
+   * Get concepts by tags for group population
+   * @param tags Array of tags to search for
+   * @param matchAll Whether to match all tags or any tag
+   * @returns Array of concepts matching the tags
+   */
+  async getConceptsByTags(
+    tags: string[],
+    matchAll: boolean = false
+  ): Promise<IConcept[]> {
+    try {
+      const normalizedTags = tags.map(tag => tag.toLowerCase().trim());
+      
+      const query = matchAll
+        ? { tags: { $all: normalizedTags }, isActive: true }
+        : { tags: { $in: normalizedTags }, isActive: true };
+
+      const concepts = await Concept.find(query)
+        .sort({ name: 1 })
+        .lean();
+
+      return concepts as unknown as IConcept[];
+    } catch (error) {
+      console.error('Error getting concepts by tags:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Get concepts for group assignment based on tag query
+   * @param tagQuery Query object with tags and filters
+   * @returns Array of concepts suitable for group assignment
+   */
+  async getConceptsForGroupAssignment(tagQuery: {
+    tags: string[];
+    category?: string;
+    difficulty?: string;
+    limit?: number;
+    excludeGroupIds?: string[];
+  }): Promise<IConcept[]> {
+    try {
+      const { tags, category, difficulty, limit = 50, excludeGroupIds = [] } = tagQuery;
+      
+      // Build base query
+      const query: any = {
+        tags: { $in: tags.map(tag => tag.toLowerCase().trim()) },
+        isActive: true
+      };
+
+      // Add category filter if specified
+      if (category) {
+        query.category = category;
+      }
+
+      // Add difficulty filter if specified
+      if (difficulty) {
+        query.difficulty = difficulty;
+      }
+
+      // Get concepts that match the criteria
+      let concepts = await Concept.find(query)
+        .sort({ name: 1 })
+        .limit(limit)
+        .lean() as unknown as IConcept[];
+
+      // Filter out concepts that are already in excluded groups
+      if (excludeGroupIds.length > 0) {
+        const ConceptGroup = (await import('@/datamodels/conceptGroup.model')).default;
+        
+        const groupsWithConcepts = await ConceptGroup.find({
+          id: { $in: excludeGroupIds },
+          isActive: true
+        }).select('memberConcepts');
+
+        const excludedConceptIds = groupsWithConcepts.flatMap(group => group.memberConcepts);
+        concepts = concepts.filter(concept => !excludedConceptIds.includes(concept.id));
+      }
+
+      return concepts;
+    } catch (error) {
+      console.error('Error getting concepts for group assignment:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Suggest tags based on concept content and existing tags
+   * @param conceptData Concept data to analyze
+   * @param existingTags Array of existing tags in the system
+   * @returns Array of suggested tags
+   */
+  async suggestTags(
+    conceptData: Partial<IConcept>,
+    existingTags: string[] = []
+  ): Promise<string[]> {
+    try {
+      const suggestions = new Set<string>();
+
+      // Add category-based tags
+      if (conceptData.category) {
+        suggestions.add(conceptData.category.toLowerCase());
+      }
+
+      // Add difficulty-based tags
+      if (conceptData.difficulty) {
+        suggestions.add(conceptData.difficulty.toLowerCase());
+      }
+
+      // Extract keywords from name and description
+      const text = `${conceptData.name || ''} ${conceptData.description || ''}`.toLowerCase();
+      const words = text.split(/\s+/).filter(word => word.length > 3);
+      
+      // Add relevant words as potential tags
+      words.forEach(word => {
+        if (word.length > 3 && word.length < 20) {
+          suggestions.add(word);
+        }
+      });
+
+      // Match against existing tags for consistency
+      const matchingExistingTags = existingTags.filter(tag => 
+        text.includes(tag.toLowerCase()) || 
+        tag.toLowerCase().includes(conceptData.name?.toLowerCase() || '')
+      );
+
+      matchingExistingTags.forEach(tag => suggestions.add(tag));
+
+      // Convert to array and limit to reasonable number
+      return Array.from(suggestions).slice(0, 10);
+    } catch (error) {
+      console.error('Error suggesting tags:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Merge duplicate or similar tags
+   * @param tags Array of tags to merge
+   * @returns Array of merged tags
+   */
+  async mergeTags(tags: string[]): Promise<string[]> {
+    try {
+      const normalized = tags.map(tag => tag.toLowerCase().trim());
+      const unique = Array.from(new Set(normalized));
+      
+      // Group similar tags (basic similarity based on edit distance)
+      const merged: string[] = [];
+      const used = new Set<string>();
+
+      for (const tag of unique) {
+        if (used.has(tag)) continue;
+
+        merged.push(tag);
+        used.add(tag);
+
+        // Find similar tags
+        for (const otherTag of unique) {
+          if (otherTag !== tag && !used.has(otherTag)) {
+            // Simple similarity check - if one tag contains the other
+            if (tag.includes(otherTag) || otherTag.includes(tag)) {
+              used.add(otherTag);
+            }
+          }
+        }
+      }
+
+      return merged;
+    } catch (error) {
+      console.error('Error merging tags:', error);
+      return Array.from(new Set(tags));
+    }
+  }
+
+  /**
+   * Get popular tags for suggestions
+   * @param limit Number of tags to return
+   * @returns Array of popular tags with usage counts
+   */
+  async getPopularTags(limit: number = 20): Promise<{ tag: string; count: number }[]> {
+    try {
+      const results = await Concept.aggregate([
+        { $match: { isActive: true } },
+        { $unwind: '$tags' },
+        { $group: { _id: '$tags', count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+        { $limit: limit },
+        { $project: { tag: '$_id', count: 1, _id: 0 } }
+      ]);
+
+      return results;
+    } catch (error) {
+      console.error('Error getting popular tags:', error);
+      return [];
+    }
   }
 }
 

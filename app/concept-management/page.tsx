@@ -16,6 +16,13 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   Network,
   TreePine,
   Wand2,
@@ -36,6 +43,9 @@ import {
   Edit,
   Merge,
   Split,
+  Archive,
+  Copy,
+  Trash2,
 } from "lucide-react";
 
 // Import the components we created
@@ -43,6 +53,7 @@ import { ConceptMapViewer } from "@/components/Features/conceptManagement/Concep
 import { HierarchyBuilder } from "@/components/Features/conceptManagement/HierarchyBuilder";
 import { BulkOperationsPanel } from "@/components/Features/conceptManagement/BulkOperationsPanel";
 import { ConceptImporter } from "@/components/Features/conceptManagement/ConceptImporter";
+import { ConceptCategory } from "@/lib/enum";
 
 // Types for the concept management page
 interface ConceptData {
@@ -68,7 +79,7 @@ interface ConceptData {
 }
 
 interface BulkOperation {
-  type: "tag-assignment" | "category-change" | "difficulty-change" | "relationship-suggestions";
+  type: "tag-assignment" | "category-change" | "difficulty-change";
   conceptIds: string[];
   parameters: Record<string, unknown>;
   preview: boolean;
@@ -82,7 +93,13 @@ interface BulkConcept {
   tags: string[];
 }
 
-type TabValue = "dashboard" | "explorer" | "map" | "hierarchy" | "bulk" | "import";
+type TabValue =
+  | "dashboard"
+  | "explorer"
+  | "map"
+  | "hierarchy"
+  | "bulk"
+  | "import";
 
 interface ConceptStats {
   total: number;
@@ -127,6 +144,7 @@ export default function ConceptManagementPage() {
   const [selectedConcept, setSelectedConcept] = useState<ConceptData | null>(
     null
   );
+  const [editMode, setEditMode] = useState(false);
 
   // Tag-based Category Creation
   const [categoryCreationMode, setCategoryCreationMode] = useState(false);
@@ -323,6 +341,123 @@ export default function ConceptManagementPage() {
     }
   }, [newCategoryName, selectedTagsForCategory, concepts]);
 
+  // Handle bulk merge
+  const handleBulkMerge = useCallback(async () => {
+    if (selectedConcepts.length < 2) {
+      alert("Please select at least 2 concepts to merge");
+      return;
+    }
+
+    // For now, create a simple merge with the first concept's name as base
+    const firstConcept = concepts.find((c) => c.id === selectedConcepts[0]);
+    if (!firstConcept) return;
+
+    const mergedName = prompt(
+      "Enter name for merged concept:",
+      firstConcept.name
+    );
+    if (!mergedName) return;
+
+    setIsLoading(true);
+    try {
+      const response = await fetch("/api/concepts/merge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sourceConceptIds: selectedConcepts,
+          targetConceptData: {
+            name: mergedName,
+            category: firstConcept.category,
+            description: `Merged concept from: ${selectedConcepts.map((id) => concepts.find((c) => c.id === id)?.name).join(", ")}`,
+            difficulty: firstConcept.difficulty,
+            tags: [
+              ...new Set(
+                selectedConcepts.flatMap(
+                  (id) => concepts.find((c) => c.id === id)?.tags || []
+                )
+              ),
+            ],
+          },
+          preserveHistory: true,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        await loadConcepts();
+        setSelectedConcepts([]);
+        console.log("Concepts merged successfully");
+      } else {
+        console.error("Failed to merge concepts:", result.error);
+      }
+    } catch (error) {
+      console.error("Error merging concepts:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [selectedConcepts, concepts, loadConcepts]);
+
+  // Handle bulk split
+  const handleBulkSplit = useCallback(async () => {
+    if (selectedConcepts.length !== 1) {
+      alert("Please select exactly 1 concept to split");
+      return;
+    }
+
+    const conceptId = selectedConcepts[0];
+    const concept = concepts.find((c) => c.id === conceptId);
+    if (!concept) return;
+
+    const subconceptNames = prompt(
+      "Enter names for subconcepts (comma-separated):",
+      ""
+    );
+    if (!subconceptNames) return;
+
+    const names = subconceptNames
+      .split(",")
+      .map((name) => name.trim())
+      .filter((name) => name);
+    if (names.length < 2) {
+      alert("Please provide at least 2 subconcept names");
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const response = await fetch("/api/concepts/split", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sourceConceptId: conceptId,
+          subconceptsData: names.map((name) => ({
+            name,
+            category: concept.category,
+            description: `Split from: ${concept.name}`,
+            difficulty: concept.difficulty,
+            tags: [...concept.tags],
+          })),
+          preserveOriginal: false,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        await loadConcepts();
+        setSelectedConcepts([]);
+        console.log("Concept split successfully");
+      } else {
+        console.error("Failed to split concept:", result.error);
+      }
+    } catch (error) {
+      console.error("Error splitting concept:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [selectedConcepts, concepts, loadConcepts]);
+
   // Handle bulk operations
   const handleBulkOperation = useCallback(
     async (operation: BulkOperation) => {
@@ -349,19 +484,19 @@ export default function ConceptManagementPage() {
     [loadConcepts]
   );
 
-  // Transform data for visualization components
+  // Transform data for group-based visualization
   const mapData = {
     nodes: filteredConcepts.map((concept, index) => ({
       id: concept.id,
       name: concept.name,
-      category: concept.category,
+      category: concept.category as "grammar" | "vocabulary",
       difficulty: concept.difficulty,
-      x: 100 + (index % 15) * 60,
-      y: 100 + Math.floor(index / 15) * 60,
+      x: 100 + (index % 15) * 80,
+      y: 100 + Math.floor(index / 15) * 80,
       tags: concept.tags,
       isActive: concept.isActive,
     })),
-    edges: [], // Would be populated from relationship API
+    edges: [], // Would be populated from ConceptGroup API showing group memberships
   };
 
   // Render dashboard
@@ -718,7 +853,7 @@ export default function ConceptManagementPage() {
           </CardTitle>
           <p className="text-gray-600">
             Use natural language to explore concepts beyond just tags. Ask about
-            relationships, similarities, or get recommendations.
+            themes, groups, or get recommendations.
           </p>
         </CardHeader>
         <CardContent>
@@ -815,107 +950,336 @@ export default function ConceptManagementPage() {
           <CardHeader>
             <CardTitle className="flex items-center justify-between">
               <span>Concept Details: {selectedConcept.name}</span>
-              <Button
-                variant="outline"
-                onClick={() => setSelectedConcept(null)}
-              >
-                <Eye className="size-4" />
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setEditMode(!editMode)}
+                >
+                  <Edit className="size-4" />
+                  {editMode ? "Cancel Edit" : "Edit"}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setSelectedConcept(null);
+                    setEditMode(false);
+                  }}
+                >
+                  <Eye className="size-4" />
+                  Close
+                </Button>
+              </div>
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-              <div>
-                <h4 className="mb-2 font-medium">Basic Information</h4>
-                <div className="space-y-2">
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Category:</span>
-                    <Badge
-                      variant={
-                        selectedConcept.category === "grammar"
-                          ? "default"
-                          : "secondary"
+            {editMode ? (
+              <div className="space-y-4">
+                <div>
+                  <label className="mb-1 block text-sm font-medium">Name</label>
+                  <Input
+                    value={selectedConcept.name}
+                    onChange={(e) =>
+                      setSelectedConcept({
+                        ...selectedConcept,
+                        name: e.target.value,
+                      })
+                    }
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium">
+                    Description
+                  </label>
+                  <Textarea
+                    value={selectedConcept.description}
+                    onChange={(e) =>
+                      setSelectedConcept({
+                        ...selectedConcept,
+                        description: e.target.value,
+                      })
+                    }
+                    rows={3}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="mb-1 block text-sm font-medium">
+                      Category
+                    </label>
+                    <Select
+                      value={selectedConcept.category}
+                      onValueChange={(value) =>
+                        setSelectedConcept({
+                          ...selectedConcept,
+                          category: value as ConceptCategory,
+                        })
                       }
                     >
-                      {selectedConcept.category}
-                    </Badge>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="grammar">Grammar</SelectItem>
+                        <SelectItem value="vocabulary">Vocabulary</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Difficulty:</span>
-                    <Badge variant="outline">
-                      {selectedConcept.difficulty}
-                    </Badge>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Source:</span>
-                    <span className="capitalize">
-                      {selectedConcept.sourceType}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Confidence:</span>
-                    <span>{Math.round(selectedConcept.confidence * 100)}%</span>
+                  <div>
+                    <label className="mb-1 block text-sm font-medium">
+                      Difficulty
+                    </label>
+                    <Select
+                      value={selectedConcept.difficulty}
+                      onValueChange={(value) =>
+                        setSelectedConcept({
+                          ...selectedConcept,
+                          difficulty: value,
+                        })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="A1">A1</SelectItem>
+                        <SelectItem value="A2">A2</SelectItem>
+                        <SelectItem value="B1">B1</SelectItem>
+                        <SelectItem value="B2">B2</SelectItem>
+                        <SelectItem value="C1">C1</SelectItem>
+                        <SelectItem value="C2">C2</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
-              </div>
-
-              <div>
-                <h4 className="mb-2 font-medium">Description</h4>
-                <p className="text-gray-700">{selectedConcept.description}</p>
-
-                {selectedConcept.examples.length > 0 && (
-                  <div className="mt-4">
-                    <h4 className="mb-2 font-medium">Examples</h4>
-                    <ul className="list-inside list-disc space-y-1">
-                      {selectedConcept.examples.map((example, idx) => (
-                        <li key={idx} className="text-gray-700">
-                          {example}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                {selectedConcept.tags.length > 0 && (
-                  <div className="mt-4">
-                    <h4 className="mb-2 font-medium">Tags</h4>
+                <div>
+                  <label className="mb-1 block text-sm font-medium">Tags</label>
+                  <div className="space-y-2">
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="Add a tag..."
+                        onKeyPress={(e) => {
+                          if (e.key === "Enter") {
+                            const newTag = (
+                              e.target as HTMLInputElement
+                            ).value.trim();
+                            if (
+                              newTag &&
+                              !selectedConcept.tags.includes(newTag)
+                            ) {
+                              setSelectedConcept({
+                                ...selectedConcept,
+                                tags: [...selectedConcept.tags, newTag],
+                              });
+                              (e.target as HTMLInputElement).value = "";
+                            }
+                          }
+                        }}
+                      />
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={(e) => {
+                          const input = (
+                            e.target as HTMLButtonElement
+                          ).parentElement?.querySelector("input");
+                          if (input) {
+                            const newTag = input.value.trim();
+                            if (
+                              newTag &&
+                              !selectedConcept.tags.includes(newTag)
+                            ) {
+                              setSelectedConcept({
+                                ...selectedConcept,
+                                tags: [...selectedConcept.tags, newTag],
+                              });
+                              input.value = "";
+                            }
+                          }
+                        }}
+                      >
+                        <Plus className="size-4" />
+                      </Button>
+                    </div>
                     <div className="flex flex-wrap gap-2">
-                      {selectedConcept.tags.map((tag) => (
-                        <Badge key={tag} variant="outline">
-                          {tag}
+                      {selectedConcept.tags.map((tag, idx) => (
+                        <Badge
+                          key={idx}
+                          variant="secondary"
+                          className="cursor-pointer"
+                          onClick={() => {
+                            setSelectedConcept({
+                              ...selectedConcept,
+                              tags: selectedConcept.tags.filter(
+                                (_, i) => i !== idx
+                              ),
+                            });
+                          }}
+                        >
+                          {tag} ×
                         </Badge>
                       ))}
                     </div>
                   </div>
-                )}
+                </div>
+                <div className="flex justify-end gap-2">
+                  <Button variant="outline" onClick={() => setEditMode(false)}>
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={async () => {
+                      setIsLoading(true);
+                      try {
+                        const updateData = {
+                          name: selectedConcept.name,
+                          description: selectedConcept.description,
+                          category: selectedConcept.category,
+                          difficulty: selectedConcept.difficulty,
+                          tags: selectedConcept.tags,
+                        };
 
-                {selectedConcept.vocabularyData && (
-                  <div className="mt-4">
-                    <h4 className="mb-2 font-medium">Vocabulary Data</h4>
-                    <div className="space-y-1 text-sm">
-                      <div>
-                        <span className="font-medium">Word:</span>{" "}
-                        {selectedConcept.vocabularyData.word}
-                      </div>
-                      <div>
-                        <span className="font-medium">Translation:</span>{" "}
-                        {selectedConcept.vocabularyData.translation}
-                      </div>
-                      <div>
-                        <span className="font-medium">Part of Speech:</span>{" "}
-                        {selectedConcept.vocabularyData.partOfSpeech}
-                      </div>
-                      {selectedConcept.vocabularyData.gender && (
-                        <div>
-                          <span className="font-medium">Gender:</span>{" "}
-                          {selectedConcept.vocabularyData.gender}
-                        </div>
-                      )}
+                        console.log("Updating concept with data:", updateData);
+
+                        const response = await fetch(
+                          `/api/concepts/${selectedConcept.id}`,
+                          {
+                            method: "PUT",
+                            headers: {
+                              "Content-Type": "application/json",
+                            },
+                            body: JSON.stringify(updateData),
+                          }
+                        );
+
+                        const result = await response.json();
+
+                        if (result.success) {
+                          // Update the concept in the local state
+                          setConcepts((prev) =>
+                            prev.map((c) =>
+                              c.id === selectedConcept.id
+                                ? { ...c, ...result.data }
+                                : c
+                            )
+                          );
+                          setEditMode(false);
+                          console.log("Concept updated successfully");
+                        } else {
+                          console.error(
+                            "Failed to update concept:",
+                            result.error
+                          );
+                          console.error("Error details:", result.details);
+                          alert(`Failed to update concept: ${result.error}`);
+                        }
+                      } catch (error) {
+                        console.error("Error updating concept:", error);
+                        alert(`Error updating concept: ${error}`);
+                      } finally {
+                        setIsLoading(false);
+                      }
+                    }}
+                    disabled={isLoading}
+                  >
+                    {isLoading ? "Saving..." : "Save Changes"}
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                <div>
+                  <h4 className="mb-2 font-medium">Basic Information</h4>
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Category:</span>
+                      <Badge
+                        variant={
+                          selectedConcept.category === "grammar"
+                            ? "default"
+                            : "secondary"
+                        }
+                      >
+                        {selectedConcept.category}
+                      </Badge>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Difficulty:</span>
+                      <Badge variant="outline">
+                        {selectedConcept.difficulty}
+                      </Badge>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Source:</span>
+                      <span className="capitalize">
+                        {selectedConcept.sourceType}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Confidence:</span>
+                      <span>
+                        {Math.round(selectedConcept.confidence * 100)}%
+                      </span>
                     </div>
                   </div>
-                )}
+                </div>
+
+                <div>
+                  <h4 className="mb-2 font-medium">Description</h4>
+                  <p className="text-gray-700">{selectedConcept.description}</p>
+
+                  {selectedConcept.examples.length > 0 && (
+                    <div className="mt-4">
+                      <h4 className="mb-2 font-medium">Examples</h4>
+                      <ul className="list-inside list-disc space-y-1">
+                        {selectedConcept.examples.map((example, idx) => (
+                          <li key={idx} className="text-gray-700">
+                            {example}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {selectedConcept.tags.length > 0 && (
+                    <div className="mt-4">
+                      <h4 className="mb-2 font-medium">Tags</h4>
+                      <div className="flex flex-wrap gap-2">
+                        {selectedConcept.tags.map((tag) => (
+                          <Badge key={tag} variant="outline">
+                            {tag}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {selectedConcept.vocabularyData && (
+                    <div className="mt-4">
+                      <h4 className="mb-2 font-medium">Vocabulary Data</h4>
+                      <div className="space-y-1 text-sm">
+                        <div>
+                          <span className="font-medium">Word:</span>{" "}
+                          {selectedConcept.vocabularyData.word}
+                        </div>
+                        <div>
+                          <span className="font-medium">Translation:</span>{" "}
+                          {selectedConcept.vocabularyData.translation}
+                        </div>
+                        <div>
+                          <span className="font-medium">Part of Speech:</span>{" "}
+                          {selectedConcept.vocabularyData.partOfSpeech}
+                        </div>
+                        {selectedConcept.vocabularyData.gender && (
+                          <div>
+                            <span className="font-medium">Gender:</span>{" "}
+                            {selectedConcept.vocabularyData.gender}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
           </CardContent>
         </Card>
       )}
@@ -938,11 +1302,21 @@ export default function ConceptManagementPage() {
                 >
                   Clear ({selectedConcepts.length})
                 </Button>
-                <Button variant="outline" size="sm">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleBulkMerge()}
+                  disabled={isLoading}
+                >
                   <Merge className="mr-2 size-4" />
                   Merge
                 </Button>
-                <Button variant="outline" size="sm">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleBulkSplit()}
+                  disabled={isLoading || selectedConcepts.length !== 1}
+                >
                   <Split className="mr-2 size-4" />
                   Split
                 </Button>
@@ -1019,12 +1393,91 @@ export default function ConceptManagementPage() {
                   >
                     <Eye className="size-4" />
                   </Button>
-                  <Button variant="ghost" size="sm">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedConcept(concept);
+                      setEditMode(true);
+                      setActiveTab("explorer");
+                    }}
+                  >
                     <Edit className="size-4" />
                   </Button>
-                  <Button variant="ghost" size="sm">
-                    <MoreVertical className="size-4" />
-                  </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <MoreVertical className="size-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem
+                        onClick={() => {
+                          setSelectedConcept(concept);
+                          setEditMode(true);
+                          setActiveTab("explorer");
+                        }}
+                      >
+                        <Edit className="mr-2 size-4" />
+                        Edit Concept
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => {
+                          navigator.clipboard.writeText(concept.name);
+                        }}
+                      >
+                        <Copy className="mr-2 size-4" />
+                        Copy Name
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onClick={() => {
+                          const otherConcept = prompt(
+                            "Enter ID of concept to merge with:"
+                          );
+                          if (otherConcept) {
+                            setSelectedConcepts([concept.id, otherConcept]);
+                            handleBulkMerge();
+                          }
+                        }}
+                      >
+                        <Merge className="mr-2 size-4" />
+                        Merge with...
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => {
+                          setSelectedConcepts([concept.id]);
+                          handleBulkSplit();
+                        }}
+                      >
+                        <Split className="mr-2 size-4" />
+                        Split Concept
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onClick={() => {
+                          console.log("Archive concept:", concept.name);
+                        }}
+                      >
+                        <Archive className="mr-2 size-4" />
+                        Archive
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => {
+                          console.log("Delete concept:", concept.name);
+                        }}
+                        className="text-red-600"
+                      >
+                        <Trash2 className="mr-2 size-4" />
+                        Delete
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
               </div>
             ))}
@@ -1056,7 +1509,7 @@ export default function ConceptManagementPage() {
               </TabsTrigger>
               <TabsTrigger value="map" className="gap-2">
                 <Network className="size-4" />
-                Concept Map
+                Group Map
               </TabsTrigger>
               <TabsTrigger value="hierarchy" className="gap-2">
                 <TreePine className="size-4" />

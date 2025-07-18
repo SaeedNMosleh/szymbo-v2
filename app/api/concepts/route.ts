@@ -10,8 +10,6 @@ const createConceptSchema = z.object({
   category: z.enum([ConceptCategory.GRAMMAR, ConceptCategory.VOCABULARY]),
   description: z.string().min(1).max(500),
   examples: z.array(z.string()).max(10),
-  prerequisites: z.array(z.string()).optional(),
-  relatedConcepts: z.array(z.string()).optional(),
   difficulty: z.enum([
     QuestionLevel.A1,
     QuestionLevel.A2,

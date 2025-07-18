@@ -27,6 +27,7 @@ import {
   Trash2,
   Plus,
 } from "lucide-react";
+import { QuestionLevel } from "@/lib/enum";
 
 // Types for import functionality
 interface ImportError {
@@ -662,12 +663,11 @@ export const ConceptImporter: React.FC<ConceptImporterProps> = ({
               <SelectValue placeholder="A1" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="A1">A1 - Beginner</SelectItem>
-              <SelectItem value="A2">A2 - Elementary</SelectItem>
-              <SelectItem value="B1">B1 - Intermediate</SelectItem>
-              <SelectItem value="B2">B2 - Upper Intermediate</SelectItem>
-              <SelectItem value="C1">C1 - Advanced</SelectItem>
-              <SelectItem value="C2">C2 - Proficient</SelectItem>
+              {Object.values(QuestionLevel).map((level) => (
+                <SelectItem key={level} value={level}>
+                  {level}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>

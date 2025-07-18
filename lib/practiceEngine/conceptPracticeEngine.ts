@@ -4,6 +4,7 @@ import ConceptProgress, {
   IConceptProgress,
 } from "@/datamodels/conceptProgress.model";
 import QuestionBank, { IQuestionBank } from "@/datamodels/questionBank.model";
+import ConceptGroup, { IConceptGroup } from "@/datamodels/conceptGroup.model";
 import { SRSCalculator } from "./srsCalculator";
 import { ContextBuilder } from "./contextBuilder";
 import { generateQuestion } from "@/lib/LLMPracticeValidation/generateQuestion";
@@ -19,6 +20,8 @@ export interface ConceptSelection {
   concepts: IConcept[];
   rationale: string;
   priorities: Map<string, number>;
+  groups?: IConceptGroup[];
+  ungroupedConcepts?: IConcept[];
 }
 
 export interface PracticeStats {
@@ -139,7 +142,7 @@ export class ConceptPracticeEngine {
   }
 
   /**
-   * Select concepts for practice based on SRS algorithm and user performance
+   * Select concepts for practice based on SRS algorithm and user performance with group integration
    */
   async selectPracticeConceptsForUser(
     userId: string = "default",
@@ -150,7 +153,7 @@ export class ConceptPracticeEngine {
         `🎯 Selecting practice concepts for user: ${userId}, max: ${maxConcepts}`
       );
 
-      // Get due and overdue concepts
+      // Get due and overdue concepts (SRS as single source of truth)
       const [dueProgress, overdueProgress] = await Promise.all([
         SRSCalculator.getConceptsDueForReview(userId),
         SRSCalculator.getOverdueConcepts(userId),
@@ -167,7 +170,7 @@ export class ConceptPracticeEngine {
         return await this.initializeNewUserPractice(userId, maxConcepts);
       }
 
-      // Calculate priorities and select top concepts
+      // Calculate priorities and select top concepts (SRS-based)
       const priorities = new Map<string, number>();
 
       for (const progress of allDueProgress) {
@@ -190,18 +193,32 @@ export class ConceptPracticeEngine {
         isActive: true,
       });
 
-      // Generate rationale
-      const rationale = this.generateSelectionRationale(
+      // Find shared groups for better organization
+      const sharedGroups = await this.getGroupsForConcepts(conceptIds);
+      
+      // Organize concepts by groups and ungrouped
+      const { groupedConcepts, ungroupedConcepts } = this.organizeConceptsByGroups(
+        concepts,
+        sharedGroups
+      );
+
+      // Generate rationale with group information
+      const rationale = this.generateGroupAwareRationale(
         sortedProgress,
-        overdueProgress.length
+        overdueProgress.length,
+        sharedGroups,
+        ungroupedConcepts
       );
 
       console.log(`✅ Selected ${concepts.length} concepts for practice`);
+      console.log(`📚 Found ${sharedGroups.length} shared groups`);
 
       return {
         concepts,
         rationale,
         priorities,
+        groups: sharedGroups,
+        ungroupedConcepts,
       };
     } catch (error) {
       console.error("❌ Error selecting practice concepts:", error);
@@ -384,6 +401,114 @@ export class ConceptPracticeEngine {
   }
 
   /**
+   * Generate group-aware rationale for concept selection
+   */
+  private generateGroupAwareRationale(
+    selectedProgress: IConceptProgress[],
+    overdueCount: number,
+    sharedGroups: IConceptGroup[],
+    ungroupedConcepts: IConcept[]
+  ): string {
+    const baseRationale = this.generateSelectionRationale(selectedProgress, overdueCount);
+    
+    const groupInfo: string[] = [];
+    
+    if (sharedGroups.length > 0) {
+      const groupNames = sharedGroups.map(g => g.name);
+      groupInfo.push(`organized by ${groupNames.join(", ")}`);
+    }
+    
+    if (ungroupedConcepts.length > 0) {
+      groupInfo.push(`${ungroupedConcepts.length} individual concept${ungroupedConcepts.length > 1 ? "s" : ""}`);
+    }
+    
+    if (groupInfo.length > 0) {
+      return `${baseRationale} (${groupInfo.join(" and ")})`;
+    }
+    
+    return baseRationale;
+  }
+
+  /**
+   * Get groups that contain the specified concepts
+   */
+  async getGroupsForConcepts(conceptIds: string[]): Promise<IConceptGroup[]> {
+    try {
+      if (conceptIds.length === 0) {
+        return [];
+      }
+
+      const groups = await ConceptGroup.find({
+        memberConcepts: { $in: conceptIds },
+        isActive: true,
+      }).lean();
+
+      console.log(`Found ${groups.length} groups containing the concepts`);
+      return groups as unknown as IConceptGroup[];
+    } catch (error) {
+      console.error("❌ Error getting groups for concepts:", error);
+      return [];
+    }
+  }
+
+  /**
+   * Get all concepts in a specific group (for drill mode)
+   */
+  async getConceptsInGroup(groupId: string): Promise<IConcept[]> {
+    try {
+      const group = await ConceptGroup.findOne({ 
+        id: groupId, 
+        isActive: true 
+      }).lean() as IConceptGroup | null;
+
+      if (!group) {
+        console.log(`Group ${groupId} not found`);
+        return [];
+      }
+
+      const concepts = await Concept.find({
+        id: { $in: group.memberConcepts },
+        isActive: true,
+      }).lean();
+
+      console.log(`Found ${concepts.length} concepts in group ${group.name}`);
+      return concepts as unknown as IConcept[];
+    } catch (error) {
+      console.error(`❌ Error getting concepts in group ${groupId}:`, error);
+      return [];
+    }
+  }
+
+  /**
+   * Organize concepts by their group membership
+   */
+  private organizeConceptsByGroups(
+    concepts: IConcept[],
+    groups: IConceptGroup[]
+  ): { groupedConcepts: IConcept[]; ungroupedConcepts: IConcept[] } {
+    const groupedConceptIds = new Set<string>();
+    const ungroupedConcepts: IConcept[] = [];
+
+    // Mark concepts that are in groups
+    for (const group of groups) {
+      for (const conceptId of group.memberConcepts) {
+        groupedConceptIds.add(conceptId);
+      }
+    }
+
+    // Separate ungrouped concepts
+    for (const concept of concepts) {
+      if (!groupedConceptIds.has(concept.id)) {
+        ungroupedConcepts.push(concept);
+      }
+    }
+
+    const groupedConcepts = concepts.filter(c => groupedConceptIds.has(c.id));
+
+    return { groupedConcepts, ungroupedConcepts };
+  }
+
+  /**
    * Simplified question retrieval with QuestionBank priority and generation fallback
    */
   async getQuestionsForConcepts(
@@ -549,6 +674,139 @@ export class ConceptPracticeEngine {
         error
       );
       return [];
+    }
+  }
+
+  /**
+   * Get drill concepts by group (for manual group practice)
+   */
+  async getDrillConceptsByGroup(
+    groupId: string,
+    maxConcepts: number = 20
+  ): Promise<string[]> {
+    try {
+      const concepts = await this.getConceptsInGroup(groupId);
+      const conceptIds = concepts.map(c => c.id);
+      
+      // Limit to maxConcepts if needed
+      return conceptIds.slice(0, maxConcepts);
+    } catch (error) {
+      console.error(
+        `❌ Error getting drill concepts for group ${groupId}:`,
+        error
+      );
+      return [];
+    }
+  }
+
+  /**
+   * Get drill concepts by multiple groups
+   */
+  async getDrillConceptsByGroups(
+    groupIds: string[],
+    maxConcepts: number = 20
+  ): Promise<string[]> {
+    try {
+      const allConceptIds = new Set<string>();
+      
+      for (const groupId of groupIds) {
+        const conceptIds = await this.getDrillConceptsByGroup(groupId, maxConcepts);
+        conceptIds.forEach(id => allConceptIds.add(id));
+      }
+      
+      const uniqueConceptIds = Array.from(allConceptIds);
+      return uniqueConceptIds.slice(0, maxConcepts);
+    } catch (error) {
+      console.error(
+        `❌ Error getting drill concepts for groups ${groupIds.join(", ")}:`,
+        error
+      );
+      return [];
+    }
+  }
+
+  /**
+   * Select concepts for drill mode with group and course options
+   */
+  async selectDrillConcepts(options: {
+    mode: 'weakness' | 'course' | 'group' | 'groups';
+    userId?: string;
+    courseId?: number;
+    groupId?: string;
+    groupIds?: string[];
+    maxConcepts?: number;
+  }): Promise<ConceptSelection> {
+    const { mode, userId = "default", courseId, groupId, groupIds, maxConcepts = 10 } = options;
+    
+    try {
+      let conceptIds: string[] = [];
+      let rationale = "";
+
+      switch (mode) {
+        case 'weakness':
+          conceptIds = await this.getDrillConceptsByWeakness(userId, maxConcepts);
+          rationale = "Drill session focusing on concepts that need more practice";
+          break;
+        
+        case 'course':
+          if (courseId) {
+            conceptIds = await this.getDrillConceptsByCourse(courseId, maxConcepts);
+            rationale = `Drill session for Course ${courseId}`;
+          }
+          break;
+        
+        case 'group':
+          if (groupId) {
+            conceptIds = await this.getDrillConceptsByGroup(groupId, maxConcepts);
+            const group = await ConceptGroup.findOne({ id: groupId }).lean() as IConceptGroup | null;
+            rationale = `Drill session for group: ${group?.name || groupId}`;
+          }
+          break;
+        
+        case 'groups':
+          if (groupIds && groupIds.length > 0) {
+            conceptIds = await this.getDrillConceptsByGroups(groupIds, maxConcepts);
+            const groups = await ConceptGroup.find({ id: { $in: groupIds } }).lean();
+            const groupNames = groups.map(g => g.name).join(", ");
+            rationale = `Drill session for groups: ${groupNames}`;
+          }
+          break;
+      }
+
+      if (conceptIds.length === 0) {
+        return {
+          concepts: [],
+          rationale: `No concepts found for drill mode: ${mode}`,
+          priorities: new Map(),
+        };
+      }
+
+      // Get full concept details
+      const concepts = await Concept.find({
+        id: { $in: conceptIds },
+        isActive: true,
+      });
+
+      // For drill mode, create equal priorities
+      const priorities = new Map<string, number>();
+      concepts.forEach(concept => {
+        priorities.set(concept.id, 1.0);
+      });
+
+      console.log(`✅ Selected ${concepts.length} concepts for drill mode: ${mode}`);
+
+      return {
+        concepts,
+        rationale,
+        priorities,
+      };
+    } catch (error) {
+      console.error(`❌ Error selecting drill concepts for mode ${mode}:`, error);
+      return {
+        concepts: [],
+        rationale: `Error loading concepts for drill mode: ${mode}`,
+        priorities: new Map(),
+      };
     }
   }
 

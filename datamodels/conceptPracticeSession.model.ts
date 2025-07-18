@@ -2,6 +2,19 @@ import { Schema, model, models } from "mongoose";
 import { PracticeMode } from "@/lib/enum";
 
 /**
+ * Interface representing a question response with attempt tracking
+ * @interface IQuestionResponse
+ */
+export interface IQuestionResponse {
+  questionId: string;
+  attempts: number; // Current attempt number (1-3)
+  isCorrect: boolean;
+  responseTime: number; // Total time across all attempts
+  userAnswer: string; // Final answer provided
+  timestamp: Date; // When the question was completed
+}
+
+/**
  * Interface representing a concept-based practice session
  * @interface IConceptPracticeSession
  */
@@ -11,18 +24,52 @@ export interface IConceptPracticeSession {
   mode: PracticeMode;
   selectedConcepts: string[]; // concept IDs chosen for this session
   questionsUsed: string[]; // question bank IDs used in session
+  questionResponses: IQuestionResponse[]; // Detailed responses per question
   startedAt: Date;
-  completedAt: Date;
+  completedAt?: Date;
+  completionReason: 'completed' | 'abandoned';
   sessionMetrics: {
-    totalQuestions: number;
+    totalQuestions: number; // Questions attempted (not planned)
     correctAnswers: number;
-    averageResponseTime: number;
-    conceptsReviewed: number;
     newQuestionsGenerated: number;
-    bankQuestionsUsed: number;
   };
   isActive: boolean;
 }
+
+const QuestionResponseSchema = new Schema<IQuestionResponse>(
+  {
+    questionId: {
+      type: String,
+      required: true,
+      ref: "QuestionBank",
+    },
+    attempts: {
+      type: Number,
+      required: true,
+      min: 1,
+      max: 3,
+    },
+    isCorrect: {
+      type: Boolean,
+      required: true,
+    },
+    responseTime: {
+      type: Number,
+      required: true,
+      min: 0,
+    },
+    userAnswer: {
+      type: String,
+      required: true,
+    },
+    timestamp: {
+      type: Date,
+      required: true,
+      default: Date.now,
+    },
+  },
+  { _id: false }
+);
 
 const ConceptPracticeSessionSchema = new Schema<IConceptPracticeSession>(
   {
@@ -50,12 +97,21 @@ const ConceptPracticeSessionSchema = new Schema<IConceptPracticeSession>(
       type: [String],
       ref: "QuestionBank",
     },
+    questionResponses: {
+      type: [QuestionResponseSchema],
+      default: [],
+    },
     startedAt: {
       type: Date,
       required: true,
     },
     completedAt: {
       type: Date,
+    },
+    completionReason: {
+      type: String,
+      enum: ['completed', 'abandoned'],
+      default: 'completed',
     },
     sessionMetrics: {
       totalQuestions: {
@@ -66,19 +122,7 @@ const ConceptPracticeSessionSchema = new Schema<IConceptPracticeSession>(
         type: Number,
         default: 0,
       },
-      averageResponseTime: {
-        type: Number,
-        default: 0,
-      },
-      conceptsReviewed: {
-        type: Number,
-        default: 0,
-      },
       newQuestionsGenerated: {
-        type: Number,
-        default: 0,
-      },
-      bankQuestionsUsed: {
         type: Number,
         default: 0,
       },
