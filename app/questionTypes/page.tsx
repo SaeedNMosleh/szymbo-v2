@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Navigation } from "@/components/ui/navigation";
 import { QuestionType, QuestionLevel } from "@/lib/enum";
 import { QuestionRenderer } from "@/components/Features/practiceNew/QuestionRenderer";
 import { QuestionData } from "@/components/Features/practiceNew/types/questionTypes";
@@ -233,169 +234,174 @@ export default function QuestionTypesDemo() {
   };
 
   return (
-    <div className="container mx-auto max-w-4xl px-4 py-8">
-      <div className="mb-8">
-        <h1 className="mb-2 text-3xl font-bold text-gray-900">
-          Question Types Demo
-        </h1>
-        <p className="text-gray-600">
-          Interactive showcase of all 18 question types in the Polish learning
-          system
-        </p>
-      </div>
+    <>
+      <Navigation />
+      <div className="container mx-auto max-w-4xl px-4 py-8">
+        <div className="mb-8">
+          <h1 className="mb-2 text-3xl font-bold text-gray-900">
+            Question Types Demo
+          </h1>
+          <p className="text-gray-600">
+            Interactive showcase of all 18 question types in the Polish learning
+            system
+          </p>
+        </div>
 
-      {/* Question Type Overview */}
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle className="flex items-center justify-between">
-            <span>
-              Question {currentQuestionIndex + 1} of {sampleQuestions.length}
-            </span>
-            <div className="flex items-center gap-2">
-              <Badge
-                className={getQuestionTypeColor(currentQuestion.questionType)}
-              >
-                {currentQuestion.questionType.replace(/_/g, " ").toUpperCase()}
-              </Badge>
-              <Badge variant="outline">{currentQuestion.difficulty}</Badge>
+        {/* Question Type Overview */}
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="flex items-center justify-between">
+              <span>
+                Question {currentQuestionIndex + 1} of {sampleQuestions.length}
+              </span>
+              <div className="flex items-center gap-2">
+                <Badge
+                  className={getQuestionTypeColor(currentQuestion.questionType)}
+                >
+                  {currentQuestion.questionType
+                    .replace(/_/g, " ")
+                    .toUpperCase()}
+                </Badge>
+                <Badge variant="outline">{currentQuestion.difficulty}</Badge>
+              </div>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="mb-4 flex items-center gap-2 text-sm text-gray-600">
+              <span>Target concepts:</span>
+              {currentQuestion.targetConcepts.map((concept) => (
+                <Badge key={concept} variant="secondary" className="text-xs">
+                  {concept}
+                </Badge>
+              ))}
             </div>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="mb-4 flex items-center gap-2 text-sm text-gray-600">
-            <span>Target concepts:</span>
-            {currentQuestion.targetConcepts.map((concept) => (
-              <Badge key={concept} variant="secondary" className="text-xs">
-                {concept}
-              </Badge>
-            ))}
-          </div>
 
-          {/* Navigation */}
-          <div className="flex items-center justify-between">
-            <Button
-              variant="outline"
-              onClick={prevQuestion}
-              disabled={currentQuestionIndex === 0}
-              className="flex items-center gap-2"
-            >
-              <ChevronLeft className="size-4" />
-              Previous
-            </Button>
-
-            <Button
-              variant="outline"
-              onClick={resetAnswers}
-              className="flex items-center gap-2"
-            >
-              <RotateCcw className="size-4" />
-              Reset All Answers
-            </Button>
-
-            <Button
-              variant="outline"
-              onClick={nextQuestion}
-              disabled={currentQuestionIndex === sampleQuestions.length - 1}
-              className="flex items-center gap-2"
-            >
-              Next
-              <ChevronRight className="size-4" />
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Question Renderer */}
-      <QuestionRenderer
-        question={currentQuestion}
-        userAnswer={
-          userAnswers[currentQuestion.id] ||
-          (currentQuestion.questionType === QuestionType.MULTI_SELECT ||
-          currentQuestion.questionType === QuestionType.MULTI_CLOZE ||
-          currentQuestion.questionType === QuestionType.CONJUGATION_TABLE ||
-          currentQuestion.questionType === QuestionType.WORD_ARRANGEMENT
-            ? []
-            : "")
-        }
-        onAnswerChange={handleAnswerChange}
-        validationResult={null}
-        isValidating={false}
-        disabled={false}
-        onSubmit={() => console.log("Submit clicked")}
-        onRetry={() => console.log("Retry clicked")}
-        onNext={() => console.log("Next clicked")}
-        showSubmit={true}
-        showRetry={false}
-        showNext={false}
-      />
-
-      {/* Demo Actions */}
-      <Card className="mt-6">
-        <CardContent className="pt-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="font-medium text-gray-900">Demo Controls</h3>
-              <p className="text-sm text-gray-600">
-                This is a demo environment - answers are not validated by LLM
-              </p>
-            </div>
-            <div className="flex gap-3">
+            {/* Navigation */}
+            <div className="flex items-center justify-between">
               <Button
                 variant="outline"
-                onClick={() => {
-                  console.log("Current Answer:", userAnswer);
-                  alert(
-                    `Current Answer: ${Array.isArray(userAnswer) ? userAnswer.join(", ") : userAnswer}`
-                  );
-                }}
+                onClick={prevQuestion}
+                disabled={currentQuestionIndex === 0}
+                className="flex items-center gap-2"
               >
-                Show Answer
+                <ChevronLeft className="size-4" />
+                Previous
               </Button>
+
               <Button
-                onClick={() => {
-                  const sampleAnswer =
-                    currentQuestion.correctAnswer || "Sample answer";
-                  handleAnswerChange(
-                    currentQuestion.questionType ===
-                      QuestionType.MULTI_SELECT ||
-                      currentQuestion.questionType ===
-                        QuestionType.MULTI_CLOZE ||
-                      currentQuestion.questionType ===
-                        QuestionType.CONJUGATION_TABLE ||
-                      currentQuestion.questionType ===
-                        QuestionType.WORD_ARRANGEMENT
-                      ? sampleAnswer.split(",")
-                      : sampleAnswer
-                  );
-                }}
+                variant="outline"
+                onClick={resetAnswers}
+                className="flex items-center gap-2"
               >
-                Fill Sample Answer
+                <RotateCcw className="size-4" />
+                Reset All Answers
+              </Button>
+
+              <Button
+                variant="outline"
+                onClick={nextQuestion}
+                disabled={currentQuestionIndex === sampleQuestions.length - 1}
+                className="flex items-center gap-2"
+              >
+                Next
+                <ChevronRight className="size-4" />
               </Button>
             </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
 
-      {/* Question Type Legend */}
-      <Card className="mt-6">
-        <CardHeader>
-          <CardTitle>Question Type Legend</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 gap-2 text-sm md:grid-cols-3">
-            {Object.values(QuestionType).map((type) => (
-              <div key={type} className="flex items-center gap-2">
-                <Badge
-                  variant="secondary"
-                  className={getQuestionTypeColor(type)}
-                >
-                  {type.replace(/_/g, " ")}
-                </Badge>
+        {/* Question Renderer */}
+        <QuestionRenderer
+          question={currentQuestion}
+          userAnswer={
+            userAnswers[currentQuestion.id] ||
+            (currentQuestion.questionType === QuestionType.MULTI_SELECT ||
+            currentQuestion.questionType === QuestionType.MULTI_CLOZE ||
+            currentQuestion.questionType === QuestionType.CONJUGATION_TABLE ||
+            currentQuestion.questionType === QuestionType.WORD_ARRANGEMENT
+              ? []
+              : "")
+          }
+          onAnswerChange={handleAnswerChange}
+          validationResult={null}
+          isValidating={false}
+          disabled={false}
+          onSubmit={() => console.log("Submit clicked")}
+          onRetry={() => console.log("Retry clicked")}
+          onNext={() => console.log("Next clicked")}
+          showSubmit={true}
+          showRetry={false}
+          showNext={false}
+        />
+
+        {/* Demo Actions */}
+        <Card className="mt-6">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-medium text-gray-900">Demo Controls</h3>
+                <p className="text-sm text-gray-600">
+                  This is a demo environment - answers are not validated by LLM
+                </p>
               </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-    </div>
+              <div className="flex gap-3">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    console.log("Current Answer:", userAnswer);
+                    alert(
+                      `Current Answer: ${Array.isArray(userAnswer) ? userAnswer.join(", ") : userAnswer}`
+                    );
+                  }}
+                >
+                  Show Answer
+                </Button>
+                <Button
+                  onClick={() => {
+                    const sampleAnswer =
+                      currentQuestion.correctAnswer || "Sample answer";
+                    handleAnswerChange(
+                      currentQuestion.questionType ===
+                        QuestionType.MULTI_SELECT ||
+                        currentQuestion.questionType ===
+                          QuestionType.MULTI_CLOZE ||
+                        currentQuestion.questionType ===
+                          QuestionType.CONJUGATION_TABLE ||
+                        currentQuestion.questionType ===
+                          QuestionType.WORD_ARRANGEMENT
+                        ? sampleAnswer.split(",")
+                        : sampleAnswer
+                    );
+                  }}
+                >
+                  Fill Sample Answer
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Question Type Legend */}
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle>Question Type Legend</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 gap-2 text-sm md:grid-cols-3">
+              {Object.values(QuestionType).map((type) => (
+                <div key={type} className="flex items-center gap-2">
+                  <Badge
+                    variant="secondary"
+                    className={getQuestionTypeColor(type)}
+                  >
+                    {type.replace(/_/g, " ")}
+                  </Badge>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </>
   );
 }

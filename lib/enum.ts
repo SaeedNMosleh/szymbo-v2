@@ -74,12 +74,14 @@ export enum PracticeMode {
 /**
  * Concept extraction workflow status
  * Pending: Course added but concepts not extracted
- * Completed: LLM extraction finished, awaiting human review
+ * Extracted: LLM extraction finished, awaiting human review
+ * In-review: Human review in progress
  * Reviewed: Human review completed, concepts added to DB
  */
 export enum ConceptExtractionStatus {
   PENDING = "pending",
-  COMPLETED = "completed",
+  EXTRACTED = "extracted",
+  IN_REVIEW = "in-review",
   REVIEWED = "reviewed",
 }
 /* eslint-enable no-unused-vars */

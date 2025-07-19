@@ -36,6 +36,11 @@ export const Navigation = () => {
                 Concept Hub
               </Button>
             </Link>
+            <Link href="/question-management">
+              <Button variant="outline" size="sm">
+                Question Hub
+              </Button>
+            </Link>
             <Link href="/practice-new">
               <Button
                 className="bg-blue-600 text-white hover:bg-blue-700"

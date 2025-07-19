@@ -143,9 +143,13 @@ export class ConceptManager {
   /**
    * Enhanced method to create or find existing concept
    * @param conceptData Data for the concept
-   * @returns The created or existing concept
+   * @param returnStatus Whether to return creation status (new parameter)
+   * @returns The created or existing concept, optionally with creation status
    */
-  async createOrFindConcept(conceptData: Partial<IConcept>): Promise<IConcept> {
+  async createOrFindConcept(
+    conceptData: Partial<IConcept>,
+    returnStatus?: boolean
+  ): Promise<IConcept | { concept: IConcept; wasCreated: boolean }> {
     try {
       // First try to find existing concept
       const existingConcept = await Concept.findOne({
@@ -177,11 +181,24 @@ export class ConceptManager {
           // Progress might already exist, which is fine
         }
 
+        if (returnStatus) {
+          return {
+            concept: existingConcept.toObject(),
+            wasCreated: false
+          };
+        }
         return existingConcept.toObject();
       }
 
       // Create new concept if not found
-      return await this.createConcept(conceptData, true);
+      const newConcept = await this.createConcept(conceptData, true);
+      if (returnStatus) {
+        return {
+          concept: newConcept,
+          wasCreated: true
+        };
+      }
+      return newConcept;
     } catch (error) {
       console.error(
         `Error in createOrFindConcept for "${conceptData.name}":`,

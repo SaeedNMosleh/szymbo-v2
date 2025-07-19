@@ -7,7 +7,7 @@ import { Navigation } from "@/components/ui/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Brain, CheckCircle, Clock, AlertCircle, ArrowLeft } from "lucide-react";
+import { Brain, Clock, AlertCircle, ArrowLeft } from "lucide-react";
 
 interface Course {
   courseId: number;
@@ -18,7 +18,11 @@ interface Course {
   extractedConcepts?: string[];
 }
 
-const CourseSelector = ({ onCourseSelect }: { onCourseSelect: (courseId: number) => void }) => {
+const CourseSelector = ({
+  onCourseSelect,
+}: {
+  onCourseSelect: (courseId: number) => void;
+}) => {
   const [courses, setCourses] = useState<Course[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -30,15 +34,20 @@ const CourseSelector = ({ onCourseSelect }: { onCourseSelect: (courseId: number)
     try {
       const response = await fetch("/api/courses");
       const result = await response.json();
-      
+
       if (result.success && result.data) {
-        // Filter to show only courses with "completed" status (ready for review)
+        // Filter to show courses with "extracted" or "in-review" status only
         const reviewableCourses = result.data.filter(
-          (course: Course) => course.conceptExtractionStatus === "completed"
+          (course: Course) =>
+            course.conceptExtractionStatus === "extracted" ||
+            course.conceptExtractionStatus === "in-review"
         );
         setCourses(reviewableCourses);
       } else {
-        console.error("Error fetching courses:", result.error || "Unknown error");
+        console.error(
+          "Error fetching courses:",
+          result.error || "Unknown error"
+        );
         setCourses([]);
       }
     } catch (error) {
@@ -51,16 +60,16 @@ const CourseSelector = ({ onCourseSelect }: { onCourseSelect: (courseId: number)
 
   const getStatusBadge = (status?: string) => {
     switch (status) {
-      case "completed":
+      case "extracted":
         return (
           <Badge variant="outline" className="border-blue-600 text-blue-600">
             Ready for Review
           </Badge>
         );
-      case "reviewed":
+      case "in-review":
         return (
-          <Badge variant="default" className="bg-green-600">
-            Concepts Added
+          <Badge variant="outline" className="border-amber-600 text-amber-600">
+            In Progress
           </Badge>
         );
       default:
@@ -70,10 +79,10 @@ const CourseSelector = ({ onCourseSelect }: { onCourseSelect: (courseId: number)
 
   const getStatusIcon = (status?: string) => {
     switch (status) {
-      case "completed":
+      case "extracted":
         return <Clock className="size-4 text-blue-600" />;
-      case "reviewed":
-        return <CheckCircle className="size-4 text-green-600" />;
+      case "in-review":
+        return <Brain className="size-4 text-amber-600" />;
       default:
         return <AlertCircle className="size-4 text-gray-400" />;
     }
@@ -99,7 +108,9 @@ const CourseSelector = ({ onCourseSelect }: { onCourseSelect: (courseId: number)
           <div className="py-8 text-center text-gray-500">
             <Brain className="mx-auto mb-4 size-12 text-gray-300" />
             <p className="mb-4">No courses ready for concept review.</p>
-            <p className="mb-2 text-sm">To review concepts, you need courses with extracted concepts.</p>
+            <p className="mb-2 text-sm">
+              To review concepts, you need courses with extracted concepts.
+            </p>
             <div className="space-y-1 text-xs text-gray-400">
               <p>1. Create courses in the Course Management page</p>
               <p>2. Extract concepts in the Concept Extraction page</p>
@@ -127,7 +138,9 @@ const CourseSelector = ({ onCourseSelect }: { onCourseSelect: (courseId: number)
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <div className="mb-2 flex items-center">
-                      <h3 className="font-semibold">Course #{course.courseId}</h3>
+                      <h3 className="font-semibold">
+                        Course #{course.courseId}
+                      </h3>
                       <span className="mx-2 text-gray-300">•</span>
                       <span className="text-sm text-gray-600">
                         {new Date(course.date).toLocaleDateString()}
@@ -138,7 +151,11 @@ const CourseSelector = ({ onCourseSelect }: { onCourseSelect: (courseId: number)
                       <p className="mb-1 text-sm text-gray-600">Keywords:</p>
                       <div className="flex flex-wrap gap-1">
                         {course.keywords.slice(0, 3).map((keyword, index) => (
-                          <Badge key={index} variant="outline" className="text-xs">
+                          <Badge
+                            key={index}
+                            variant="outline"
+                            className="text-xs"
+                          >
                             {keyword}
                           </Badge>
                         ))}
@@ -153,11 +170,12 @@ const CourseSelector = ({ onCourseSelect }: { onCourseSelect: (courseId: number)
                     <div className="mb-3 flex items-center space-x-2">
                       {getStatusIcon(course.conceptExtractionStatus)}
                       {getStatusBadge(course.conceptExtractionStatus)}
-                      {course.extractedConcepts && course.extractedConcepts.length > 0 && (
-                        <span className="text-xs text-gray-500">
-                          ({course.extractedConcepts.length} concepts)
-                        </span>
-                      )}
+                      {course.extractedConcepts &&
+                        course.extractedConcepts.length > 0 && (
+                          <span className="text-xs text-gray-500">
+                            ({course.extractedConcepts.length} concepts)
+                          </span>
+                        )}
                     </div>
                   </div>
                 </div>
@@ -167,7 +185,9 @@ const CourseSelector = ({ onCourseSelect }: { onCourseSelect: (courseId: number)
                     onClick={() => onCourseSelect(course.courseId)}
                     className="w-full"
                   >
-                    Review Concepts
+                    {course.conceptExtractionStatus === "in-review"
+                      ? "Continue Review"
+                      : "Review Concepts"}
                   </Button>
                 </div>
               </CardContent>
@@ -185,11 +205,13 @@ const ConceptReviewContent = () => {
   const [selectedCourseId, setSelectedCourseId] = useState<number | null>(
     courseIdParam ? parseInt(courseIdParam) : null
   );
+  const [refreshKey, setRefreshKey] = useState(0);
 
   const handleReviewComplete = () => {
     console.log("Concept review completed successfully");
-    // Go back to course selection
+    // Go back to course selection and refresh the course list
     setSelectedCourseId(null);
+    setRefreshKey((prev) => prev + 1); // This will force CourseSelector to re-fetch
   };
 
   const handleBackToCourseSelection = () => {
@@ -197,15 +219,17 @@ const ConceptReviewContent = () => {
   };
 
   if (!selectedCourseId) {
-    return <CourseSelector onCourseSelect={setSelectedCourseId} />;
+    return (
+      <CourseSelector key={refreshKey} onCourseSelect={setSelectedCourseId} />
+    );
   }
 
   return (
     <div className="space-y-4">
       <div className="flex justify-start">
-        <Button 
-          variant="outline" 
-          size="sm" 
+        <Button
+          variant="outline"
+          size="sm"
           onClick={handleBackToCourseSelection}
         >
           <ArrowLeft className="mr-2 size-4" />
@@ -231,8 +255,8 @@ const ConceptReviewPage = () => {
           </h1>
           <p className="mx-auto max-w-2xl text-center text-gray-600">
             Review and approve concepts extracted from your Polish language
-            courses. This helps maintain quality and consistency in your learning
-            system.
+            courses. This helps maintain quality and consistency in your
+            learning system.
           </p>
         </div>
 

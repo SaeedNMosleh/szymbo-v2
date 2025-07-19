@@ -1,5 +1,5 @@
 // components/Features/conceptReview/ConceptReview.tsx
-"use client"
+"use client";
 
 import React, { useState, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -79,6 +79,20 @@ export function ConceptReview({
    */
   const handleSubmitReview = useCallback(async () => {
     if (reviewDecisions.length === 0) {
+      console.warn("No review decisions found. Cannot submit empty review.");
+      return;
+    }
+
+    // Check for any incomplete review decisions
+    const incompleteDecisions = reviewDecisions.filter(
+      (decision) => !decision.action || !decision.extractedConcept
+    );
+
+    if (incompleteDecisions.length > 0) {
+      console.warn(
+        "Some review decisions are incomplete:",
+        incompleteDecisions
+      );
       return;
     }
 
@@ -89,7 +103,12 @@ export function ConceptReview({
       resetExtraction();
       onReviewComplete?.();
     }
-  }, [reviewDecisions, processReviewDecisions, onReviewComplete, resetExtraction]);
+  }, [
+    reviewDecisions,
+    processReviewDecisions,
+    onReviewComplete,
+    resetExtraction,
+  ]);
 
   /**
    * Check if concept has a decision

@@ -232,9 +232,29 @@ export class ConceptManagerEnhanced extends ConceptManager {
       throw new Error("Name and groupType are required for concept groups");
     }
 
+    // Check if a group with the same name and groupType already exists
+    let uniqueName = groupData.name;
+    let counter = 1;
+    
+    while (true) {
+      const existingGroup = await ConceptGroup.findOne({ 
+        name: uniqueName, 
+        groupType: groupData.groupType,
+        isActive: true 
+      });
+      
+      if (!existingGroup) {
+        break; // Name is unique, we can use it
+      }
+      
+      // Generate a new name with counter
+      counter++;
+      uniqueName = `${groupData.name} (${counter})`;
+    }
+
     const group: IConceptGroup = {
       id: groupData.id || uuidv4(),
-      name: groupData.name,
+      name: uniqueName,
       description: groupData.description || '',
       memberConcepts: groupData.memberConcepts || [],
       parentGroup: groupData.parentGroup,

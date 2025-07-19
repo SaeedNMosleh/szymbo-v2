@@ -4,13 +4,29 @@ import { ConceptCategory, QuestionLevel } from "@/lib/enum";
 import type { IConcept } from "./concept.model";
 
 /**
+ * Duplicate detection result for session
+ */
+export interface DuplicateDetectionResult {
+  hasDuplicates: boolean;
+  duplicates: Array<{
+    extractedConceptName: string;
+    existingConcept: {
+      id: string;
+      name: string;
+      category: ConceptCategory;
+    };
+    duplicateType: "exact" | "case_insensitive";
+  }>;
+  checkedAt: Date;
+}
+
+/**
  * Enhanced review decision interface - removed 'link' action, focus on merge for similarity
  */
 export interface ReviewDecision {
-  action: "approve" | "edit" | "reject" | "merge" | "link" | "manual_add";
+  action: "approve" | "edit" | "reject" | "merge" | "manual_add";
   extractedConcept: ExtractedConcept;
   editedConcept?: Partial<ExtractedConcept>; // for edit action
-  targetConceptId?: string; // for link action
   mergeData?: {
     primaryConceptId: string;
     additionalData: {
@@ -29,7 +45,7 @@ export interface ReviewDecision {
  */
 export interface SuggestedTag {
   tag: string;
-  source: 'existing' | 'new';
+  source: "existing" | "new";
   confidence: number;
 }
 
@@ -94,10 +110,11 @@ export interface IConceptExtractionSession {
   courseId: number;
   courseName: string;
   extractionDate: Date;
-  status: 'extracted' | 'in_review' | 'reviewed' | 'archived';
+  status: "extracted" | "in-review" | "reviewed";
   extractedConcepts: ExtractedConcept[];
   similarityMatches: SimilarityData[];
   reviewProgress: ReviewProgress;
+  duplicateDetection?: DuplicateDetectionResult; // Optional for backward compatibility
   newTagsCreated: string[]; // Session-level tracking of newly created tags
   extractionMetadata: {
     llmModel: string;
@@ -112,8 +129,8 @@ export interface IConceptExtractionSession {
 // Zod validation schemas
 export const SuggestedTagSchema = z.object({
   tag: z.string().min(1, "Tag cannot be empty"),
-  source: z.enum(['existing', 'new']),
-  confidence: z.number().min(0).max(1)
+  source: z.enum(["existing", "new"]),
+  confidence: z.number().min(0).max(1),
 });
 
 export const ExtractedConceptSchema = z.object({
@@ -125,11 +142,16 @@ export const ExtractedConceptSchema = z.object({
   confidence: z.number().min(0).max(1),
   suggestedDifficulty: z.nativeEnum(QuestionLevel),
   suggestedTags: z.array(SuggestedTagSchema),
-  extractionMetadata: z.object({
-    model: z.string(),
-    timestamp: z.string().datetime().transform(date => new Date(date)),
-    processingTime: z.number()
-  }).optional()
+  extractionMetadata: z
+    .object({
+      model: z.string(),
+      timestamp: z
+        .string()
+        .datetime()
+        .transform((date) => new Date(date)),
+      processingTime: z.number(),
+    })
+    .optional(),
 });
 
 export const SimilarityMatchSchema = z.object({
@@ -140,42 +162,66 @@ export const SimilarityMatchSchema = z.object({
   description: z.string().min(1),
   examples: z.array(z.string()),
   mergeScore: z.number().min(0).max(1),
-  mergeSuggestion: z.object({
-    reason: z.string(),
-    conflictingFields: z.array(z.string()),
-    suggestedMergedDescription: z.string().optional()
-  }).optional()
+  mergeSuggestion: z
+    .object({
+      reason: z.string(),
+      conflictingFields: z.array(z.string()),
+      suggestedMergedDescription: z.string().optional(),
+    })
+    .optional(),
 });
 
 export const SimilarityDataSchema = z.object({
   extractedConceptName: z.string().min(1),
-  matches: z.array(SimilarityMatchSchema)
+  matches: z.array(SimilarityMatchSchema),
 });
 
 export const ReviewDecisionSchema = z.object({
-  action: z.enum(["approve", "edit", "reject", "merge", "link", "manual_add"]),
+  action: z.enum(["approve", "edit", "reject", "merge", "manual_add"]),
   extractedConcept: ExtractedConceptSchema,
   editedConcept: ExtractedConceptSchema.partial().optional(),
-  targetConceptId: z.string().optional(),
-  mergeData: z.object({
-    primaryConceptId: z.string(),
-    additionalData: z.object({
-      description: z.string().optional(),
-      examples: z.array(z.string()).optional(),
-      tags: z.array(z.string()).optional()
+  mergeData: z
+    .object({
+      primaryConceptId: z.string(),
+      additionalData: z.object({
+        description: z.string().optional(),
+        examples: z.array(z.string()).optional(),
+        tags: z.array(z.string()).optional(),
+      }),
     })
-  }).optional(),
+    .optional(),
   courseId: z.number(),
-  reviewedAt: z.string().datetime().transform(date => new Date(date)),
-  reviewerId: z.string().optional()
+  reviewedAt: z
+    .string()
+    .datetime()
+    .transform((date) => new Date(date)),
+  reviewerId: z.string().optional(),
 });
 
 export const ReviewProgressSchema = z.object({
   totalConcepts: z.number().min(0),
   reviewedCount: z.number().min(0),
   decisions: z.array(ReviewDecisionSchema),
-  lastReviewedAt: z.string().datetime().transform(date => new Date(date)).optional(),
-  isDraft: z.boolean()
+  lastReviewedAt: z
+    .string()
+    .datetime()
+    .transform((date) => new Date(date))
+    .optional(),
+  isDraft: z.boolean(),
+});
+
+export const DuplicateDetectionResultSchema = z.object({
+  hasDuplicates: z.boolean(),
+  duplicates: z.array(z.object({
+    extractedConceptName: z.string(),
+    existingConcept: z.object({
+      id: z.string(),
+      name: z.string(),
+      category: z.nativeEnum(ConceptCategory),
+    }),
+    duplicateType: z.enum(["exact", "case_insensitive"]),
+  })),
+  checkedAt: z.date(),
 });
 
 export const ConceptExtractionSessionSchema = z.object({
@@ -183,147 +229,200 @@ export const ConceptExtractionSessionSchema = z.object({
   courseId: z.number(),
   courseName: z.string().min(1),
   extractionDate: z.date(),
-  status: z.enum(['extracted', 'in_review', 'reviewed', 'archived']),
+  status: z.enum(["extracted", "in-review", "reviewed"]),
   extractedConcepts: z.array(ExtractedConceptSchema),
   similarityMatches: z.array(SimilarityDataSchema),
   reviewProgress: ReviewProgressSchema,
+  duplicateDetection: DuplicateDetectionResultSchema.optional(),
   newTagsCreated: z.array(z.string()),
   extractionMetadata: z.object({
     llmModel: z.string(),
     totalProcessingTime: z.number(),
     extractionConfidence: z.number().min(0).max(1),
-    sourceContentLength: z.number()
+    sourceContentLength: z.number(),
   }),
   createdAt: z.date(),
-  updatedAt: z.date()
+  updatedAt: z.date(),
 });
 
 // Mongoose Schema
-const ConceptExtractionSessionMongooseSchema = new Schema<IConceptExtractionSession>(
-  {
-    id: { type: String, required: true, unique: true },
-    courseId: { type: Number, required: true, index: true },
-    courseName: { type: String, required: true },
-    extractionDate: { type: Date, required: true },
-    status: {
-      type: String,
-      enum: ['extracted', 'in_review', 'reviewed', 'archived'],
-      required: true,
-      default: 'extracted',
-      index: true
-    },
-    extractedConcepts: [{
-      name: { type: String, required: true },
-      category: {
+const ConceptExtractionSessionMongooseSchema =
+  new Schema<IConceptExtractionSession>(
+    {
+      id: { type: String, required: true, unique: true },
+      courseId: { type: Number, required: true, index: true },
+      courseName: { type: String, required: true },
+      extractionDate: { type: Date, required: true },
+      status: {
         type: String,
-        enum: Object.values(ConceptCategory),
-        required: true
+        enum: ["extracted", "in-review", "reviewed"],
+        required: true,
+        default: "extracted",
+        index: true,
       },
-      description: { type: String, required: true },
-      examples: { type: [String], required: true },
-      sourceContent: { type: String, required: true },
-      confidence: { type: Number, required: true, min: 0, max: 1 },
-      suggestedDifficulty: {
-        type: String,
-        enum: Object.values(QuestionLevel),
-        required: true
-      },
-      suggestedTags: [{
-        tag: { type: String, required: true },
-        source: { type: String, enum: ['existing', 'new'], required: true },
-        confidence: { type: Number, required: true, min: 0, max: 1 }
-      }],
-      extractionMetadata: {
-        model: { type: String },
-        timestamp: { type: Date },
-        processingTime: { type: Number }
-      }
-    }],
-    similarityMatches: [{
-      extractedConceptName: { type: String, required: true },
-      matches: [{
-        conceptId: { type: String, required: true },
-        name: { type: String, required: true },
-        similarity: { type: Number, required: true, min: 0, max: 1 },
-        category: {
-          type: String,
-          enum: Object.values(ConceptCategory),
-          required: true
-        },
-        description: { type: String, required: true },
-        examples: { type: [String], required: true },
-        mergeScore: { type: Number, required: true, min: 0, max: 1 },
-        mergeSuggestion: {
-          reason: { type: String },
-          conflictingFields: { type: [String] },
-          suggestedMergedDescription: { type: String }
-        }
-      }]
-    }],
-    reviewProgress: {
-      totalConcepts: { type: Number, required: true, min: 0 },
-      reviewedCount: { type: Number, required: true, min: 0, default: 0 },
-      decisions: [{
-        action: {
-          type: String,
-          enum: ["approve", "edit", "reject", "merge", "link", "manual_add"],
-          required: true
-        },
-        extractedConcept: {
+      extractedConcepts: [
+        {
           name: { type: String, required: true },
           category: {
             type: String,
             enum: Object.values(ConceptCategory),
-            required: true
+            required: true,
           },
           description: { type: String, required: true },
           examples: { type: [String], required: true },
           sourceContent: { type: String, required: true },
-          confidence: { type: Number, required: true },
+          confidence: { type: Number, required: true, min: 0, max: 1 },
           suggestedDifficulty: {
             type: String,
             enum: Object.values(QuestionLevel),
-            required: true
+            required: true,
           },
-          suggestedTags: [{
-            tag: { type: String, required: true },
-            source: { type: String, enum: ['existing', 'new'], required: true },
-            confidence: { type: Number, required: true, min: 0, max: 1 }
-          }]
+          suggestedTags: [
+            {
+              tag: { type: String, required: true },
+              source: {
+                type: String,
+                enum: ["existing", "new"],
+                required: true,
+              },
+              confidence: { type: Number, required: true, min: 0, max: 1 },
+            },
+          ],
+          extractionMetadata: {
+            model: { type: String },
+            timestamp: { type: Date },
+            processingTime: { type: Number },
+          },
         },
-        editedConcept: { type: Schema.Types.Mixed },
-        targetConceptId: { type: String },
-        mergeData: {
-          primaryConceptId: { type: String },
-          additionalData: { type: Schema.Types.Mixed }
+      ],
+      similarityMatches: [
+        {
+          extractedConceptName: { type: String, required: true },
+          matches: [
+            {
+              conceptId: { type: String, required: true },
+              name: { type: String, required: true },
+              similarity: { type: Number, required: true, min: 0, max: 1 },
+              category: {
+                type: String,
+                enum: Object.values(ConceptCategory),
+                required: true,
+              },
+              description: { type: String, required: true },
+              examples: { type: [String], required: true },
+              mergeScore: { type: Number, required: true, min: 0, max: 1 },
+              mergeSuggestion: {
+                reason: { type: String },
+                conflictingFields: { type: [String] },
+                suggestedMergedDescription: { type: String },
+              },
+            },
+          ],
         },
-        courseId: { type: Number, required: true },
-        reviewedAt: { type: Date, required: true },
-        reviewerId: { type: String }
-      }],
-      lastReviewedAt: { type: Date },
-      isDraft: { type: Boolean, default: true }
+      ],
+      reviewProgress: {
+        totalConcepts: { type: Number, required: true, min: 0 },
+        reviewedCount: { type: Number, required: true, min: 0, default: 0 },
+        decisions: [
+          {
+            action: {
+              type: String,
+              enum: [
+                "approve",
+                "edit",
+                "reject",
+                "merge",
+                "manual_add",
+              ],
+              required: true,
+            },
+            extractedConcept: {
+              name: { type: String, required: true },
+              category: {
+                type: String,
+                enum: Object.values(ConceptCategory),
+                required: true,
+              },
+              description: { type: String, required: true },
+              examples: { type: [String], required: true },
+              sourceContent: { type: String, required: true },
+              confidence: { type: Number, required: true },
+              suggestedDifficulty: {
+                type: String,
+                enum: Object.values(QuestionLevel),
+                required: true,
+              },
+              suggestedTags: [
+                {
+                  tag: { type: String, required: true },
+                  source: {
+                    type: String,
+                    enum: ["existing", "new"],
+                    required: true,
+                  },
+                  confidence: { type: Number, required: true, min: 0, max: 1 },
+                },
+              ],
+            },
+            editedConcept: { type: Schema.Types.Mixed },
+            mergeData: {
+              primaryConceptId: { type: String },
+              additionalData: { type: Schema.Types.Mixed },
+            },
+            courseId: { type: Number, required: true },
+            reviewedAt: { type: Date, required: true },
+            reviewerId: { type: String },
+          },
+        ],
+        lastReviewedAt: { type: Date },
+        isDraft: { type: Boolean, default: true },
+      },
+      duplicateDetection: {
+        hasDuplicates: { type: Boolean },
+        duplicates: [{
+          extractedConceptName: { type: String },
+          existingConcept: {
+            id: { type: String },
+            name: { type: String },
+            category: { 
+              type: String,
+              enum: Object.values(ConceptCategory),
+            },
+          },
+          duplicateType: {
+            type: String,
+            enum: ["exact", "case_insensitive"],
+          },
+        }],
+        checkedAt: { type: Date },
+      },
+      newTagsCreated: { type: [String], default: [] },
+      extractionMetadata: {
+        llmModel: { type: String, required: true },
+        totalProcessingTime: { type: Number, required: true },
+        extractionConfidence: { type: Number, required: true, min: 0, max: 1 },
+        sourceContentLength: { type: Number, required: true },
+      },
     },
-    newTagsCreated: { type: [String], default: [] },
-    extractionMetadata: {
-      llmModel: { type: String, required: true },
-      totalProcessingTime: { type: Number, required: true },
-      extractionConfidence: { type: Number, required: true, min: 0, max: 1 },
-      sourceContentLength: { type: Number, required: true }
+    {
+      timestamps: true,
     }
-  },
-  {
-    timestamps: true
-  }
-);
+  );
 
 // Create indexes for performance
 ConceptExtractionSessionMongooseSchema.index({ courseId: 1, status: 1 });
 ConceptExtractionSessionMongooseSchema.index({ extractionDate: -1 });
-ConceptExtractionSessionMongooseSchema.index({ status: 1, 'reviewProgress.isDraft': 1 });
+ConceptExtractionSessionMongooseSchema.index({
+  status: 1,
+  "reviewProgress.isDraft": 1,
+});
 
-const ConceptExtractionSession = models?.ConceptExtractionSession || 
-  model<IConceptExtractionSession>("ConceptExtractionSession", ConceptExtractionSessionMongooseSchema);
+const ConceptExtractionSession =
+  models?.ConceptExtractionSession ||
+  model<IConceptExtractionSession>(
+    "ConceptExtractionSession",
+    ConceptExtractionSessionMongooseSchema
+  );
 
 export default ConceptExtractionSession;
 

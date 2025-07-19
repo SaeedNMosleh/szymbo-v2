@@ -225,7 +225,7 @@ export class ConceptExtractor {
         { courseId },
         {
           $set: {
-            conceptExtractionStatus: ConceptExtractionStatus.COMPLETED,
+            conceptExtractionStatus: ConceptExtractionStatus.EXTRACTED,
             conceptExtractionDate: new Date(),
             extractedConcepts: extractedConcepts.map((c) => c.name),
           },
@@ -249,7 +249,7 @@ export class ConceptExtractor {
     // Check for existing extraction session first
     const session = await ConceptExtractionSession.findOne({
       courseId,
-      status: { $in: ["extracted", "in_review"] },
+      status: { $in: ["extracted", "in-review"] },
     }).sort({ extractionDate: -1 });
 
     if (session) {
@@ -274,7 +274,7 @@ export class ConceptExtractor {
     // If no session exists, check if course has been extracted
     const course = await Course.findOne({
       courseId,
-      conceptExtractionStatus: ConceptExtractionStatus.COMPLETED,
+      conceptExtractionStatus: ConceptExtractionStatus.EXTRACTED,
     });
 
     if (!course) {
@@ -307,7 +307,7 @@ export class ConceptExtractor {
   ): Promise<IConceptExtractionSession | null> {
     return await ConceptExtractionSession.findOne({
       courseId,
-      status: { $in: ["extracted", "in_review"] },
+      status: { $in: ["extracted", "in-review"] },
     }).sort({ extractionDate: -1 });
   }
 
@@ -326,7 +326,7 @@ export class ConceptExtractor {
         $set: {
           reviewProgress: progress,
           updatedAt: new Date(),
-          status: progress.isDraft ? "in_review" : "reviewed",
+          status: progress.isDraft ? "in-review" : "reviewed",
         },
       }
     );
@@ -451,12 +451,6 @@ export class ConceptExtractor {
           results.errors.push("Failed to update course status");
         }
       }
-
-      // Archive the extraction session
-      await ConceptExtractionSession.updateOne(
-        { courseId, status: { $in: ["extracted", "in_review", "reviewed"] } },
-        { $set: { status: "archived", updatedAt: new Date() } }
-      );
 
       // Set success to false only if we had no successes and errors
       if (

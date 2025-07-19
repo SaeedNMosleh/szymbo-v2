@@ -146,10 +146,65 @@ const DropdownMenuSeparator = ({ className }: DropdownMenuSeparatorProps) => {
   )
 }
 
+interface DropdownMenuCheckboxItemProps extends DropdownMenuItemProps {
+  checked?: boolean;
+  onCheckedChange?: (checked: boolean) => void;
+}
+
+const DropdownMenuCheckboxItem = ({
+  children,
+  checked,
+  onCheckedChange,
+  className,
+  onClick,
+  ...props
+}: DropdownMenuCheckboxItemProps & { setIsOpen?: (open: boolean) => void }) => {
+  const handleClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (onCheckedChange) {
+      onCheckedChange(!checked);
+    }
+    if (onClick) {
+      onClick();
+    }
+    // Do not close the dropdown when checkbox is clicked
+  };
+
+  return (
+    <div
+      onClick={handleClick}
+      className={cn(
+        "relative flex cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none transition-colors hover:bg-gray-100 focus:bg-gray-100 data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+        className
+      )}
+      {...props}
+    >
+      <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
+        {checked && (
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="h-4 w-4"
+          >
+            <polyline points="20 6 9 17 4 12" />
+          </svg>
+        )}
+      </span>
+      {children}
+    </div>
+  );
+};
+
 export {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
+  DropdownMenuCheckboxItem,
 }

@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Navigation } from "@/components/ui/navigation";
 import {
   Select,
   SelectContent,
@@ -50,10 +51,10 @@ import {
 
 // Import the components we created
 import { ConceptMapViewer } from "@/components/Features/conceptManagement/ConceptMapViewer";
-import { HierarchyBuilder } from "@/components/Features/conceptManagement/HierarchyBuilder";
 import { BulkOperationsPanel } from "@/components/Features/conceptManagement/BulkOperationsPanel";
 import { ConceptImporter } from "@/components/Features/conceptManagement/ConceptImporter";
-import { ConceptCategory } from "@/lib/enum";
+import { MergeConceptDialog } from "@/components/Features/conceptManagement/MergeConceptDialog";
+import { MultiSelectDropdown } from "@/components/ui/MultiSelectDropdown";
 
 // Types for the concept management page
 interface ConceptData {
@@ -128,11 +129,12 @@ export default function ConceptManagementPage() {
     "dashboard" | "explorer" | "map" | "hierarchy" | "bulk" | "import"
   >("dashboard");
   const [concepts, setConcepts] = useState<ConceptData[]>([]);
+  const [conceptGroups, setConceptGroups] = useState<any[]>([]);
   const [selectedConcepts, setSelectedConcepts] = useState<string[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [difficultyFilter, setDifficultyFilter] = useState<string>("all");
-  const [tagFilter, setTagFilter] = useState<string>("all");
+  const [tagFilter, setTagFilter] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [stats, setStats] = useState<ConceptStats | null>(null);
 
@@ -152,6 +154,32 @@ export default function ConceptManagementPage() {
   const [selectedTagsForCategory, setSelectedTagsForCategory] = useState<
     string[]
   >([]);
+  const [selectedConceptsForGroup, setSelectedConceptsForGroup] = useState<
+    string[]
+  >([]);
+
+  // Merge Dialog State
+  const [showMergeDialog, setShowMergeDialog] = useState(false);
+
+  // Concept Groups Management State
+  const [selectedGroup, setSelectedGroup] = useState<any>(null);
+  const [groupSearchTerm, setGroupSearchTerm] = useState("");
+  const [groupFilter, setGroupFilter] = useState("all"); // all, vocabulary, grammar, mixed
+  const [isEditingGroup, setIsEditingGroup] = useState(false);
+  const [editGroupName, setEditGroupName] = useState("");
+  const [editGroupDescription, setEditGroupDescription] = useState("");
+
+  // Concept Selector Modal State
+  const [showConceptSelector, setShowConceptSelector] = useState(false);
+  const [conceptSelectorSearch, setConceptSelectorSearch] = useState("");
+  const [selectedConceptsToAdd, setSelectedConceptsToAdd] = useState<string[]>([]);
+
+  // Super Group Management State
+  const [showSuperGroupCreator, setShowSuperGroupCreator] = useState(false);
+  const [selectedGroupsForSuperGroup, setSelectedGroupsForSuperGroup] = useState<string[]>([]);
+  const [superGroupName, setSuperGroupName] = useState("");
+  const [superGroupDescription, setSuperGroupDescription] = useState("");
+  const [expandedSuperGroups, setExpandedSuperGroups] = useState<Set<string>>(new Set());
 
   // Calculate statistics
   const calculateStats = useCallback((conceptData: ConceptData[]) => {
@@ -210,6 +238,20 @@ export default function ConceptManagementPage() {
     }
   }, [calculateStats]);
 
+  // Load concept groups from API
+  const loadConceptGroups = useCallback(async () => {
+    try {
+      const response = await fetch("/api/concept-groups?includeHierarchy=true");
+      const data = await response.json();
+
+      if (data.success) {
+        setConceptGroups(data.data);
+      }
+    } catch (error) {
+      console.error("Failed to load concept groups:", error);
+    }
+  }, []);
+
   // Filter concepts based on current filters
   const filteredConcepts = useMemo(() => {
     return concepts.filter((concept) => {
@@ -228,7 +270,8 @@ export default function ConceptManagementPage() {
         difficultyFilter === "all" ||
         concept.difficulty === difficultyFilter;
       const matchesTag =
-        !tagFilter || tagFilter === "all" || concept.tags.includes(tagFilter);
+        tagFilter.length === 0 ||
+        tagFilter.every((tag) => concept.tags.includes(tag));
 
       return (
         matchesSearch && matchesCategory && matchesDifficulty && matchesTag
@@ -245,10 +288,100 @@ export default function ConceptManagementPage() {
     return Array.from(tags).sort();
   }, [concepts]);
 
-  // Load concepts on mount
+  // Filter groups based on search and filters
+  const filteredGroups = useMemo(() => {
+    return conceptGroups.filter((group) => {
+      const matchesSearch = group.name.toLowerCase().includes(groupSearchTerm.toLowerCase()) ||
+                           group.description?.toLowerCase().includes(groupSearchTerm.toLowerCase());
+      const matchesFilter = groupFilter === "all" || group.groupType === groupFilter;
+      return matchesSearch && matchesFilter;
+    });
+  }, [conceptGroups, groupSearchTerm, groupFilter]);
+
+  // Filter available concepts for adding to group (exclude already added ones)
+  const availableConceptsForGroup = useMemo(() => {
+    if (!selectedGroup) return [];
+    
+    const alreadyInGroup = selectedGroup.memberConcepts || [];
+    return concepts.filter((concept) => {
+      const notInGroup = !alreadyInGroup.includes(concept.id);
+      const matchesSearch = concept.name.toLowerCase().includes(conceptSelectorSearch.toLowerCase()) ||
+                           concept.description.toLowerCase().includes(conceptSelectorSearch.toLowerCase());
+      return notInGroup && matchesSearch;
+    });
+  }, [concepts, selectedGroup, conceptSelectorSearch]);
+
+  // Organize groups into hierarchy structure
+  const organizedGroups = useMemo(() => {
+    const superGroups: any[] = [];
+    const standaloneGroups: any[] = [];
+    
+    // Separate super groups (level 2) and regular groups (level 1)
+    conceptGroups.forEach(group => {
+      if (group.level === 2) {
+        // This is a super group
+        const childGroups = conceptGroups.filter(g => g.parentGroup === group.id);
+        superGroups.push({
+          ...group,
+          children: childGroups,
+          totalConcepts: childGroups.reduce((sum, child) => sum + (child.memberConcepts?.length || 0), 0)
+        });
+      } else if (group.level === 1 && !group.parentGroup) {
+        // This is a standalone group (not under any super group)
+        standaloneGroups.push(group);
+      }
+    });
+
+    return { superGroups, standaloneGroups };
+  }, [conceptGroups]);
+
+  // Filter organized groups based on search and filters
+  const filteredOrganizedGroups = useMemo(() => {
+    const filterGroup = (group: any) => {
+      const matchesSearch = group.name.toLowerCase().includes(groupSearchTerm.toLowerCase()) ||
+                           group.description?.toLowerCase().includes(groupSearchTerm.toLowerCase());
+      const matchesFilter = groupFilter === "all" || group.groupType === groupFilter;
+      return matchesSearch && matchesFilter;
+    };
+
+    const filteredSuperGroups = organizedGroups.superGroups
+      .map(superGroup => ({
+        ...superGroup,
+        children: superGroup.children.filter(filterGroup)
+      }))
+      .filter(superGroup => 
+        filterGroup(superGroup) || superGroup.children.length > 0
+      );
+
+    const filteredStandaloneGroups = organizedGroups.standaloneGroups.filter(filterGroup);
+
+    return {
+      superGroups: filteredSuperGroups,
+      standaloneGroups: filteredStandaloneGroups
+    };
+  }, [organizedGroups, groupSearchTerm, groupFilter]);
+
+  // Load concepts and groups on mount
   useEffect(() => {
     loadConcepts();
-  }, [loadConcepts]);
+    loadConceptGroups();
+  }, [loadConcepts, loadConceptGroups]);
+
+  // Auto-select concepts when tags are selected
+  useEffect(() => {
+    if (selectedTagsForCategory.length > 0) {
+      const matchingConceptIds = concepts
+        .filter((c) =>
+          c.tags.some((tag) =>
+            selectedTagsForCategory.includes(tag)
+          )
+        )
+        .map((c) => c.id);
+      setSelectedConceptsForGroup(matchingConceptIds);
+    } else {
+      setSelectedConceptsForGroup([]);
+    }
+  }, [selectedTagsForCategory, concepts]);
 
   // Handle concept selection
   const toggleConceptSelection = useCallback((conceptId: string) => {
@@ -315,70 +448,276 @@ export default function ConceptManagementPage() {
       });
 
       if (response.ok) {
-        // Add concepts with matching tags to the new category
-        const conceptsToAdd = concepts
-          .filter((c) =>
-            c.tags.some((tag) => selectedTagsForCategory.includes(tag))
-          )
-          .map((c) => c.id);
-
-        if (conceptsToAdd.length > 0) {
+        // Add selected concepts to the new group
+        if (selectedConceptsForGroup.length > 0) {
           const groupData = await response.json();
           await fetch(`/api/concept-groups/${groupData.data.id}`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ conceptIds: conceptsToAdd }),
+            body: JSON.stringify({ conceptIds: selectedConceptsForGroup }),
           });
         }
 
         // Reset form
         setNewCategoryName("");
         setSelectedTagsForCategory([]);
+        setSelectedConceptsForGroup([]);
         setCategoryCreationMode(false);
+        
+        // Refresh concept groups
+        loadConceptGroups();
       }
     } catch (error) {
       console.error("Failed to create category:", error);
     }
   }, [newCategoryName, selectedTagsForCategory, concepts]);
 
+  // Handle group selection
+  const handleGroupSelect = useCallback((group: any) => {
+    setSelectedGroup(group);
+    setIsEditingGroup(false);
+    setEditGroupName(group.name);
+    setEditGroupDescription(group.description || "");
+  }, []);
+
+  // Handle group editing
+  const handleGroupEdit = useCallback(() => {
+    setIsEditingGroup(true);
+  }, []);
+
+  // Handle save group changes
+  const handleSaveGroup = useCallback(async () => {
+    if (!selectedGroup) return;
+
+    try {
+      const response = await fetch(`/api/concept-groups/${selectedGroup.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: editGroupName,
+          description: editGroupDescription,
+        }),
+      });
+
+      if (response.ok) {
+        setIsEditingGroup(false);
+        await loadConceptGroups();
+        // Update selected group with new data
+        const updatedGroup = { ...selectedGroup, name: editGroupName, description: editGroupDescription };
+        setSelectedGroup(updatedGroup);
+      }
+    } catch (error) {
+      console.error("Failed to update group:", error);
+    }
+  }, [selectedGroup, editGroupName, editGroupDescription, loadConceptGroups]);
+
+  // Handle remove concept from group
+  const handleRemoveConceptFromGroup = useCallback(async (conceptId: string) => {
+    if (!selectedGroup) return;
+
+    try {
+      const response = await fetch(`/api/concept-groups/${selectedGroup.id}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ conceptIds: [conceptId] }),
+      });
+
+      if (response.ok) {
+        await loadConceptGroups();
+        // Update selected group to reflect changes
+        const updatedGroup = {
+          ...selectedGroup,
+          memberConcepts: selectedGroup.memberConcepts?.filter((id: string) => id !== conceptId) || []
+        };
+        setSelectedGroup(updatedGroup);
+      }
+    } catch (error) {
+      console.error("Failed to remove concept from group:", error);
+    }
+  }, [selectedGroup, loadConceptGroups]);
+
+  // Handle open concept selector
+  const handleOpenConceptSelector = useCallback(() => {
+    setShowConceptSelector(true);
+    setConceptSelectorSearch("");
+    setSelectedConceptsToAdd([]);
+  }, []);
+
+  // Handle concept selection in modal
+  const handleToggleConceptSelection = useCallback((conceptId: string) => {
+    setSelectedConceptsToAdd(prev => 
+      prev.includes(conceptId)
+        ? prev.filter(id => id !== conceptId)
+        : [...prev, conceptId]
+    );
+  }, []);
+
+  // Handle add concepts to group
+  const handleAddConceptsToGroup = useCallback(async () => {
+    if (!selectedGroup || selectedConceptsToAdd.length === 0) return;
+
+    try {
+      const response = await fetch(`/api/concept-groups/${selectedGroup.id}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ conceptIds: selectedConceptsToAdd }),
+      });
+
+      if (response.ok) {
+        await loadConceptGroups();
+        // Update selected group to reflect changes
+        const updatedGroup = {
+          ...selectedGroup,
+          memberConcepts: [...(selectedGroup.memberConcepts || []), ...selectedConceptsToAdd]
+        };
+        setSelectedGroup(updatedGroup);
+        
+        // Close modal and reset
+        setShowConceptSelector(false);
+        setSelectedConceptsToAdd([]);
+        setConceptSelectorSearch("");
+      }
+    } catch (error) {
+      console.error("Failed to add concepts to group:", error);
+    }
+  }, [selectedGroup, selectedConceptsToAdd, loadConceptGroups]);
+
+  // Handle super group expand/collapse
+  const handleToggleSuperGroup = useCallback((superGroupId: string) => {
+    setExpandedSuperGroups(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(superGroupId)) {
+        newSet.delete(superGroupId);
+      } else {
+        newSet.add(superGroupId);
+      }
+      return newSet;
+    });
+  }, []);
+
+  // Handle super group selection (for right panel display)
+  const handleSuperGroupSelect = useCallback((superGroup: any) => {
+    setSelectedGroup(superGroup);
+    setIsEditingGroup(false);
+    setEditGroupName(superGroup.name);
+    setEditGroupDescription(superGroup.description || "");
+    // Also toggle expand/collapse
+    handleToggleSuperGroup(superGroup.id);
+  }, [handleToggleSuperGroup]);
+
+  // Handle open super group creator
+  const handleOpenSuperGroupCreator = useCallback(() => {
+    setShowSuperGroupCreator(true);
+    setSuperGroupName("");
+    setSuperGroupDescription("");
+    setSelectedGroupsForSuperGroup([]);
+  }, []);
+
+  // Handle group selection for super group creation
+  const handleToggleGroupForSuperGroup = useCallback((groupId: string) => {
+    setSelectedGroupsForSuperGroup(prev => 
+      prev.includes(groupId)
+        ? prev.filter(id => id !== groupId)
+        : [...prev, groupId]
+    );
+  }, []);
+
+  // Handle create super group
+  const handleCreateSuperGroup = useCallback(async () => {
+    if (!superGroupName || selectedGroupsForSuperGroup.length === 0) return;
+
+    try {
+      // Create the super group
+      const response = await fetch("/api/concept-groups", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: superGroupName,
+          description: superGroupDescription,
+          groupType: "mixed", // Super groups are always mixed
+          level: 2, // Super group level
+          difficulty: "A1", // Default, can be changed later
+          memberConcepts: [], // Super groups don't have direct concepts
+        }),
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        const superGroupId = result.data.id;
+
+        // Update selected groups to be children of this super group
+        await Promise.all(
+          selectedGroupsForSuperGroup.map(groupId =>
+            fetch(`/api/concept-groups/${groupId}`, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                parentGroup: superGroupId,
+              }),
+            })
+          )
+        );
+
+        // Reset form and reload data
+        setShowSuperGroupCreator(false);
+        setSuperGroupName("");
+        setSuperGroupDescription("");
+        setSelectedGroupsForSuperGroup([]);
+        await loadConceptGroups();
+
+        // Auto-expand the new super group
+        setExpandedSuperGroups(prev => new Set([...prev, superGroupId]));
+      }
+    } catch (error) {
+      console.error("Failed to create super group:", error);
+    }
+  }, [superGroupName, superGroupDescription, selectedGroupsForSuperGroup, loadConceptGroups]);
+
   // Handle bulk merge
-  const handleBulkMerge = useCallback(async () => {
+  const handleBulkMerge = useCallback(() => {
     if (selectedConcepts.length < 2) {
       alert("Please select at least 2 concepts to merge");
       return;
     }
 
-    // For now, create a simple merge with the first concept's name as base
-    const firstConcept = concepts.find((c) => c.id === selectedConcepts[0]);
-    if (!firstConcept) return;
+    // Check if all concepts have the same category
+    const selectedConceptsData = selectedConcepts.map(id => 
+      concepts.find(c => c.id === id)
+    ).filter(Boolean) as ConceptData[];
 
-    const mergedName = prompt(
-      "Enter name for merged concept:",
-      firstConcept.name
-    );
-    if (!mergedName) return;
+    const categories = [...new Set(selectedConceptsData.map(c => c.category))];
+    if (categories.length > 1) {
+      alert("Cannot merge concepts of different categories (Grammar and Vocabulary cannot be merged together)");
+      return;
+    }
 
+    setShowMergeDialog(true);
+  }, [selectedConcepts, concepts]);
+
+  // Handle merge confirmation from dialog
+  const handleMergeConfirmation = useCallback(async (mergeData: {
+    primaryConceptId: string;
+    secondaryConceptIds: string[];
+    finalConceptData: any;
+  }) => {
     setIsLoading(true);
     try {
       const response = await fetch("/api/concepts/merge", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          sourceConceptIds: selectedConcepts,
-          targetConceptData: {
-            name: mergedName,
-            category: firstConcept.category,
-            description: `Merged concept from: ${selectedConcepts.map((id) => concepts.find((c) => c.id === id)?.name).join(", ")}`,
-            difficulty: firstConcept.difficulty,
-            tags: [
-              ...new Set(
-                selectedConcepts.flatMap(
-                  (id) => concepts.find((c) => c.id === id)?.tags || []
-                )
-              ),
-            ],
+          targetConceptId: mergeData.primaryConceptId,
+          sourceConceptIds: mergeData.secondaryConceptIds,
+          finalConceptData: {
+            name: mergeData.finalConceptData.name,
+            category: mergeData.finalConceptData.category,
+            description: mergeData.finalConceptData.description,
+            examples: mergeData.finalConceptData.examples || [],
+            sourceContent: mergeData.finalConceptData.sourceContent,
+            confidence: mergeData.finalConceptData.confidence || 1.0,
+            suggestedDifficulty: mergeData.finalConceptData.suggestedDifficulty,
+            suggestedTags: mergeData.finalConceptData.suggestedTags || [],
           },
-          preserveHistory: true,
         }),
       });
 
@@ -387,16 +726,19 @@ export default function ConceptManagementPage() {
       if (result.success) {
         await loadConcepts();
         setSelectedConcepts([]);
+        setShowMergeDialog(false);
         console.log("Concepts merged successfully");
       } else {
         console.error("Failed to merge concepts:", result.error);
+        alert(`Failed to merge concepts: ${result.error}`);
       }
     } catch (error) {
       console.error("Error merging concepts:", error);
+      alert(`Error merging concepts: ${error}`);
     } finally {
       setIsLoading(false);
     }
-  }, [selectedConcepts, concepts, loadConcepts]);
+  }, [loadConcepts]);
 
   // Handle bulk split
   const handleBulkSplit = useCallback(async () => {
@@ -485,8 +827,8 @@ export default function ConceptManagementPage() {
   );
 
   // Transform data for group-based visualization
-  const mapData = {
-    nodes: filteredConcepts.map((concept, index) => ({
+  const mapData = useMemo(() => {
+    const nodes = filteredConcepts.map((concept, index) => ({
       id: concept.id,
       name: concept.name,
       category: concept.category as "grammar" | "vocabulary",
@@ -495,9 +837,36 @@ export default function ConceptManagementPage() {
       y: 100 + Math.floor(index / 15) * 80,
       tags: concept.tags,
       isActive: concept.isActive,
-    })),
-    edges: [], // Would be populated from ConceptGroup API showing group memberships
-  };
+    }));
+
+    // Add group nodes
+    const groupNodes = conceptGroups.map((group, index) => ({
+      id: `group-${group.id}`,
+      name: `📁 ${group.name}`,
+      category: "group" as any,
+      difficulty: group.difficulty,
+      x: 50 + (index % 10) * 120,
+      y: 50 + Math.floor(index / 10) * 120,
+      tags: [],
+      isActive: group.isActive,
+      isGroup: true,
+    }));
+
+    // Create edges from groups to their member concepts
+    const edges = conceptGroups.flatMap(group => 
+      group.memberConcepts?.map((conceptId: string) => ({
+        id: `${group.id}-${conceptId}`,
+        source: `group-${group.id}`,
+        target: conceptId,
+        type: "membership"
+      })) || []
+    );
+
+    return {
+      nodes: [...groupNodes, ...nodes],
+      edges,
+    };
+  }, [filteredConcepts, conceptGroups]);
 
   // Render dashboard
   const renderDashboard = () => (
@@ -605,19 +974,12 @@ export default function ConceptManagementPage() {
               </SelectContent>
             </Select>
 
-            <Select value={tagFilter} onValueChange={setTagFilter}>
-              <SelectTrigger>
-                <SelectValue placeholder="Tag" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Tags</SelectItem>
-                {allTags.map((tag) => (
-                  <SelectItem key={tag} value={tag}>
-                    {tag}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <MultiSelectDropdown
+              options={allTags}
+              selected={tagFilter}
+              onChange={setTagFilter}
+              placeholder="Tags"
+            />
 
             <Button
               variant="outline"
@@ -625,7 +987,7 @@ export default function ConceptManagementPage() {
                 setSearchTerm("");
                 setCategoryFilter("all");
                 setDifficultyFilter("all");
-                setTagFilter("all");
+                setTagFilter([]);
               }}
             >
               Clear Filters
@@ -643,14 +1005,14 @@ export default function ConceptManagementPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Tags className="size-5" />
-            Create Categories from Tags
+            Create Groups from Tags
           </CardTitle>
         </CardHeader>
         <CardContent>
           {!categoryCreationMode ? (
             <div className="space-y-4">
               <p className="text-gray-600">
-                Group concepts into meaningful categories based on their tags.
+                Group concepts into meaningful groups based on their tags.
                 This helps organize related concepts automatically.
               </p>
 
@@ -677,19 +1039,19 @@ export default function ConceptManagementPage() {
 
               <Button onClick={() => setCategoryCreationMode(true)}>
                 <Plus className="mr-2 size-4" />
-                Create Category
+                Create Group
               </Button>
             </div>
           ) : (
             <div className="space-y-4">
               <div>
                 <label className="mb-2 block text-sm font-medium">
-                  Category Name
+                  Group Name
                 </label>
                 <Input
                   value={newCategoryName}
                   onChange={(e) => setNewCategoryName(e.target.value)}
-                  placeholder="Enter category name..."
+                  placeholder="Enter group name..."
                 />
               </div>
 
@@ -725,7 +1087,7 @@ export default function ConceptManagementPage() {
               {selectedTagsForCategory.length > 0 && (
                 <div>
                   <label className="mb-2 block text-sm font-medium">
-                    Concepts that will be included (
+                    Related Concepts (
                     {
                       concepts.filter((c) =>
                         c.tags.some((tag) =>
@@ -735,21 +1097,67 @@ export default function ConceptManagementPage() {
                     }
                     )
                   </label>
-                  <div className="max-h-24 overflow-y-auto text-sm text-gray-600">
+                  <div className="max-h-48 overflow-y-auto space-y-2">
                     {concepts
                       .filter((c) =>
                         c.tags.some((tag) =>
                           selectedTagsForCategory.includes(tag)
                         )
                       )
-                      .slice(0, 10)
-                      .map((c) => c.name)
-                      .join(", ")}
-                    {concepts.filter((c) =>
-                      c.tags.some((tag) =>
-                        selectedTagsForCategory.includes(tag)
-                      )
-                    ).length > 10 && "..."}
+                      .map((concept) => (
+                        <div
+                          key={concept.id}
+                          className="flex items-center gap-3 rounded border p-2 bg-blue-50 border-blue-200"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedConceptsForGroup.includes(concept.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedConceptsForGroup(prev => [...prev, concept.id]);
+                              } else {
+                                setSelectedConceptsForGroup(prev => prev.filter(id => id !== concept.id));
+                              }
+                            }}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium text-sm">{concept.name}</span>
+                              <Badge
+                                variant={
+                                  concept.category === "grammar" ? "default" : "secondary"
+                                }
+                                className="text-xs"
+                              >
+                                {concept.category}
+                              </Badge>
+                              <Badge variant="outline" className="text-xs">
+                                {concept.difficulty}
+                              </Badge>
+                            </div>
+                            <div className="text-xs text-gray-600 truncate">
+                              {concept.description}
+                            </div>
+                            {concept.tags.length > 0 && (
+                              <div className="mt-1 flex flex-wrap gap-1">
+                                {concept.tags
+                                  .filter(tag => selectedTagsForCategory.includes(tag))
+                                  .slice(0, 3)
+                                  .map((tag, idx) => (
+                                    <Badge key={idx} variant="outline" className="text-xs bg-blue-100">
+                                      {tag}
+                                    </Badge>
+                                  ))}
+                                {concept.tags.filter(tag => selectedTagsForCategory.includes(tag)).length > 3 && (
+                                  <Badge variant="outline" className="text-xs bg-blue-100">
+                                    +{concept.tags.filter(tag => selectedTagsForCategory.includes(tag)).length - 3}
+                                  </Badge>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
                   </div>
                 </div>
               )}
@@ -758,10 +1166,10 @@ export default function ConceptManagementPage() {
                 <Button
                   onClick={handleCreateCategoryFromTags}
                   disabled={
-                    !newCategoryName || selectedTagsForCategory.length === 0
+                    !newCategoryName || selectedConceptsForGroup.length === 0
                   }
                 >
-                  Create Category
+                  Create Group
                 </Button>
                 <Button
                   variant="outline"
@@ -769,6 +1177,7 @@ export default function ConceptManagementPage() {
                     setCategoryCreationMode(false);
                     setNewCategoryName("");
                     setSelectedTagsForCategory([]);
+                    setSelectedConceptsForGroup([]);
                   }}
                 >
                   Cancel
@@ -1361,7 +1770,7 @@ export default function ConceptManagementPage() {
                     </Badge>
                   </div>
 
-                  <p className="truncate text-sm text-gray-600">
+                  <p className="text-sm text-gray-600 break-words">
                     {concept.description}
                   </p>
 
@@ -1381,7 +1790,7 @@ export default function ConceptManagementPage() {
                   )}
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex flex-shrink-0 items-center gap-2">
                   <Button
                     variant="ghost"
                     size="sm"
@@ -1489,6 +1898,7 @@ export default function ConceptManagementPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <Navigation />
       {/* Main Content */}
       <div className="container mx-auto p-6">
         <Tabs
@@ -1498,7 +1908,7 @@ export default function ConceptManagementPage() {
         >
           {/* Tab Navigation */}
           <div className="rounded-lg bg-white p-4 shadow-sm">
-            <TabsList className="grid w-full grid-cols-6">
+            <TabsList className="grid w-full grid-cols-5">
               <TabsTrigger value="dashboard" className="gap-2">
                 <BarChart3 className="size-4" />
                 Dashboard
@@ -1509,11 +1919,7 @@ export default function ConceptManagementPage() {
               </TabsTrigger>
               <TabsTrigger value="map" className="gap-2">
                 <Network className="size-4" />
-                Group Map
-              </TabsTrigger>
-              <TabsTrigger value="hierarchy" className="gap-2">
-                <TreePine className="size-4" />
-                Hierarchy
+                Concept Groups
               </TabsTrigger>
               <TabsTrigger value="bulk" className="gap-2">
                 <Wand2 className="size-4" />
@@ -1535,44 +1941,367 @@ export default function ConceptManagementPage() {
           <TabsContent value="explorer">{renderLLMExplorer()}</TabsContent>
 
           <TabsContent value="map">
-            <div className="rounded-lg bg-white shadow-sm">
-              <ConceptMapViewer
-                data={mapData}
-                onNodeClick={(node) => {
-                  const concept = concepts.find((c) => c.id === node.id);
-                  if (concept) {
-                    setSelectedConcept(concept);
-                    setActiveTab("explorer");
-                  }
-                }}
-                onEdgeClick={(edge) => console.log("Edge clicked:", edge)}
-                onNodeDrag={(nodeId, x, y) =>
-                  console.log("Node dragged:", nodeId, x, y)
-                }
-                width={1200}
-                height={700}
-              />
+            <div className="h-[800px] flex gap-4">
+              {/* Left Panel - Groups List */}
+              <div className="w-1/3 bg-white rounded-lg shadow-sm border">
+                {/* Header */}
+                <div className="p-4 border-b">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-semibold">
+                      Groups ({filteredOrganizedGroups.superGroups.length + filteredOrganizedGroups.standaloneGroups.length})
+                    </h3>
+                    <div className="flex gap-2">
+                      <Button 
+                        size="sm" 
+                        variant="outline"
+                        onClick={handleOpenSuperGroupCreator}
+                      >
+                        <Plus className="size-4 mr-1" />
+                        Super Group
+                      </Button>
+                      <Button 
+                        size="sm" 
+                        onClick={() => setActiveTab("dashboard")}
+                      >
+                        <Plus className="size-4 mr-1" />
+                        New Group
+                      </Button>
+                    </div>
+                  </div>
+                  
+                  {/* Search */}
+                  <div className="relative mb-3">
+                    <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-gray-400" />
+                    <Input
+                      placeholder="Search groups..."
+                      value={groupSearchTerm}
+                      onChange={(e) => setGroupSearchTerm(e.target.value)}
+                      className="pl-10"
+                    />
+                  </div>
+
+                  {/* Filter */}
+                  <Select value={groupFilter} onValueChange={setGroupFilter}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Filter by type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Types</SelectItem>
+                      <SelectItem value="vocabulary">Vocabulary</SelectItem>
+                      <SelectItem value="grammar">Grammar</SelectItem>
+                      <SelectItem value="mixed">Mixed</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Groups Tree */}
+                <ScrollArea className="h-[600px]">
+                  <div className="p-2">
+                    {filteredOrganizedGroups.superGroups.length === 0 && filteredOrganizedGroups.standaloneGroups.length === 0 ? (
+                      <div className="text-center py-8">
+                        <Network className="mx-auto h-12 w-12 text-gray-400" />
+                        <h3 className="mt-2 text-sm font-medium text-gray-900">No groups found</h3>
+                        <p className="mt-1 text-sm text-gray-500">
+                          {groupSearchTerm ? "Try different search terms" : "Create your first group from the Dashboard tab"}
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-1">
+                        {/* Super Groups */}
+                        {filteredOrganizedGroups.superGroups.map((superGroup) => (
+                          <div key={superGroup.id}>
+                            {/* Super Group Header */}
+                            <div
+                              className={`p-3 rounded-md cursor-pointer border transition-colors hover:bg-gray-50 ${
+                                selectedGroup?.id === superGroup.id ? "bg-purple-50 border-purple-200" : "border-transparent"
+                              }`}
+                              onClick={() => handleSuperGroupSelect(superGroup)}
+                            >
+                              <div className="flex items-start gap-2">
+                                <div className="flex items-center gap-1">
+                                  {expandedSuperGroups.has(superGroup.id) ? (
+                                    <div className="size-4 mt-1 text-purple-600">📁</div>
+                                  ) : (
+                                    <div className="size-4 mt-1 text-purple-600">📁</div>
+                                  )}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <h4 className="font-bold text-sm truncate text-purple-800">{superGroup.name}</h4>
+                                  <div className="flex items-center gap-1 mt-1">
+                                    <Badge variant="outline" className="text-xs bg-purple-50">
+                                      Super Group
+                                    </Badge>
+                                    <Badge variant="secondary" className="text-xs">
+                                      {superGroup.difficulty}
+                                    </Badge>
+                                  </div>
+                                  <p className="text-xs text-gray-500 mt-1">
+                                    {superGroup.children.length} groups • {superGroup.totalConcepts} concepts
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Child Groups (shown when expanded) */}
+                            {expandedSuperGroups.has(superGroup.id) && (
+                              <div className="ml-6 mt-1 space-y-1">
+                                {superGroup.children.map((childGroup: any) => (
+                                  <div
+                                    key={childGroup.id}
+                                    className={`p-2 rounded-md cursor-pointer border transition-colors hover:bg-gray-50 ${
+                                      selectedGroup?.id === childGroup.id ? "bg-blue-50 border-blue-200" : "border-transparent"
+                                    }`}
+                                    onClick={() => handleGroupSelect(childGroup)}
+                                  >
+                                    <div className="flex items-start gap-2">
+                                      <div className="size-4 mt-1 text-blue-600">📂</div>
+                                      <div className="flex-1 min-w-0">
+                                        <h4 className="font-medium text-sm truncate">{childGroup.name}</h4>
+                                        <div className="flex items-center gap-1 mt-1">
+                                          <Badge variant="outline" className="text-xs">
+                                            {childGroup.groupType}
+                                          </Badge>
+                                          <Badge variant="secondary" className="text-xs">
+                                            {childGroup.difficulty}
+                                          </Badge>
+                                        </div>
+                                        <p className="text-xs text-gray-500 mt-1">
+                                          {childGroup.memberConcepts?.length || 0} concepts
+                                        </p>
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+
+                        {/* Standalone Groups */}
+                        {filteredOrganizedGroups.standaloneGroups.map((group) => (
+                          <div
+                            key={group.id}
+                            className={`p-3 rounded-md cursor-pointer border transition-colors hover:bg-gray-50 ${
+                              selectedGroup?.id === group.id ? "bg-blue-50 border-blue-200" : "border-transparent"
+                            }`}
+                            onClick={() => handleGroupSelect(group)}
+                          >
+                            <div className="flex items-start gap-2">
+                              <div className="size-4 mt-1 text-blue-600">📂</div>
+                              <div className="flex-1 min-w-0">
+                                <h4 className="font-medium text-sm truncate">{group.name}</h4>
+                                <div className="flex items-center gap-1 mt-1">
+                                  <Badge variant="outline" className="text-xs">
+                                    {group.groupType}
+                                  </Badge>
+                                  <Badge variant="secondary" className="text-xs">
+                                    {group.difficulty}
+                                  </Badge>
+                                </div>
+                                <p className="text-xs text-gray-500 mt-1">
+                                  {group.memberConcepts?.length || 0} concepts • Level {group.level}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </ScrollArea>
+              </div>
+
+              {/* Right Panel - Group Details */}
+              <div className="flex-1 bg-white rounded-lg shadow-sm border">
+                {selectedGroup ? (
+                  <div className="h-full flex flex-col">
+                    {/* Group Header */}
+                    <div className="p-6 border-b">
+                      {isEditingGroup ? (
+                        <div className="space-y-4">
+                          <div>
+                            <label className="block text-sm font-medium mb-1">Group Name</label>
+                            <Input
+                              value={editGroupName}
+                              onChange={(e) => setEditGroupName(e.target.value)}
+                              placeholder="Enter group name..."
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium mb-1">Description</label>
+                            <Textarea
+                              value={editGroupDescription}
+                              onChange={(e) => setEditGroupDescription(e.target.value)}
+                              placeholder="Enter group description..."
+                              rows={3}
+                            />
+                          </div>
+                          <div className="flex gap-2">
+                            <Button onClick={handleSaveGroup}>Save Changes</Button>
+                            <Button variant="outline" onClick={() => setIsEditingGroup(false)}>
+                              Cancel
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              {selectedGroup.level === 2 ? (
+                                <span className="text-purple-600">📁</span>
+                              ) : (
+                                <span className="text-blue-600">📂</span>
+                              )}
+                              <h2 className="text-xl font-semibold">{selectedGroup.name}</h2>
+                            </div>
+                            <Button variant="outline" size="sm" onClick={handleGroupEdit}>
+                              <Edit className="size-4 mr-1" />
+                              Edit
+                            </Button>
+                          </div>
+                          <p className="text-gray-600 mb-3">{selectedGroup.description || "No description"}</p>
+                          <div className="flex items-center gap-4 text-sm text-gray-500">
+                            {selectedGroup.level === 2 ? (
+                              <>
+                                <span>📁 {selectedGroup.children?.length || 0} groups</span>
+                                <span>💡 {selectedGroup.totalConcepts || 0} total concepts</span>
+                                <span>📂 Super Group</span>
+                                <span>📊 {selectedGroup.difficulty} Level</span>
+                              </>
+                            ) : (
+                              <>
+                                <span>💡 {selectedGroup.memberConcepts?.length || 0} concepts</span>
+                                <span>📂 {selectedGroup.groupType}</span>
+                                <span>📊 {selectedGroup.difficulty} Level</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Content Section */}
+                    <div className="flex-1 p-6">
+                      {selectedGroup.level === 2 ? (
+                        /* Super Group Content */
+                        <div>
+                          <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-lg font-medium">Child Groups</h3>
+                          </div>
+
+                          {selectedGroup.children?.length === 0 ? (
+                            <div className="text-center py-8">
+                              <Network className="mx-auto h-12 w-12 text-gray-400" />
+                              <h3 className="mt-2 text-sm font-medium text-gray-900">No child groups yet</h3>
+                              <p className="mt-1 text-sm text-gray-500">Create groups and organize them into this super group</p>
+                            </div>
+                          ) : (
+                            <div className="space-y-2">
+                              {selectedGroup.children?.map((childGroup: any) => (
+                                <div
+                                  key={childGroup.id}
+                                  className="flex items-center gap-3 p-3 border rounded-lg hover:bg-gray-50 cursor-pointer"
+                                  onClick={() => handleGroupSelect(childGroup)}
+                                >
+                                  <span className="text-blue-600">📂</span>
+                                  <div className="flex-1">
+                                    <div className="flex items-center gap-2">
+                                      <h4 className="font-medium">{childGroup.name}</h4>
+                                      <Badge
+                                        variant="outline"
+                                        className="text-xs"
+                                      >
+                                        {childGroup.groupType}
+                                      </Badge>
+                                      <Badge variant="secondary" className="text-xs">
+                                        {childGroup.difficulty}
+                                      </Badge>
+                                    </div>
+                                    <p className="text-sm text-gray-600 mt-1">{childGroup.description || "No description"}</p>
+                                    <p className="text-xs text-gray-500 mt-1">
+                                      {childGroup.memberConcepts?.length || 0} concepts
+                                    </p>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        /* Regular Group Content */
+                        <div>
+                          <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-lg font-medium">Concepts in this Group</h3>
+                            <Button variant="outline" size="sm" onClick={handleOpenConceptSelector}>
+                              <Plus className="size-4 mr-1" />
+                              Add Concepts
+                            </Button>
+                          </div>
+
+                          {selectedGroup.memberConcepts?.length === 0 ? (
+                            <div className="text-center py-8">
+                              <BookOpen className="mx-auto h-12 w-12 text-gray-400" />
+                              <h3 className="mt-2 text-sm font-medium text-gray-900">No concepts yet</h3>
+                              <p className="mt-1 text-sm text-gray-500">Add concepts to organize them in this group</p>
+                            </div>
+                          ) : (
+                            <div className="space-y-2">
+                              {selectedGroup.memberConcepts?.map((conceptId: string) => {
+                                const concept = concepts.find(c => c.id === conceptId);
+                                if (!concept) return null;
+                                
+                                return (
+                                  <div
+                                    key={conceptId}
+                                    className="flex items-center gap-3 p-3 border rounded-lg hover:bg-gray-50"
+                                  >
+                                    <div className="flex-1">
+                                      <div className="flex items-center gap-2">
+                                        <h4 className="font-medium">{concept.name}</h4>
+                                        <Badge
+                                          variant={concept.category === "grammar" ? "default" : "secondary"}
+                                          className="text-xs"
+                                        >
+                                          {concept.category}
+                                        </Badge>
+                                        <Badge variant="outline" className="text-xs">
+                                          {concept.difficulty}
+                                        </Badge>
+                                      </div>
+                                      <p className="text-sm text-gray-600 mt-1">{concept.description}</p>
+                                    </div>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => handleRemoveConceptFromGroup(conceptId)}
+                                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                    >
+                                      <Trash2 className="size-4" />
+                                    </Button>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-center h-full">
+                    <div className="text-center">
+                      <Network className="mx-auto h-12 w-12 text-gray-400" />
+                      <h3 className="mt-2 text-sm font-medium text-gray-900">Select a group</h3>
+                      <p className="mt-1 text-sm text-gray-500">
+                        Choose a group from the left panel to view and manage its concepts
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </TabsContent>
 
-          <TabsContent value="hierarchy">
-            <div className="h-[700px] rounded-lg bg-white shadow-sm">
-              <HierarchyBuilder
-                hierarchy={[]} // Would be populated from ConceptGroup API
-                learningPaths={[]} // Would be populated from learning paths API
-                onNodeMove={(nodeId, targetParentId, position) =>
-                  console.log("Node moved:", nodeId, targetParentId, position)
-                }
-                onNodeClick={(node) =>
-                  console.log("Hierarchy node clicked:", node)
-                }
-                onPathCreate={(path) => console.log("Path created:", path)}
-                onPathUpdate={(pathId, updates) =>
-                  console.log("Path updated:", pathId, updates)
-                }
-              />
-            </div>
-          </TabsContent>
 
           <TabsContent value="bulk">
             <BulkOperationsPanel
@@ -1607,6 +2336,253 @@ export default function ConceptManagementPage() {
             />
           </TabsContent>
         </Tabs>
+
+        {/* Merge Dialog */}
+        {showMergeDialog && (
+          <MergeConceptDialog
+            isOpen={showMergeDialog}
+            selectedConcepts={selectedConcepts.map(id => {
+              const concept = concepts.find(c => c.id === id);
+              return concept ? {
+                id: concept.id,
+                name: concept.name,
+                category: concept.category,
+                difficulty: concept.difficulty,
+                tags: concept.tags,
+                isActive: concept.isActive,
+                lastUpdated: concept.lastUpdated,
+              } : null;
+            }).filter(Boolean) as any[]}
+            availableTags={allTags}
+            onConfirmMerge={handleMergeConfirmation}
+            onCancel={() => setShowMergeDialog(false)}
+          />
+        )}
+
+        {/* Concept Selector Modal */}
+        {showConceptSelector && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+            <div className="bg-white rounded-lg shadow-lg w-[600px] max-h-[80vh] overflow-hidden">
+              {/* Modal Header */}
+              <div className="p-6 border-b">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-xl font-semibold">Add Concepts to {selectedGroup?.name}</h2>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={() => setShowConceptSelector(false)}
+                  >
+                    ✕
+                  </Button>
+                </div>
+                
+                {/* Search */}
+                <div className="relative mt-4">
+                  <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-gray-400" />
+                  <Input
+                    placeholder="Search concepts..."
+                    value={conceptSelectorSearch}
+                    onChange={(e) => setConceptSelectorSearch(e.target.value)}
+                    className="pl-10"
+                  />
+                </div>
+              </div>
+
+              {/* Modal Content */}
+              <div className="p-6 max-h-[400px] overflow-y-auto">
+                {availableConceptsForGroup.length === 0 ? (
+                  <div className="text-center py-8">
+                    <BookOpen className="mx-auto h-12 w-12 text-gray-400" />
+                    <h3 className="mt-2 text-sm font-medium text-gray-900">
+                      {conceptSelectorSearch ? "No concepts found" : "All concepts are already in this group"}
+                    </h3>
+                    <p className="mt-1 text-sm text-gray-500">
+                      {conceptSelectorSearch ? "Try different search terms" : "Create more concepts to add them here"}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {availableConceptsForGroup.map((concept) => (
+                      <div
+                        key={concept.id}
+                        className={`flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50 ${
+                          selectedConceptsToAdd.includes(concept.id) ? "bg-blue-50 border-blue-200" : ""
+                        }`}
+                        onClick={() => handleToggleConceptSelection(concept.id)}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedConceptsToAdd.includes(concept.id)}
+                          onChange={() => handleToggleConceptSelection(concept.id)}
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <h4 className="font-medium">{concept.name}</h4>
+                            <Badge
+                              variant={concept.category === "grammar" ? "default" : "secondary"}
+                              className="text-xs"
+                            >
+                              {concept.category}
+                            </Badge>
+                            <Badge variant="outline" className="text-xs">
+                              {concept.difficulty}
+                            </Badge>
+                          </div>
+                          <p className="text-sm text-gray-600 mt-1 truncate">{concept.description}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Modal Footer */}
+              <div className="p-6 border-t bg-gray-50">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-600">
+                    {selectedConceptsToAdd.length} concept{selectedConceptsToAdd.length !== 1 ? 's' : ''} selected
+                  </span>
+                  <div className="flex gap-2">
+                    <Button 
+                      variant="outline" 
+                      onClick={() => setShowConceptSelector(false)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button 
+                      onClick={handleAddConceptsToGroup}
+                      disabled={selectedConceptsToAdd.length === 0}
+                    >
+                      Add {selectedConceptsToAdd.length} Concept{selectedConceptsToAdd.length !== 1 ? 's' : ''}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Super Group Creator Modal */}
+        {showSuperGroupCreator && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+            <div className="bg-white rounded-lg shadow-lg w-[700px] max-h-[80vh] overflow-hidden">
+              {/* Modal Header */}
+              <div className="p-6 border-b">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-xl font-semibold">Create Super Group</h2>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={() => setShowSuperGroupCreator(false)}
+                  >
+                    ✕
+                  </Button>
+                </div>
+              </div>
+
+              {/* Modal Content */}
+              <div className="p-6 max-h-[500px] overflow-y-auto">
+                <div className="space-y-4">
+                  {/* Super Group Details */}
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Super Group Name</label>
+                    <Input
+                      value={superGroupName}
+                      onChange={(e) => setSuperGroupName(e.target.value)}
+                      placeholder="Enter super group name..."
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Description (Optional)</label>
+                    <Textarea
+                      value={superGroupDescription}
+                      onChange={(e) => setSuperGroupDescription(e.target.value)}
+                      placeholder="Enter super group description..."
+                      rows={3}
+                    />
+                  </div>
+
+                  {/* Group Selection */}
+                  <div>
+                    <label className="block text-sm font-medium mb-2">
+                      Select Groups to Include ({selectedGroupsForSuperGroup.length} selected)
+                    </label>
+                    
+                    {/* Available Groups (only standalone groups) */}
+                    <div className="space-y-2 max-h-64 overflow-y-auto border rounded-lg p-3">
+                      {filteredOrganizedGroups.standaloneGroups.length === 0 ? (
+                        <div className="text-center py-4">
+                          <Network className="mx-auto h-8 w-8 text-gray-400" />
+                          <p className="mt-2 text-sm text-gray-500">
+                            No standalone groups available. Create some groups first.
+                          </p>
+                        </div>
+                      ) : (
+                        filteredOrganizedGroups.standaloneGroups.map((group) => (
+                          <div
+                            key={group.id}
+                            className={`flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50 ${
+                              selectedGroupsForSuperGroup.includes(group.id) ? "bg-purple-50 border-purple-200" : ""
+                            }`}
+                            onClick={() => handleToggleGroupForSuperGroup(group.id)}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={selectedGroupsForSuperGroup.includes(group.id)}
+                              onChange={() => handleToggleGroupForSuperGroup(group.id)}
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                            <span className="text-blue-600">📂</span>
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2">
+                                <h4 className="font-medium">{group.name}</h4>
+                                <Badge variant="outline" className="text-xs">
+                                  {group.groupType}
+                                </Badge>
+                                <Badge variant="secondary" className="text-xs">
+                                  {group.difficulty}
+                                </Badge>
+                              </div>
+                              <p className="text-sm text-gray-600 mt-1 truncate">{group.description || "No description"}</p>
+                              <p className="text-xs text-gray-500 mt-1">
+                                {group.memberConcepts?.length || 0} concepts
+                              </p>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Modal Footer */}
+              <div className="p-6 border-t bg-gray-50">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-600">
+                    {selectedGroupsForSuperGroup.length} group{selectedGroupsForSuperGroup.length !== 1 ? 's' : ''} will be organized into this super group
+                  </span>
+                  <div className="flex gap-2">
+                    <Button 
+                      variant="outline" 
+                      onClick={() => setShowSuperGroupCreator(false)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button 
+                      onClick={handleCreateSuperGroup}
+                      disabled={!superGroupName || selectedGroupsForSuperGroup.length === 0}
+                    >
+                      Create Super Group
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

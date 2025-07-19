@@ -4,10 +4,14 @@ import ConceptExtractionSession, {
   IConceptExtractionSession,
   validateConceptExtractionSession,
   ExtractedConceptSchema,
-  SimilarityDataSchema
+  SimilarityDataSchema,
 } from "@/datamodels/conceptExtractionSession.model";
-import { createApiResponse, createErrorResponse } from "@/lib/utils/apiResponse";
+import {
+  createApiResponse,
+  createErrorResponse,
+} from "@/lib/utils/apiResponse";
 import dbConnect from "@/lib/dbConnect";
+import { duplicationDetector } from "@/lib/conceptExtraction/duplicationDetector";
 
 // Schema for creating new session
 const CreateSessionSchema = z.object({
@@ -19,8 +23,8 @@ const CreateSessionSchema = z.object({
     llmModel: z.string(),
     totalProcessingTime: z.number(),
     extractionConfidence: z.number().min(0).max(1),
-    sourceContentLength: z.number()
-  })
+    sourceContentLength: z.number(),
+  }),
 });
 
 /**
@@ -31,21 +35,28 @@ export async function GET(request: NextRequest) {
     await dbConnect();
 
     const { searchParams } = new URL(request.url);
-    
+
     // Parse query parameters manually
-    const courseIdParam = searchParams.get('courseId');
-    const statusParam = searchParams.get('status');
-    const limitParam = searchParams.get('limit');
-    const offsetParam = searchParams.get('offset');
+    const courseIdParam = searchParams.get("courseId");
+    const statusParam = searchParams.get("status");
+    const limitParam = searchParams.get("limit");
+    const offsetParam = searchParams.get("offset");
 
     // Validate and convert parameters
     const courseId = courseIdParam ? Number(courseIdParam) : undefined;
-    const status = statusParam as 'extracted' | 'in_review' | 'reviewed' | 'archived' | undefined;
+    const status = statusParam as
+      | "extracted"
+      | "in-review"
+      | "reviewed"
+      | undefined;
     const limit = limitParam ? Number(limitParam) : 10;
     const offset = offsetParam ? Number(offsetParam) : 0;
 
     // Validate status if provided
-    if (statusParam && !['extracted', 'in_review', 'reviewed', 'archived'].includes(statusParam)) {
+    if (
+      statusParam &&
+      !["extracted", "in-review", "reviewed"].includes(statusParam)
+    ) {
       return createErrorResponse("Invalid status parameter", 400);
     }
 
@@ -66,8 +77,7 @@ export async function GET(request: NextRequest) {
     if (status) query.status = status;
 
     // Execute query with pagination
-    const sessions = await ConceptExtractionSession
-      .find(query)
+    const sessions = await ConceptExtractionSession.find(query)
       .sort({ extractionDate: -1 })
       .limit(limit)
       .skip(offset)
@@ -81,10 +91,9 @@ export async function GET(request: NextRequest) {
         total: totalCount,
         limit,
         offset,
-        hasMore: offset + limit < totalCount
-      }
+        hasMore: offset + limit < totalCount,
+      },
     });
-
   } catch (error) {
     console.error("Error fetching extraction sessions:", error);
     return createErrorResponse(
@@ -113,8 +122,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { courseId, courseName, extractedConcepts, similarityMatches, extractionMetadata } = validationResult.data;
+    const {
+      courseId,
+      courseName,
+      extractedConcepts,
+      similarityMatches,
+      extractionMetadata,
+    } = validationResult.data;
 
+    // Check for duplicates before creating session
+    const duplicationResult = await duplicationDetector.checkForDuplicates(extractedConcepts);
+    
     // Generate unique session ID
     const sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
@@ -123,18 +141,32 @@ export async function POST(request: NextRequest) {
       courseId,
       courseName,
       extractionDate: new Date(),
-      status: 'extracted',
+      status: "extracted",
       extractedConcepts,
       similarityMatches,
       reviewProgress: {
         totalConcepts: extractedConcepts.length,
         reviewedCount: 0,
         decisions: [],
-        isDraft: true
+        isDraft: true,
       },
       extractionMetadata,
+      // Add duplication detection results
+      duplicateDetection: {
+        hasDuplicates: duplicationResult.hasDuplicates,
+        duplicates: duplicationResult.duplicates.map(duplicate => ({
+          extractedConceptName: duplicate.extractedConceptName,
+          existingConcept: {
+            id: duplicate.existingConcept.id,
+            name: duplicate.existingConcept.name,
+            category: duplicate.existingConcept.category,
+          },
+          duplicateType: duplicate.duplicateType,
+        })),
+        checkedAt: new Date(),
+      },
       createdAt: new Date(),
-      updatedAt: new Date()
+      updatedAt: new Date(),
     };
 
     // Validate complete session data
@@ -154,7 +186,6 @@ export async function POST(request: NextRequest) {
       "Extraction session created successfully",
       201
     );
-
   } catch (error) {
     console.error("Error creating extraction session:", error);
     return createErrorResponse(
@@ -173,21 +204,20 @@ export async function DELETE(request: NextRequest) {
     await dbConnect();
 
     const { searchParams } = new URL(request.url);
-    const olderThanDays = parseInt(searchParams.get('olderThanDays') || '30');
+    const olderThanDays = parseInt(searchParams.get("olderThanDays") || "30");
 
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - olderThanDays);
 
     const result = await ConceptExtractionSession.deleteMany({
-      status: 'archived',
-      updatedAt: { $lt: cutoffDate }
+      status: "archived",
+      updatedAt: { $lt: cutoffDate },
     });
 
     return createApiResponse(
       { deletedCount: result.deletedCount },
       `Cleaned up ${result.deletedCount} archived sessions`
     );
-
   } catch (error) {
     console.error("Error cleaning up extraction sessions:", error);
     return createErrorResponse(
