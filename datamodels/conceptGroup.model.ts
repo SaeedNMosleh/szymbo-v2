@@ -18,7 +18,7 @@ export interface IConceptGroup {
   
   // Metadata
   groupType: "vocabulary" | "grammar" | "mixed";
-  level: number;            // 1=leaf concepts, 2=mid-level, 3=top-level
+  level: number;            // 1=concepts, 2=groups, 3=super groups
   difficulty: QuestionLevel;
   isActive: boolean;
   createdDate: Date;

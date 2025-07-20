@@ -29,7 +29,7 @@ export async function GET() {
     // Fetch all active concepts
     const concepts = await Concept.find({ isActive: true }).sort({ name: 1 });
     
-    // Fetch all active questions
+    // Fetch all active questions from QuestionBank only
     const questions = await QuestionBank.find({ isActive: true });
     
     // Build coverage matrix
@@ -46,15 +46,20 @@ export async function GET() {
       coverageMap.set(concept.id, coverage);
     });
     
-    // Count questions for each concept and type (STRICT: Only valid concept IDs)
+    // Count questions for each concept and type
     questions.forEach(question => {
       question.targetConcepts.forEach((conceptId: string) => {
         const coverage = coverageMap.get(conceptId);
-        if (coverage && question.questionType in QuestionType) {
-          const questionType = question.questionType as QuestionType;
-          coverage[questionType] = (coverage[questionType] || 0) + 1;
-        } else if (!coverage) {
-          // Log invalid concept IDs for cleanup (strict architecture - no fallbacks)
+        if (coverage) {
+          // Check if questionType is valid
+          const questionTypeValues = Object.values(QuestionType);
+          if (questionTypeValues.includes(question.questionType as QuestionType)) {
+            const questionType = question.questionType as QuestionType;
+            coverage[questionType] = (coverage[questionType] || 0) + 1;
+          } else {
+            console.warn(`Question ${question.id} has invalid questionType: ${question.questionType}`);
+          }
+        } else {
           console.warn(`Question ${question.id} references invalid concept ID: ${conceptId}`);
         }
       });

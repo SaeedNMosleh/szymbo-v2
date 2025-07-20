@@ -19,10 +19,19 @@ export function BasicClozeQuestion({
   // Parse the question text to find cloze gaps
   const renderQuestionWithGaps = () => {
     const text = question.question;
-    const parts = text.split(/(\[.*?\])/g);
+    
+    // Handle both bracket format [gap] and underscore format _____
+    let parts: string[];
+    if (text.includes("[") && text.includes("]")) {
+      // Bracket format: [gap] or [word]
+      parts = text.split(/(\[.*?\])/g);
+    } else {
+      // Underscore format: _____ (3 or more underscores)
+      parts = text.split(/(_{3,})/g);
+    }
 
     return parts.map((part, index) => {
-      if (part.startsWith("[") && part.endsWith("]")) {
+      if ((part.startsWith("[") && part.endsWith("]")) || /^_{3,}$/.test(part)) {
         // This is a gap
         const gapId = `gap-${index}`;
         return (
@@ -44,22 +53,18 @@ export function BasicClozeQuestion({
   };
 
   return (
-    <Card>
-      <CardContent className="pt-6">
-        <div className="space-y-4">
-          <Label className="text-base font-medium">Fill in the blank:</Label>
+    <div className="space-y-4">
+      <Label className="text-base font-medium">Fill in the blank:</Label>
 
-          <div className="text-lg leading-relaxed">
-            {renderQuestionWithGaps()}
-          </div>
+      <div className="text-lg leading-relaxed">
+        {renderQuestionWithGaps()}
+      </div>
 
-          <div className="text-sm text-gray-600">
-            <p>
-              Complete the sentence by filling in the missing word or phrase.
-            </p>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
+      <div className="text-sm text-gray-600">
+        <p>
+          Complete the sentence by filling in the missing word or phrase.
+        </p>
+      </div>
+    </div>
   );
 }

@@ -22,8 +22,10 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { QuestionType, QuestionLevel } from "@/lib/enum";
 import { IConcept } from "@/datamodels/concept.model";
+import { IConceptGroup } from "@/datamodels/conceptGroup.model";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
 interface ConceptSelection {
   conceptId: string;
@@ -31,6 +33,16 @@ interface ConceptSelection {
   category: string;
   difficulty: string;
   selected: boolean;
+}
+
+interface GroupSelection {
+  groupId: string;
+  name: string;
+  groupType: string;
+  level: number;
+  difficulty: string;
+  selected: boolean;
+  memberConcepts: string[];
 }
 
 interface QuestionTypeQuantity {
@@ -54,6 +66,9 @@ export default function QuestionGenerationPlanner({
 }: QuestionGenerationPlannerProps) {
   const [concepts, setConcepts] = useState<ConceptSelection[]>([]);
   const [selectedConcepts, setSelectedConcepts] = useState<string[]>([]);
+  const [groups, setGroups] = useState<GroupSelection[]>([]);
+  const [selectedGroups, setSelectedGroups] = useState<string[]>([]);
+  const [selectionMode, setSelectionMode] = useState<"concepts" | "groups">("concepts");
   const [questionTypes, setQuestionTypes] = useState<QuestionTypeQuantity[]>(
     Object.values(QuestionType).map((type) => ({ type, quantity: 0 }))
   );
@@ -69,6 +84,7 @@ export default function QuestionGenerationPlanner({
 
   useEffect(() => {
     fetchConcepts();
+    fetchGroups();
     checkDraftCount();
   }, []);
 
@@ -93,6 +109,29 @@ export default function QuestionGenerationPlanner({
       setError("Failed to load concepts");
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const fetchGroups = async () => {
+    try {
+      const response = await fetch("/api/concept-groups");
+      if (!response.ok) throw new Error("Failed to fetch groups");
+
+      const data = await response.json();
+      const groups = data.data || [];
+      const groupSelections = groups.map((group: IConceptGroup) => ({
+        groupId: group.id,
+        name: group.name,
+        groupType: group.groupType,
+        level: group.level,
+        difficulty: group.difficulty,
+        selected: false,
+        memberConcepts: group.memberConcepts || [],
+      }));
+
+      setGroups(groupSelections);
+    } catch {
+      setError("Failed to load groups");
     }
   };
 
@@ -160,6 +199,24 @@ export default function QuestionGenerationPlanner({
     });
   };
 
+  const handleGroupToggle = (groupId: string) => {
+    setGroups((prev) =>
+      prev.map((group) =>
+        group.groupId === groupId
+          ? { ...group, selected: !group.selected }
+          : group
+      )
+    );
+
+    setSelectedGroups((prev) => {
+      if (prev.includes(groupId)) {
+        return prev.filter((id) => id !== groupId);
+      } else {
+        return [...prev, groupId];
+      }
+    });
+  };
+
   const handleQuantityChange = (type: QuestionType, quantity: number) => {
     setQuestionTypes((prev) =>
       prev.map((qt) =>
@@ -169,14 +226,26 @@ export default function QuestionGenerationPlanner({
   };
 
   const handleSelectAll = () => {
-    const allSelected = selectedConcepts.length === concepts.length;
-    if (allSelected) {
-      setSelectedConcepts([]);
-      setConcepts((prev) => prev.map((c) => ({ ...c, selected: false })));
+    if (selectionMode === "concepts") {
+      const allSelected = selectedConcepts.length === concepts.length;
+      if (allSelected) {
+        setSelectedConcepts([]);
+        setConcepts((prev) => prev.map((c) => ({ ...c, selected: false })));
+      } else {
+        const allIds = concepts.map((c) => c.conceptId);
+        setSelectedConcepts(allIds);
+        setConcepts((prev) => prev.map((c) => ({ ...c, selected: true })));
+      }
     } else {
-      const allIds = concepts.map((c) => c.conceptId);
-      setSelectedConcepts(allIds);
-      setConcepts((prev) => prev.map((c) => ({ ...c, selected: true })));
+      const allSelected = selectedGroups.length === groups.length;
+      if (allSelected) {
+        setSelectedGroups([]);
+        setGroups((prev) => prev.map((g) => ({ ...g, selected: false })));
+      } else {
+        const allIds = groups.map((g) => g.groupId);
+        setSelectedGroups(allIds);
+        setGroups((prev) => prev.map((g) => ({ ...g, selected: true })));
+      }
     }
   };
 
@@ -185,9 +254,27 @@ export default function QuestionGenerationPlanner({
   };
 
   const handleGenerate = async () => {
-    if (selectedConcepts.length === 0) {
-      setError("Please select at least one concept");
-      return;
+    let conceptIds: string[] = [];
+    
+    if (selectionMode === "concepts") {
+      if (selectedConcepts.length === 0) {
+        setError("Please select at least one concept");
+        return;
+      }
+      conceptIds = selectedConcepts;
+    } else {
+      if (selectedGroups.length === 0) {
+        setError("Please select at least one group");
+        return;
+      }
+      // Get concept IDs from selected groups
+      const selectedGroupsData = groups.filter(g => selectedGroups.includes(g.groupId));
+      conceptIds = selectedGroupsData.flatMap(g => g.memberConcepts);
+      
+      if (conceptIds.length === 0) {
+        setError("Selected groups contain no concepts");
+        return;
+      }
     }
 
     if (getTotalQuestions() === 0) {
@@ -205,7 +292,7 @@ export default function QuestionGenerationPlanner({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          conceptIds: selectedConcepts,
+          conceptIds,
           questionTypes: activeQuestionTypes,
           difficulty,
           specialInstructions,
@@ -237,7 +324,9 @@ export default function QuestionGenerationPlanner({
       // Don't reset form immediately - let user see the success message
       setTimeout(() => {
         setSelectedConcepts([]);
+        setSelectedGroups([]);
         setConcepts((prev) => prev.map((c) => ({ ...c, selected: false })));
+        setGroups((prev) => prev.map((g) => ({ ...g, selected: false })));
         setQuestionTypes((prev) => prev.map((qt) => ({ ...qt, quantity: 0 })));
         setSpecialInstructions("");
       }, 3000);
@@ -283,53 +372,105 @@ export default function QuestionGenerationPlanner({
         </Alert>
       )}
 
-      {/* Concept Selection */}
+      {/* Selection Tabs */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
-            Concept Selection
+            <span>Content Selection</span>
             <Button variant="outline" size="sm" onClick={handleSelectAll}>
-              {selectedConcepts.length === concepts.length
+              {selectionMode === "concepts"
+                ? selectedConcepts.length === concepts.length
+                  ? "Deselect All"
+                  : "Select All"
+                : selectedGroups.length === groups.length
                 ? "Deselect All"
                 : "Select All"}
             </Button>
           </CardTitle>
           <CardDescription>
-            Choose concepts to generate questions for ({selectedConcepts.length}{" "}
-            selected)
+            Choose {selectionMode === "concepts" ? "concepts" : "groups and supergroups"} to generate questions from{" "}
+            ({selectionMode === "concepts" ? selectedConcepts.length : selectedGroups.length} selected)
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid max-h-60 grid-cols-1 gap-3 overflow-y-auto md:grid-cols-2 lg:grid-cols-3">
-            {concepts.map((concept) => (
-              <div
-                key={concept.conceptId}
-                className="flex items-center space-x-2"
-              >
-                <Checkbox
-                  id={concept.conceptId}
-                  checked={concept.selected}
-                  onCheckedChange={() => handleConceptToggle(concept.conceptId)}
-                />
-                <Label
-                  htmlFor={concept.conceptId}
-                  className="flex-1 cursor-pointer text-sm"
-                >
-                  <div className="flex flex-col">
-                    <span>{concept.name}</span>
-                    <div className="mt-1 flex gap-1">
-                      <Badge variant="outline" className="text-xs">
-                        {concept.category}
-                      </Badge>
-                      <Badge variant="secondary" className="text-xs">
-                        {concept.difficulty}
-                      </Badge>
-                    </div>
+          <Tabs value={selectionMode} onValueChange={(value) => setSelectionMode(value as "concepts" | "groups")}>
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="concepts">Concept Selection</TabsTrigger>
+              <TabsTrigger value="groups">Group Selection</TabsTrigger>
+            </TabsList>
+            
+            <TabsContent value="concepts" className="mt-4">
+              <div className="grid max-h-60 grid-cols-1 gap-3 overflow-y-auto md:grid-cols-2 lg:grid-cols-3">
+                {concepts.map((concept) => (
+                  <div
+                    key={concept.conceptId}
+                    className="flex items-center space-x-2"
+                  >
+                    <Checkbox
+                      id={concept.conceptId}
+                      checked={concept.selected}
+                      onCheckedChange={() => handleConceptToggle(concept.conceptId)}
+                    />
+                    <Label
+                      htmlFor={concept.conceptId}
+                      className="flex-1 cursor-pointer text-sm"
+                    >
+                      <div className="flex flex-col">
+                        <span>{concept.name}</span>
+                        <div className="mt-1 flex gap-1">
+                          <Badge variant="outline" className="text-xs">
+                            {concept.category}
+                          </Badge>
+                          <Badge variant="secondary" className="text-xs">
+                            {concept.difficulty}
+                          </Badge>
+                        </div>
+                      </div>
+                    </Label>
                   </div>
-                </Label>
+                ))}
               </div>
-            ))}
-          </div>
+            </TabsContent>
+            
+            <TabsContent value="groups" className="mt-4">
+              <div className="grid max-h-60 grid-cols-1 gap-3 overflow-y-auto md:grid-cols-2">
+                {groups.map((group) => (
+                  <div
+                    key={group.groupId}
+                    className="flex items-center space-x-2"
+                  >
+                    <Checkbox
+                      id={group.groupId}
+                      checked={group.selected}
+                      onCheckedChange={() => handleGroupToggle(group.groupId)}
+                    />
+                    <Label
+                      htmlFor={group.groupId}
+                      className="flex-1 cursor-pointer text-sm"
+                    >
+                      <div className="flex flex-col">
+                        <span>{group.name}</span>
+                        <div className="mt-1 flex gap-1">
+                          <Badge variant="outline" className="text-xs">
+                            {group.groupType}
+                          </Badge>
+                          <Badge variant="secondary" className="text-xs">
+                            Level {group.level}
+                          </Badge>
+                          <Badge variant="default" className="text-xs">
+                            {group.difficulty}
+                          </Badge>
+                          <Badge variant="outline" className="text-xs">
+                            {group.memberConcepts.length} concepts
+                          </Badge>
+                        </div>
+                      </div>
+                    </Label>
+                  </div>
+                ))}
+              </div>
+            </TabsContent>
+          </Tabs>
         </CardContent>
       </Card>
 
@@ -430,7 +571,7 @@ export default function QuestionGenerationPlanner({
           onClick={handleGenerate}
           disabled={
             isGenerating ||
-            selectedConcepts.length === 0 ||
+            (selectionMode === "concepts" ? selectedConcepts.length === 0 : selectedGroups.length === 0) ||
             getTotalQuestions() === 0
           }
           size="lg"

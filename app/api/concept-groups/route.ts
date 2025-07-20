@@ -50,13 +50,13 @@ export async function GET(request: NextRequest) {
 
     const groupsData = groups.map(group => group.toObject());
 
-    // If hierarchy requested, build tree structure
+    // If hierarchy requested, build tree structure but still return flat data
+    // The frontend handles its own organization logic
     if (includeHierarchy) {
-      const hierarchyData = buildHierarchy(groupsData);
       return NextResponse.json(
         {
           success: true,
-          data: hierarchyData,
+          data: groupsData,
           total: groupsData.length,
         },
         { status: 200 }

@@ -29,6 +29,7 @@ export function QuestionRenderer(props: QuestionComponentProps) {
   const { question } = props;
 
   const renderQuestionComponent = () => {
+
     try {
       switch (question.questionType) {
         case QuestionType.BASIC_CLOZE:
@@ -103,7 +104,7 @@ export function QuestionRenderer(props: QuestionComponentProps) {
       }
     } catch (error) {
       console.error(
-        `Error rendering question type ${question.questionType}:`,
+        `❌ Error rendering question type ${question.questionType}:`,
         error
       );
 

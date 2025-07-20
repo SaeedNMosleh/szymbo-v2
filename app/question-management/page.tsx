@@ -14,6 +14,7 @@ import QuestionGenerationPlanner from "@/components/Features/questionManagement/
 import QuestionDraftReview from "@/components/Features/questionManagement/QuestionDraftReview";
 import QuestionCoverageDashboard from "@/components/Features/questionManagement/QuestionCoverageDashboard";
 import QuestionEditor from "@/components/Features/questionManagement/QuestionEditor";
+import QuestionBankManager from "@/components/Features/questionManagement/QuestionBankManager";
 
 export default function QuestionManagementPage() {
   const [activeTab, setActiveTab] = useState("planner");
@@ -42,11 +43,12 @@ export default function QuestionManagementPage() {
           onValueChange={setActiveTab}
           className="space-y-4"
         >
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="planner">Generation Planner</TabsTrigger>
             <TabsTrigger value="drafts">Draft Review</TabsTrigger>
             <TabsTrigger value="coverage">Coverage Dashboard</TabsTrigger>
             <TabsTrigger value="editor">Manual Question Adding</TabsTrigger>
+            <TabsTrigger value="management">Question Management</TabsTrigger>
           </TabsList>
 
           <TabsContent value="planner" className="space-y-4">
@@ -110,6 +112,20 @@ export default function QuestionManagementPage() {
               </CardHeader>
               <CardContent>
                 <QuestionEditor onQuestionSaved={handleRefreshData} />
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="management" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Question Management</CardTitle>
+                <CardDescription>
+                  Browse, search, edit, and manage all questions in the question bank
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <QuestionBankManager />
               </CardContent>
             </Card>
           </TabsContent>

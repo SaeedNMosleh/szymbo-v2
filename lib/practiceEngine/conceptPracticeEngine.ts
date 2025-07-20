@@ -678,6 +678,35 @@ export class ConceptPracticeEngine {
   }
 
   /**
+   * Get drill concepts by multiple courses (for multi-course drilling)
+   */
+  async getDrillConceptsByCourses(
+    courseIds: number[],
+    maxConcepts: number = 10
+  ): Promise<string[]> {
+    try {
+      const { default: CourseConcept } = await import(
+        "@/datamodels/courseConcept.model"
+      );
+
+      const courseConceptMappings = await CourseConcept.find({
+        courseId: { $in: courseIds },
+        isActive: true,
+      })
+        .sort({ confidence: -1 })
+        .limit(maxConcepts);
+
+      return courseConceptMappings.map((cc) => cc.conceptId);
+    } catch (error) {
+      console.error(
+        `❌ Error getting drill concepts for courses ${courseIds.join(", ")}:`,
+        error
+      );
+      return [];
+    }
+  }
+
+  /**
    * Get drill concepts by group (for manual group practice)
    */
   async getDrillConceptsByGroup(
@@ -938,6 +967,66 @@ export class ConceptPracticeEngine {
     }
 
     return QuestionLevel.A1;
+  }
+
+  /**
+   * Detect appropriate question type based on question content patterns
+   */
+  private detectQuestionType(questionText: string): QuestionType {
+    const text = questionText.toLowerCase().trim();
+    
+    // Translation patterns
+    if (text.includes("translate") || text.includes("przetłumacz") || 
+        text.includes("how do you say") || text.includes("jak powiedzieć")) {
+      const type = text.includes("polish") || text.includes("polski") ? 
+        QuestionType.TRANSLATION_EN : QuestionType.TRANSLATION_PL;
+      console.log(`🎯 Question type detection: "${text.substring(0, 50)}..." -> ${type} (translation)`);
+      return type;
+    }
+    
+    // Fill-in-the-blank / Cloze patterns
+    if (text.includes("___") || text.includes("[") || text.includes("blank") || 
+        text.includes("complete") || text.includes("uzupełnij")) {
+      // Multiple blanks = multi-cloze, single blank = basic cloze
+      const blankCount = (text.match(/___|\[.*?\]/g) || []).length;
+      const type = blankCount > 1 ? QuestionType.MULTI_CLOZE : QuestionType.BASIC_CLOZE;
+      console.log(`🎯 Question type detection: "${text.substring(0, 50)}..." -> ${type} (cloze, ${blankCount} blanks)`);
+      return type;
+    }
+    
+    // Multiple choice patterns
+    if (text.includes("choose") || text.includes("select") || text.includes("wybierz") ||
+        text.includes("a)") || text.includes("1)") || text.includes("which")) {
+      return QuestionType.VOCAB_CHOICE;
+    }
+    
+    // Conjugation patterns
+    if (text.includes("conjugate") || text.includes("odmień") || text.includes("verb form") ||
+        text.includes("correct form") || text.includes("właściwą formę")) {
+      return QuestionType.CASE_TRANSFORM;
+    }
+    
+    // Word arrangement patterns
+    if (text.includes("arrange") || text.includes("order") || text.includes("ułóż") ||
+        text.includes("put in order") || text.includes("rearrange")) {
+      return QuestionType.WORD_ARRANGEMENT;
+    }
+    
+    // Sentence transformation patterns
+    if (text.includes("rewrite") || text.includes("transform") || text.includes("przepisz") ||
+        text.includes("change") || text.includes("convert")) {
+      return QuestionType.SENTENCE_TRANSFORM;
+    }
+    
+    // Cultural context patterns
+    if (text.includes("culture") || text.includes("tradition") || text.includes("kultura") ||
+        text.includes("customs") || text.includes("społeczeństwo")) {
+      return QuestionType.CULTURAL_CONTEXT;
+    }
+    
+    // Default to Q&A for open-ended questions
+    console.log(`🎯 Question type detection: "${text}" -> Q_A (default)`);
+    return QuestionType.Q_A;
   }
 
   /**

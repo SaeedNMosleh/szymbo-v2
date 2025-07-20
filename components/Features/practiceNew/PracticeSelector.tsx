@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 
 interface PracticeSelectorProps {
-  onModeSelect: (mode: PracticeMode, options?: { drillType?: "weakness" | "course"; courseId?: number }) => void;
+  onModeSelect: (mode: PracticeMode, options?: { drillType?: "weakness" | "course"; courseIds?: number[]; conceptIds?: string[] }) => void;
   isLoading: boolean;
 }
 
@@ -294,7 +294,7 @@ export function PracticeSelector({
                       )}
                     </Button>
                     <Button
-                      onClick={() => onModeSelect(option.mode)}
+                      onClick={() => onModeSelect(option.mode, { drillType: "course" })}
                       disabled={isLoading || isDisabled}
                       variant="outline"
                       className="w-full"

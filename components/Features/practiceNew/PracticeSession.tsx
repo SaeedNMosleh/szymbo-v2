@@ -18,6 +18,39 @@ import { IQuestionBank } from "@/datamodels/questionBank.model";
 import { ICourse } from "@/datamodels/course.model";
 import { ArrowLeft, AlertCircle } from "lucide-react";
 
+// Helper function to safely map string questionType to enum
+function mapQuestionType(questionType: string): QuestionType {
+  // Direct enum value lookup
+  const enumValues = Object.values(QuestionType) as string[];
+  if (enumValues.includes(questionType)) {
+    return questionType as QuestionType;
+  }
+
+  // Handle potential mismatches or legacy formats
+  const typeMap: Record<string, QuestionType> = {
+    "q_a": QuestionType.Q_A,
+    "qa": QuestionType.Q_A,
+    "question_answer": QuestionType.Q_A,
+    "basic_cloze": QuestionType.BASIC_CLOZE,
+    "multi_cloze": QuestionType.MULTI_CLOZE,
+    "vocab_choice": QuestionType.VOCAB_CHOICE,
+    "multi_select": QuestionType.MULTI_SELECT,
+    "case_transform": QuestionType.CASE_TRANSFORM,
+    "translation_pl": QuestionType.TRANSLATION_PL,
+    "translation_en": QuestionType.TRANSLATION_EN,
+  };
+
+  const mapped = typeMap[questionType.toLowerCase()];
+  if (mapped) {
+    console.warn(`Mapped questionType "${questionType}" to "${mapped}"`);
+    return mapped;
+  }
+
+  // Default fallback
+  console.warn(`Unknown questionType "${questionType}", falling back to Q_A`);
+  return QuestionType.Q_A;
+}
+
 interface Question {
   id: string;
   question: string;
@@ -319,7 +352,7 @@ export function PracticeSession({
           id: currentQuestion.id,
           question: currentQuestion.question,
           correctAnswer: newResult.correctAnswer,
-          questionType: currentQuestion.questionType as QuestionType,
+          questionType: mapQuestionType(currentQuestion.questionType),
           targetConcepts: currentQuestion.targetConcepts,
           difficulty: currentQuestion.difficulty as QuestionLevel,
           source: "generated",
@@ -514,7 +547,7 @@ export function PracticeSession({
             question={{
               id: currentQuestion.id,
               question: currentQuestion.question,
-              questionType: currentQuestion.questionType as QuestionType,
+              questionType: mapQuestionType(currentQuestion.questionType),
               difficulty: currentQuestion.difficulty as QuestionLevel,
               targetConcepts: currentQuestion.targetConcepts,
               correctAnswer: currentQuestion.correctAnswer,

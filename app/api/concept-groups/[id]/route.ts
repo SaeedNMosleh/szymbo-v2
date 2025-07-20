@@ -15,6 +15,7 @@ const updateGroupSchema = z.object({
   groupType: z.enum(["vocabulary", "grammar", "mixed"]).optional(),
   level: z.number().min(1).max(5).optional(),
   difficulty: z.string().optional(),
+  parentGroup: z.string().nullable().optional(),
 });
 
 // Request validation schema for removing concepts from group
@@ -220,7 +221,14 @@ export async function DELETE(
   try {
     await connectToDatabase();
     const resolvedParams = await params;
-    const body = await request.json();
+    
+    // Try to parse body, but handle case where no body is sent
+    let body;
+    try {
+      body = await request.json();
+    } catch {
+      body = {}; // Empty body for simple group deletion
+    }
 
     // If conceptIds are provided, remove specific concepts from group
     if (body.conceptIds) {
