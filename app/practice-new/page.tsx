@@ -91,7 +91,9 @@ function WeakConceptSelector({
 
   const fetchWeakConcepts = async () => {
     try {
-      const response = await fetch("/api/practice-new/concept-due?includeDetails=true&userId=default");
+      const response = await fetch(
+        "/api/practice-new/concept-due?includeDetails=true&userId=default"
+      );
       if (!response.ok) {
         throw new Error("Failed to fetch weak concepts");
       }
@@ -127,9 +129,9 @@ function WeakConceptSelector({
   };
 
   const toggleConceptSelection = (conceptId: string) => {
-    setSelectedConcepts(prev => 
-      prev.includes(conceptId) 
-        ? prev.filter(id => id !== conceptId)
+    setSelectedConcepts((prev) =>
+      prev.includes(conceptId)
+        ? prev.filter((id) => id !== conceptId)
         : [...prev, conceptId]
     );
   };
@@ -194,49 +196,70 @@ function WeakConceptSelector({
           </Button>
           <div className="text-center">
             <h2 className="text-xl font-semibold">Select Weak Concepts</h2>
-            <p className="text-sm text-gray-600">Choose concepts that need practice</p>
+            <p className="text-sm text-gray-600">
+              Choose concepts that need practice
+            </p>
           </div>
         </div>
 
         {weakConcepts.length === 0 ? (
           <div className="text-center">
-            <p className="mb-4 text-gray-600">No weak concepts found. Great progress!</p>
+            <p className="mb-4 text-gray-600">
+              No weak concepts found. Great progress!
+            </p>
             <Button onClick={onBack}>Back to Practice Modes</Button>
           </div>
         ) : (
           <>
-            <div className="space-y-3 mb-6 max-h-96 overflow-y-auto">
+            <div className="mb-6 max-h-96 space-y-3 overflow-y-auto">
               {weakConcepts.map((conceptData) => {
-                const isSelected = selectedConcepts.includes(conceptData.concept.id);
+                const isSelected = selectedConcepts.includes(
+                  conceptData.concept.id
+                );
                 const successRate = conceptData.progress?.successRate || 0;
-                const lastPracticed = conceptData.progress?.lastPracticed || new Date();
+                const lastPracticed =
+                  conceptData.progress?.lastPracticed || new Date();
                 return (
                   <div
                     key={conceptData.concept.id}
                     className={`cursor-pointer rounded-lg border p-4 transition-colors ${
-                      isSelected 
-                        ? 'border-blue-500 bg-blue-50' 
-                        : 'border-gray-200 hover:bg-gray-50'
+                      isSelected
+                        ? "border-blue-500 bg-blue-50"
+                        : "border-gray-200 hover:bg-gray-50"
                     }`}
-                    onClick={() => toggleConceptSelection(conceptData.concept.id)}
+                    onClick={() =>
+                      toggleConceptSelection(conceptData.concept.id)
+                    }
                   >
                     <div className="flex items-start justify-between">
                       <div className="flex items-start gap-3">
                         <input
                           type="checkbox"
                           checked={isSelected}
-                          onChange={() => toggleConceptSelection(conceptData.concept.id)}
+                          onChange={() =>
+                            toggleConceptSelection(conceptData.concept.id)
+                          }
                           className="mt-1"
                           onClick={(e) => e.stopPropagation()}
                         />
                         <div className="flex-1">
-                          <h3 className="font-medium">{conceptData.concept.name}</h3>
+                          <h3 className="font-medium">
+                            {conceptData.concept.name}
+                          </h3>
                           {conceptData.concept.description && (
-                            <p className="text-sm text-gray-600 mt-1">{conceptData.concept.description}</p>
+                            <p className="mt-1 text-sm text-gray-600">
+                              {conceptData.concept.description}
+                            </p>
                           )}
                           <div className="mt-2 flex flex-wrap gap-2">
-                            <span className={`rounded px-2 py-1 text-xs ${getWeaknessColor(successRate, conceptData.isOverdue)}`}>
-                              {getWeaknessText(successRate, conceptData.isOverdue)} ({Math.round(successRate * 100)}%)
+                            <span
+                              className={`rounded px-2 py-1 text-xs ${getWeaknessColor(successRate, conceptData.isOverdue)}`}
+                            >
+                              {getWeaknessText(
+                                successRate,
+                                conceptData.isOverdue
+                              )}{" "}
+                              ({Math.round(successRate * 100)}%)
                             </span>
                             <span className="rounded bg-gray-100 px-2 py-1 text-xs text-gray-600">
                               Priority: {conceptData.priority.toFixed(1)}
@@ -250,23 +273,26 @@ function WeakConceptSelector({
                               </span>
                             )}
                           </div>
-                          {conceptData.concept.tags && conceptData.concept.tags.length > 0 && (
-                            <div className="mt-1 flex flex-wrap gap-1">
-                              {conceptData.concept.tags.slice(0, 3).map((tag, idx) => (
-                                <span
-                                  key={idx}
-                                  className="rounded bg-blue-100 px-1 py-0.5 text-xs text-blue-700"
-                                >
-                                  {tag}
-                                </span>
-                              ))}
-                              {conceptData.concept.tags.length > 3 && (
-                                <span className="rounded bg-gray-100 px-1 py-0.5 text-xs text-gray-600">
-                                  +{conceptData.concept.tags.length - 3}
-                                </span>
-                              )}
-                            </div>
-                          )}
+                          {conceptData.concept.tags &&
+                            conceptData.concept.tags.length > 0 && (
+                              <div className="mt-1 flex flex-wrap gap-1">
+                                {conceptData.concept.tags
+                                  .slice(0, 3)
+                                  .map((tag, idx) => (
+                                    <span
+                                      key={idx}
+                                      className="rounded bg-blue-100 px-1 py-0.5 text-xs text-blue-700"
+                                    >
+                                      {tag}
+                                    </span>
+                                  ))}
+                                {conceptData.concept.tags.length > 3 && (
+                                  <span className="rounded bg-gray-100 px-1 py-0.5 text-xs text-gray-600">
+                                    +{conceptData.concept.tags.length - 3}
+                                  </span>
+                                )}
+                              </div>
+                            )}
                         </div>
                       </div>
                       <div className="text-right">
@@ -274,7 +300,7 @@ function WeakConceptSelector({
                           Last: {new Date(lastPracticed).toLocaleDateString()}
                         </div>
                         {conceptData.isOverdue && (
-                          <div className="text-xs text-red-600 font-medium">
+                          <div className="text-xs font-medium text-red-600">
                             {conceptData.daysSinceReview} days overdue
                           </div>
                         )}
@@ -284,12 +310,13 @@ function WeakConceptSelector({
                 );
               })}
             </div>
-            
+
             <div className="flex items-center justify-between">
               <div className="text-sm text-gray-600">
-                {selectedConcepts.length} concept{selectedConcepts.length !== 1 ? 's' : ''} selected
+                {selectedConcepts.length} concept
+                {selectedConcepts.length !== 1 ? "s" : ""} selected
               </div>
-              <Button 
+              <Button
                 onClick={handleStartPractice}
                 disabled={selectedConcepts.length === 0 || isLoading}
                 className="bg-red-600 hover:bg-red-700"
@@ -377,9 +404,9 @@ function CourseSelector({
   }
 
   const toggleCourseSelection = (courseId: number) => {
-    setSelectedCourses(prev => 
-      prev.includes(courseId) 
-        ? prev.filter(id => id !== courseId)
+    setSelectedCourses((prev) =>
+      prev.includes(courseId)
+        ? prev.filter((id) => id !== courseId)
         : [...prev, courseId]
     );
   };
@@ -411,16 +438,16 @@ function CourseSelector({
           </div>
         ) : (
           <>
-            <div className="space-y-3 mb-6">
+            <div className="mb-6 space-y-3">
               {courses.map((course) => {
                 const isSelected = selectedCourses.includes(course.courseId);
                 return (
                   <div
                     key={course.courseId}
                     className={`cursor-pointer rounded-lg border p-4 transition-colors ${
-                      isSelected 
-                        ? 'border-blue-500 bg-blue-50' 
-                        : 'border-gray-200 hover:bg-gray-50'
+                      isSelected
+                        ? "border-blue-500 bg-blue-50"
+                        : "border-gray-200 hover:bg-gray-50"
                     }`}
                     onClick={() => toggleCourseSelection(course.courseId)}
                   >
@@ -429,7 +456,9 @@ function CourseSelector({
                         <input
                           type="checkbox"
                           checked={isSelected}
-                          onChange={() => toggleCourseSelection(course.courseId)}
+                          onChange={() =>
+                            toggleCourseSelection(course.courseId)
+                          }
                           className="mt-1"
                           onClick={(e) => e.stopPropagation()}
                         />
@@ -473,12 +502,13 @@ function CourseSelector({
                 );
               })}
             </div>
-            
+
             <div className="flex items-center justify-between">
               <div className="text-sm text-gray-600">
-                {selectedCourses.length} course{selectedCourses.length !== 1 ? 's' : ''} selected
+                {selectedCourses.length} course
+                {selectedCourses.length !== 1 ? "s" : ""} selected
               </div>
-              <Button 
+              <Button
                 onClick={handleStartPractice}
                 disabled={selectedCourses.length === 0 || isLoading}
                 className="bg-blue-600 hover:bg-blue-700"
@@ -495,12 +525,21 @@ function CourseSelector({
 
 export default function PracticeNewPage() {
   const [selectedMode, setSelectedMode] = useState<PracticeMode | null>(null);
-  const [drillSubmode, setDrillSubmode] = useState<"weakness" | "course" | null>(null);
+  const [drillSubmode, setDrillSubmode] = useState<
+    "weakness" | "course" | null
+  >(null);
   const [sessionData, setSessionData] = useState<SessionData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleModeSelect = async (mode: PracticeMode, options?: { drillType?: "weakness" | "course"; courseIds?: number[]; conceptIds?: string[] }) => {
+  const handleModeSelect = async (
+    mode: PracticeMode,
+    options?: {
+      drillType?: "weakness" | "course";
+      courseIds?: number[];
+      conceptIds?: string[];
+    }
+  ) => {
     // For drill mode, if no drillType provided, show drill selection
     if (mode === PracticeMode.DRILL && !options?.drillType) {
       setSelectedMode(mode);
@@ -508,14 +547,22 @@ export default function PracticeNewPage() {
     }
 
     // If drill weakness mode without concept selection, show concept selector
-    if (mode === PracticeMode.DRILL && options?.drillType === "weakness" && !options?.conceptIds) {
+    if (
+      mode === PracticeMode.DRILL &&
+      options?.drillType === "weakness" &&
+      !options?.conceptIds
+    ) {
       setSelectedMode(mode);
       setDrillSubmode("weakness");
       return;
     }
 
     // If drill course mode without course selection, show course selector
-    if (mode === PracticeMode.DRILL && options?.drillType === "course" && !options?.courseIds) {
+    if (
+      mode === PracticeMode.DRILL &&
+      options?.drillType === "course" &&
+      !options?.courseIds
+    ) {
       setSelectedMode(mode);
       setDrillSubmode("course");
       return;
@@ -535,7 +582,11 @@ export default function PracticeNewPage() {
 
       if (mode === PracticeMode.DRILL && options?.drillType) {
         requestBody.drillType = options.drillType;
-        if (options.drillType === "course" && options.courseIds && options.courseIds.length > 0) {
+        if (
+          options.drillType === "course" &&
+          options.courseIds &&
+          options.courseIds.length > 0
+        ) {
           // For now, use the first course ID for compatibility
           requestBody.courseId = options.courseIds[0];
         }
@@ -621,25 +672,37 @@ export default function PracticeNewPage() {
           </>
         )}
 
-        {selectedMode === PracticeMode.DRILL && drillSubmode === "course" && !sessionData && !isLoading && (
-          <CourseSelector
-            onCourseSelect={(courseIds) =>
-              handleModeSelect(PracticeMode.DRILL, { drillType: "course", courseIds })
-            }
-            onBack={handleBackToModes}
-            isLoading={isLoading}
-          />
-        )}
+        {selectedMode === PracticeMode.DRILL &&
+          drillSubmode === "course" &&
+          !sessionData &&
+          !isLoading && (
+            <CourseSelector
+              onCourseSelect={(courseIds) =>
+                handleModeSelect(PracticeMode.DRILL, {
+                  drillType: "course",
+                  courseIds,
+                })
+              }
+              onBack={handleBackToModes}
+              isLoading={isLoading}
+            />
+          )}
 
-        {selectedMode === PracticeMode.DRILL && drillSubmode === "weakness" && !sessionData && !isLoading && (
-          <WeakConceptSelector
-            onConceptSelect={(conceptIds) =>
-              handleModeSelect(PracticeMode.DRILL, { drillType: "weakness", conceptIds })
-            }
-            onBack={handleBackToModes}
-            isLoading={isLoading}
-          />
-        )}
+        {selectedMode === PracticeMode.DRILL &&
+          drillSubmode === "weakness" &&
+          !sessionData &&
+          !isLoading && (
+            <WeakConceptSelector
+              onConceptSelect={(conceptIds) =>
+                handleModeSelect(PracticeMode.DRILL, {
+                  drillType: "weakness",
+                  conceptIds,
+                })
+              }
+              onBack={handleBackToModes}
+              isLoading={isLoading}
+            />
+          )}
 
         {isLoading && (
           <Card>

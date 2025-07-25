@@ -5,7 +5,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -19,7 +18,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Wand2,
   Tags,
-  ArrowRight,
   CheckCircle,
   AlertCircle,
   Eye,
@@ -30,10 +28,7 @@ import { QuestionLevel } from "@/lib/enum";
 
 // Types for bulk operations
 interface BulkOperation {
-  type:
-    | "tag-assignment"
-    | "category-change"
-    | "difficulty-change";
+  type: "tag-assignment" | "category-change" | "difficulty-change";
   conceptIds: string[];
   parameters: Record<string, unknown>;
   preview: boolean;
@@ -46,7 +41,6 @@ interface OperationChange {
   applied: boolean;
   error?: string;
 }
-
 
 interface BulkOperationResult {
   operation: string;
@@ -87,9 +81,7 @@ export const BulkOperationsPanel: React.FC<BulkOperationsPanelProps> = ({
 }) => {
   const [activeOperation, setActiveOperation] =
     useState<BulkOperation["type"]>("tag-assignment");
-  const [operationParams, setOperationParams] = useState<OperationParams>(
-    {}
-  );
+  const [operationParams, setOperationParams] = useState<OperationParams>({});
   const [isLoading, setIsLoading] = useState(false);
   const [lastResult, setLastResult] = useState<BulkOperationResult | null>(
     null
@@ -244,7 +236,6 @@ export const BulkOperationsPanel: React.FC<BulkOperationsPanelProps> = ({
     );
   };
 
-
   // Render operation results
   const renderResults = () => {
     if (!lastResult) return null;
@@ -317,7 +308,6 @@ export const BulkOperationsPanel: React.FC<BulkOperationsPanelProps> = ({
                 </ScrollArea>
               </div>
             )}
-
 
             {/* Actions */}
             {lastResult.preview && (

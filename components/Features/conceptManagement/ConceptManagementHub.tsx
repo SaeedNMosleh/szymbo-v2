@@ -80,10 +80,16 @@ export const ConceptManagementHub: React.FC<ConceptManagementHubProps> = ({
 
       if (data.success) {
         setConcepts(data.data);
-        
+
         // Extract available tags for merge dialog
-        const allTags = data.data.flatMap((concept: ConceptSummary) => concept.tags || []);
-        const uniqueTags = [...new Set(allTags.filter((tag: string) => tag.trim() !== ''))];
+        const allTags = data.data.flatMap(
+          (concept: ConceptSummary) => concept.tags || []
+        );
+        const uniqueTags: string[] = [
+          ...new Set<string>(
+            allTags.filter((tag: string) => tag.trim() !== "")
+          ),
+        ];
         setAvailableTags(uniqueTags);
       }
     } catch (error) {
@@ -162,12 +168,12 @@ export const ConceptManagementHub: React.FC<ConceptManagementHubProps> = ({
 
     // Get selected concept summaries for validation
     const selectedConceptSummaries = selectedConcepts
-      .map(id => concepts.find(c => c.id === id))
+      .map((id) => concepts.find((c) => c.id === id))
       .filter(Boolean) as ConceptSummary[];
 
     // Validate merge compatibility before opening dialog
     const validation = validateMergeCompatibility(selectedConceptSummaries);
-    
+
     if (!validation.isValid) {
       // If validation fails, the dialog will show the error
       setIsMergeDialogOpen(true);
@@ -179,41 +185,44 @@ export const ConceptManagementHub: React.FC<ConceptManagementHubProps> = ({
   }, [selectedConcepts, concepts]);
 
   // Handle merge confirmation from dialog
-  const handleMergeConfirm = useCallback(async (mergeData: {
-    primaryConceptId: string;
-    secondaryConceptIds: string[];
-    finalConceptData: ConceptEditFormData;
-  }) => {
-    try {
-      const response = await fetch('/api/concepts/merge', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          targetConceptId: mergeData.primaryConceptId,
-          sourceConceptIds: mergeData.secondaryConceptIds,
-          finalConceptData: mergeData.finalConceptData,
-        }),
-      });
+  const handleMergeConfirm = useCallback(
+    async (mergeData: {
+      primaryConceptId: string;
+      secondaryConceptIds: string[];
+      finalConceptData: ConceptEditFormData;
+    }) => {
+      try {
+        const response = await fetch("/api/concepts/merge", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            targetConceptId: mergeData.primaryConceptId,
+            sourceConceptIds: mergeData.secondaryConceptIds,
+            finalConceptData: mergeData.finalConceptData,
+          }),
+        });
 
-      const result = await response.json();
+        const result = await response.json();
 
-      if (result.success) {
-        // Refresh concepts after successful merge
-        await loadConcepts();
-        clearSelection();
-        setIsMergeDialogOpen(false);
-        
-        // Show success feedback
-        console.log('Merge completed successfully:', result.message);
-      } else {
-        console.error('Merge failed:', result.message);
+        if (result.success) {
+          // Refresh concepts after successful merge
+          await loadConcepts();
+          clearSelection();
+          setIsMergeDialogOpen(false);
+
+          // Show success feedback
+          console.log("Merge completed successfully:", result.message);
+        } else {
+          console.error("Merge failed:", result.message);
+          // Keep dialog open to show error
+        }
+      } catch (error) {
+        console.error("Error during merge:", error);
         // Keep dialog open to show error
       }
-    } catch (error) {
-      console.error('Error during merge:', error);
-      // Keep dialog open to show error
-    }
-  }, [loadConcepts, clearSelection]);
+    },
+    [loadConcepts, clearSelection]
+  );
 
   // Handle merge dialog cancel
   const handleMergeCancel = useCallback(() => {
@@ -415,7 +424,7 @@ export const ConceptManagementHub: React.FC<ConceptManagementHubProps> = ({
                     onClick={(e) => e.stopPropagation()}
                   />
 
-                  <div className="flex-1 min-w-0">
+                  <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <h4 className="truncate font-medium">{concept.name}</h4>
                       <Badge
@@ -450,7 +459,7 @@ export const ConceptManagementHub: React.FC<ConceptManagementHubProps> = ({
                     )}
                   </div>
 
-                  <div className="flex items-center gap-2 flex-shrink-0">
+                  <div className="flex shrink-0 items-center gap-2">
                     <Button variant="ghost" size="sm">
                       <Edit className="size-4" />
                     </Button>
@@ -470,7 +479,7 @@ export const ConceptManagementHub: React.FC<ConceptManagementHubProps> = ({
   // Get selected concept summaries for merge dialog
   const getSelectedConceptSummaries = () => {
     return selectedConcepts
-      .map(id => concepts.find(c => c.id === id))
+      .map((id) => concepts.find((c) => c.id === id))
       .filter(Boolean) as ConceptSummary[];
   };
 

@@ -38,7 +38,6 @@ export interface PracticeStats {
   };
 }
 
-
 export class ConceptPracticeEngine {
   private contextBuilder: ContextBuilder;
 
@@ -195,12 +194,10 @@ export class ConceptPracticeEngine {
 
       // Find shared groups for better organization
       const sharedGroups = await this.getGroupsForConcepts(conceptIds);
-      
+
       // Organize concepts by groups and ungrouped
-      const { groupedConcepts, ungroupedConcepts } = this.organizeConceptsByGroups(
-        concepts,
-        sharedGroups
-      );
+      const { /* groupedConcepts, */ ungroupedConcepts } =
+        this.organizeConceptsByGroups(concepts, sharedGroups);
 
       // Generate rationale with group information
       const rationale = this.generateGroupAwareRationale(
@@ -241,7 +238,9 @@ export class ConceptPracticeEngine {
       );
 
       // Import CourseConcept model
-      const { default: CourseConcept } = await import("@/datamodels/courseConcept.model");
+      const { default: CourseConcept } = await import(
+        "@/datamodels/courseConcept.model"
+      );
 
       // Get course-concept mappings
       const courseConceptMappings = await CourseConcept.find({
@@ -260,7 +259,7 @@ export class ConceptPracticeEngine {
         };
       }
 
-      const conceptIds = courseConceptMappings.map(cc => cc.conceptId);
+      const conceptIds = courseConceptMappings.map((cc) => cc.conceptId);
 
       // Get full concept details
       const concepts = await Concept.find({
@@ -270,18 +269,22 @@ export class ConceptPracticeEngine {
 
       // Create priorities based on extraction confidence
       const priorities = new Map<string, number>();
-      courseConceptMappings.forEach(cc => {
+      courseConceptMappings.forEach((cc) => {
         priorities.set(cc.conceptId, cc.confidence);
       });
 
       // Get course info for rationale
       const { default: Course } = await import("@/datamodels/course.model");
       const course = await Course.findOne({ courseId });
-      const courseName = course ? `${course.courseType} course from ${course.date.toLocaleDateString()}` : `Course ${courseId}`;
+      const courseName = course
+        ? `${course.courseType} course from ${course.date.toLocaleDateString()}`
+        : `Course ${courseId}`;
 
       const rationale = `Practice session focused on concepts from ${courseName}`;
 
-      console.log(`✅ Selected ${concepts.length} concepts from course ${courseId}`);
+      console.log(
+        `✅ Selected ${concepts.length} concepts from course ${courseId}`
+      );
 
       return {
         concepts,
@@ -289,7 +292,10 @@ export class ConceptPracticeEngine {
         priorities,
       };
     } catch (error) {
-      console.error(`❌ Error selecting concepts from course ${courseId}:`, error);
+      console.error(
+        `❌ Error selecting concepts from course ${courseId}:`,
+        error
+      );
       return {
         concepts: [],
         rationale: `Error loading concepts from course ${courseId}`,
@@ -409,23 +415,28 @@ export class ConceptPracticeEngine {
     sharedGroups: IConceptGroup[],
     ungroupedConcepts: IConcept[]
   ): string {
-    const baseRationale = this.generateSelectionRationale(selectedProgress, overdueCount);
-    
+    const baseRationale = this.generateSelectionRationale(
+      selectedProgress,
+      overdueCount
+    );
+
     const groupInfo: string[] = [];
-    
+
     if (sharedGroups.length > 0) {
-      const groupNames = sharedGroups.map(g => g.name);
+      const groupNames = sharedGroups.map((g) => g.name);
       groupInfo.push(`organized by ${groupNames.join(", ")}`);
     }
-    
+
     if (ungroupedConcepts.length > 0) {
-      groupInfo.push(`${ungroupedConcepts.length} individual concept${ungroupedConcepts.length > 1 ? "s" : ""}`);
+      groupInfo.push(
+        `${ungroupedConcepts.length} individual concept${ungroupedConcepts.length > 1 ? "s" : ""}`
+      );
     }
-    
+
     if (groupInfo.length > 0) {
       return `${baseRationale} (${groupInfo.join(" and ")})`;
     }
-    
+
     return baseRationale;
   }
 
@@ -456,10 +467,10 @@ export class ConceptPracticeEngine {
    */
   async getConceptsInGroup(groupId: string): Promise<IConcept[]> {
     try {
-      const group = await ConceptGroup.findOne({ 
-        id: groupId, 
-        isActive: true 
-      }).lean() as IConceptGroup | null;
+      const group = (await ConceptGroup.findOne({
+        id: groupId,
+        isActive: true,
+      }).lean()) as IConceptGroup | null;
 
       if (!group) {
         console.log(`Group ${groupId} not found`);
@@ -503,7 +514,7 @@ export class ConceptPracticeEngine {
       }
     }
 
-    const groupedConcepts = concepts.filter(c => groupedConceptIds.has(c.id));
+    const groupedConcepts = concepts.filter((c) => groupedConceptIds.has(c.id));
 
     return { groupedConcepts, ungroupedConcepts };
   }
@@ -550,10 +561,6 @@ export class ConceptPracticeEngine {
       return [];
     }
   }
-
-
-
-
 
   /**
    * Get concepts that have progress records
@@ -715,8 +722,8 @@ export class ConceptPracticeEngine {
   ): Promise<string[]> {
     try {
       const concepts = await this.getConceptsInGroup(groupId);
-      const conceptIds = concepts.map(c => c.id);
-      
+      const conceptIds = concepts.map((c) => c.id);
+
       // Limit to maxConcepts if needed
       return conceptIds.slice(0, maxConcepts);
     } catch (error) {
@@ -737,12 +744,15 @@ export class ConceptPracticeEngine {
   ): Promise<string[]> {
     try {
       const allConceptIds = new Set<string>();
-      
+
       for (const groupId of groupIds) {
-        const conceptIds = await this.getDrillConceptsByGroup(groupId, maxConcepts);
-        conceptIds.forEach(id => allConceptIds.add(id));
+        const conceptIds = await this.getDrillConceptsByGroup(
+          groupId,
+          maxConcepts
+        );
+        conceptIds.forEach((id) => allConceptIds.add(id));
       }
-      
+
       const uniqueConceptIds = Array.from(allConceptIds);
       return uniqueConceptIds.slice(0, maxConcepts);
     } catch (error) {
@@ -758,45 +768,69 @@ export class ConceptPracticeEngine {
    * Select concepts for drill mode with group and course options
    */
   async selectDrillConcepts(options: {
-    mode: 'weakness' | 'course' | 'group' | 'groups';
+    mode: "weakness" | "course" | "group" | "groups";
     userId?: string;
     courseId?: number;
     groupId?: string;
     groupIds?: string[];
     maxConcepts?: number;
   }): Promise<ConceptSelection> {
-    const { mode, userId = "default", courseId, groupId, groupIds, maxConcepts = 10 } = options;
-    
+    const {
+      mode,
+      userId = "default",
+      courseId,
+      groupId,
+      groupIds,
+      maxConcepts = 10,
+    } = options;
+
     try {
       let conceptIds: string[] = [];
       let rationale = "";
 
       switch (mode) {
-        case 'weakness':
-          conceptIds = await this.getDrillConceptsByWeakness(userId, maxConcepts);
-          rationale = "Drill session focusing on concepts that need more practice";
+        case "weakness":
+          conceptIds = await this.getDrillConceptsByWeakness(
+            userId,
+            maxConcepts
+          );
+          rationale =
+            "Drill session focusing on concepts that need more practice";
           break;
-        
-        case 'course':
+
+        case "course":
           if (courseId) {
-            conceptIds = await this.getDrillConceptsByCourse(courseId, maxConcepts);
+            conceptIds = await this.getDrillConceptsByCourse(
+              courseId,
+              maxConcepts
+            );
             rationale = `Drill session for Course ${courseId}`;
           }
           break;
-        
-        case 'group':
+
+        case "group":
           if (groupId) {
-            conceptIds = await this.getDrillConceptsByGroup(groupId, maxConcepts);
-            const group = await ConceptGroup.findOne({ id: groupId }).lean() as IConceptGroup | null;
+            conceptIds = await this.getDrillConceptsByGroup(
+              groupId,
+              maxConcepts
+            );
+            const group = (await ConceptGroup.findOne({
+              id: groupId,
+            }).lean()) as IConceptGroup | null;
             rationale = `Drill session for group: ${group?.name || groupId}`;
           }
           break;
-        
-        case 'groups':
+
+        case "groups":
           if (groupIds && groupIds.length > 0) {
-            conceptIds = await this.getDrillConceptsByGroups(groupIds, maxConcepts);
-            const groups = await ConceptGroup.find({ id: { $in: groupIds } }).lean();
-            const groupNames = groups.map(g => g.name).join(", ");
+            conceptIds = await this.getDrillConceptsByGroups(
+              groupIds,
+              maxConcepts
+            );
+            const groups = await ConceptGroup.find({
+              id: { $in: groupIds },
+            }).lean();
+            const groupNames = groups.map((g) => g.name).join(", ");
             rationale = `Drill session for groups: ${groupNames}`;
           }
           break;
@@ -818,11 +852,13 @@ export class ConceptPracticeEngine {
 
       // For drill mode, create equal priorities
       const priorities = new Map<string, number>();
-      concepts.forEach(concept => {
+      concepts.forEach((concept) => {
         priorities.set(concept.id, 1.0);
       });
 
-      console.log(`✅ Selected ${concepts.length} concepts for drill mode: ${mode}`);
+      console.log(
+        `✅ Selected ${concepts.length} concepts for drill mode: ${mode}`
+      );
 
       return {
         concepts,
@@ -830,7 +866,10 @@ export class ConceptPracticeEngine {
         priorities,
       };
     } catch (error) {
-      console.error(`❌ Error selecting drill concepts for mode ${mode}:`, error);
+      console.error(
+        `❌ Error selecting drill concepts for mode ${mode}:`,
+        error
+      );
       return {
         concepts: [],
         rationale: `Error loading concepts for drill mode: ${mode}`,
@@ -974,56 +1013,98 @@ export class ConceptPracticeEngine {
    */
   private detectQuestionType(questionText: string): QuestionType {
     const text = questionText.toLowerCase().trim();
-    
+
     // Translation patterns
-    if (text.includes("translate") || text.includes("przetłumacz") || 
-        text.includes("how do you say") || text.includes("jak powiedzieć")) {
-      const type = text.includes("polish") || text.includes("polski") ? 
-        QuestionType.TRANSLATION_EN : QuestionType.TRANSLATION_PL;
-      console.log(`🎯 Question type detection: "${text.substring(0, 50)}..." -> ${type} (translation)`);
+    if (
+      text.includes("translate") ||
+      text.includes("przetłumacz") ||
+      text.includes("how do you say") ||
+      text.includes("jak powiedzieć")
+    ) {
+      const type =
+        text.includes("polish") || text.includes("polski")
+          ? QuestionType.TRANSLATION_EN
+          : QuestionType.TRANSLATION_PL;
+      console.log(
+        `🎯 Question type detection: "${text.substring(0, 50)}..." -> ${type} (translation)`
+      );
       return type;
     }
-    
+
     // Fill-in-the-blank / Cloze patterns
-    if (text.includes("___") || text.includes("[") || text.includes("blank") || 
-        text.includes("complete") || text.includes("uzupełnij")) {
+    if (
+      text.includes("___") ||
+      text.includes("[") ||
+      text.includes("blank") ||
+      text.includes("complete") ||
+      text.includes("uzupełnij")
+    ) {
       // Multiple blanks = multi-cloze, single blank = basic cloze
       const blankCount = (text.match(/___|\[.*?\]/g) || []).length;
-      const type = blankCount > 1 ? QuestionType.MULTI_CLOZE : QuestionType.BASIC_CLOZE;
-      console.log(`🎯 Question type detection: "${text.substring(0, 50)}..." -> ${type} (cloze, ${blankCount} blanks)`);
+      const type =
+        blankCount > 1 ? QuestionType.MULTI_CLOZE : QuestionType.BASIC_CLOZE;
+      console.log(
+        `🎯 Question type detection: "${text.substring(0, 50)}..." -> ${type} (cloze, ${blankCount} blanks)`
+      );
       return type;
     }
-    
+
     // Multiple choice patterns
-    if (text.includes("choose") || text.includes("select") || text.includes("wybierz") ||
-        text.includes("a)") || text.includes("1)") || text.includes("which")) {
+    if (
+      text.includes("choose") ||
+      text.includes("select") ||
+      text.includes("wybierz") ||
+      text.includes("a)") ||
+      text.includes("1)") ||
+      text.includes("which")
+    ) {
       return QuestionType.VOCAB_CHOICE;
     }
-    
+
     // Conjugation patterns
-    if (text.includes("conjugate") || text.includes("odmień") || text.includes("verb form") ||
-        text.includes("correct form") || text.includes("właściwą formę")) {
+    if (
+      text.includes("conjugate") ||
+      text.includes("odmień") ||
+      text.includes("verb form") ||
+      text.includes("correct form") ||
+      text.includes("właściwą formę")
+    ) {
       return QuestionType.CASE_TRANSFORM;
     }
-    
+
     // Word arrangement patterns
-    if (text.includes("arrange") || text.includes("order") || text.includes("ułóż") ||
-        text.includes("put in order") || text.includes("rearrange")) {
+    if (
+      text.includes("arrange") ||
+      text.includes("order") ||
+      text.includes("ułóż") ||
+      text.includes("put in order") ||
+      text.includes("rearrange")
+    ) {
       return QuestionType.WORD_ARRANGEMENT;
     }
-    
+
     // Sentence transformation patterns
-    if (text.includes("rewrite") || text.includes("transform") || text.includes("przepisz") ||
-        text.includes("change") || text.includes("convert")) {
+    if (
+      text.includes("rewrite") ||
+      text.includes("transform") ||
+      text.includes("przepisz") ||
+      text.includes("change") ||
+      text.includes("convert")
+    ) {
       return QuestionType.SENTENCE_TRANSFORM;
     }
-    
+
     // Cultural context patterns
-    if (text.includes("culture") || text.includes("tradition") || text.includes("kultura") ||
-        text.includes("customs") || text.includes("społeczeństwo")) {
+    if (
+      text.includes("culture") ||
+      text.includes("tradition") ||
+      text.includes("kultura") ||
+      text.includes("customs") ||
+      text.includes("społeczeństwo")
+    ) {
       return QuestionType.CULTURAL_CONTEXT;
     }
-    
+
     // Default to Q&A for open-ended questions
     console.log(`🎯 Question type detection: "${text}" -> Q_A (default)`);
     return QuestionType.Q_A;

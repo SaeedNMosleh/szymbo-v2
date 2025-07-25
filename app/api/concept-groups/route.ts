@@ -1,14 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/dbConnect";
 import { ConceptManagerEnhanced } from "@/lib/conceptExtraction/conceptManagerEnhanced";
-import { IConceptGroup } from "@/datamodels/conceptGroup.model";
+// Commented out as currently not used - will be needed when hierarchy functionality is enabled
+// import { IConceptGroup } from "@/datamodels/conceptGroup.model";
 import { z } from "zod";
 import { QuestionLevel } from "@/lib/enum";
 
-// Type for group with children for hierarchy building
+// Type for group with children for hierarchy building (commented as not currently used)
+// Will be needed if hierarchy functionality is enabled
+/*
 interface GroupWithChildren extends IConceptGroup {
   children: GroupWithChildren[];
 }
+*/
 
 // Request validation schemas
 const createGroupSchema = z.object({
@@ -28,27 +32,29 @@ const createGroupSchema = z.object({
   memberConcepts: z.array(z.string()).optional(),
 });
 
-
 // GET /api/concept-groups - Fetch concept groups with hierarchy
 export async function GET(request: NextRequest) {
   try {
     await connectToDatabase();
     const { searchParams } = new URL(request.url);
-    
+
     const groupType = searchParams.get("groupType");
     const level = searchParams.get("level");
     const includeHierarchy = searchParams.get("includeHierarchy") !== "false";
 
     // Build query
-    const query: { isActive: boolean; groupType?: string; level?: number } = { isActive: true };
+    const query: { isActive: boolean; groupType?: string; level?: number } = {
+      isActive: true,
+    };
     if (groupType) query.groupType = groupType;
     if (level) query.level = parseInt(level);
 
     // Import ConceptGroup model directly since it's not in conceptManager
-    const ConceptGroup = (await import("@/datamodels/conceptGroup.model")).default;
+    const ConceptGroup = (await import("@/datamodels/conceptGroup.model"))
+      .default;
     const groups = await ConceptGroup.find(query).sort({ level: 1, name: 1 });
 
-    const groupsData = groups.map(group => group.toObject());
+    const groupsData = groups.map((group) => group.toObject());
 
     // If hierarchy requested, build tree structure but still return flat data
     // The frontend handles its own organization logic
@@ -130,29 +136,6 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Helper function to build hierarchy tree structure
-function buildHierarchy(groups: IConceptGroup[]): GroupWithChildren[] {
-  const groupMap = new Map<string, GroupWithChildren>();
-  
-  // First pass: create all groups with empty children arrays
-  for (const group of groups) {
-    groupMap.set(group.id, { ...group, children: [] as GroupWithChildren[] });
-  }
-  
-  const rootGroups: GroupWithChildren[] = [];
-
-  for (const group of groups) {
-    const groupWithChildren = groupMap.get(group.id)!;
-    
-    if (group.parentGroup && groupMap.has(group.parentGroup)) {
-      // Add to parent's children
-      const parent = groupMap.get(group.parentGroup)!;
-      parent.children.push(groupWithChildren);
-    } else {
-      // This is a root group
-      rootGroups.push(groupWithChildren);
-    }
-  }
-
-  return rootGroups;
-}
+// This function is completely removed as it's not being used
+// If hierarchy functionality is needed in the future, it can be implemented
+// based on the requirements at that time

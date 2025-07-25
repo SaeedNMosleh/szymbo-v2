@@ -1,7 +1,11 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import dbConnect from "@/lib/dbConnect";
 import Concept from "@/datamodels/concept.model";
-import { createSuccessResponse, createErrorResponse } from "@/lib/utils/apiResponse";
+import {
+  createSuccessResponse,
+  createErrorResponse,
+} from "@/lib/utils/apiResponse";
+import { PipelineStage } from "mongoose";
 
 /**
  * GET /api/concepts/tags
@@ -15,12 +19,12 @@ export async function GET(request: NextRequest) {
     const courseId = searchParams.get("courseId");
 
     // Build aggregation pipeline to extract unique tags
-    const pipeline: any[] = [];
+    const pipeline: PipelineStage[] = [];
 
     // Filter by course if specified
     if (courseId) {
       pipeline.push({
-        $match: { courseId: parseInt(courseId) }
+        $match: { courseId: parseInt(courseId) },
       });
     }
 
@@ -32,8 +36,8 @@ export async function GET(request: NextRequest) {
         $group: {
           _id: "$tags",
           frequency: { $sum: 1 },
-          courses: { $addToSet: "$courseId" }
-        }
+          courses: { $addToSet: "$courseId" },
+        },
       },
       // Sort by frequency (most used first)
       { $sort: { frequency: -1, _id: 1 } },
@@ -43,22 +47,28 @@ export async function GET(request: NextRequest) {
           tag: "$_id",
           frequency: 1,
           courses: 1,
-          _id: 0
-        }
+          _id: 0,
+        },
       }
     );
 
     const result = await Concept.aggregate(pipeline);
 
+    // Define the type for the result items
+    interface TagResult {
+      tag: string;
+      frequency: number;
+      courses?: string[];
+    }
+
     // Extract just the tag names for simple autocomplete
-    const tagNames = result.map((item: any) => item.tag);
+    const tagNames = result.map((item: TagResult) => item.tag);
 
     return createSuccessResponse({
       tags: tagNames,
       tagDetails: result,
-      totalUniqueTags: result.length
+      totalUniqueTags: result.length,
     });
-
   } catch (error) {
     console.error("Error fetching concept tags:", error);
     return createErrorResponse(

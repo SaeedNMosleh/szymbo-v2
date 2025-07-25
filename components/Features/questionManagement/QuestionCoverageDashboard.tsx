@@ -66,7 +66,7 @@ export default function QuestionCoverageDashboard({
       if (!response.ok) throw new Error("Failed to fetch coverage data");
 
       const data = await response.json();
-      
+
       const coverage = data.data?.coverage || data.coverage || [];
       const stats = data.data?.stats || data.stats || null;
 
@@ -134,7 +134,9 @@ export default function QuestionCoverageDashboard({
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-green-600">{stats.totalQuestions}</div>
+              <div className="text-2xl font-bold text-green-600">
+                {stats.totalQuestions}
+              </div>
               <p className="text-xs text-muted-foreground">In question bank</p>
             </CardContent>
           </Card>
@@ -193,7 +195,11 @@ export default function QuestionCoverageDashboard({
                       <span className="text-sm">{count} questions</span>
                     </div>
                     <Progress
-                      value={stats.totalQuestions > 0 ? (count / stats.totalQuestions) * 100 : 0}
+                      value={
+                        stats.totalQuestions > 0
+                          ? (count / stats.totalQuestions) * 100
+                          : 0
+                      }
                       className="w-32"
                     />
                   </div>
@@ -208,7 +214,9 @@ export default function QuestionCoverageDashboard({
       <div className="flex items-center space-x-4">
         <Select
           value={filterCategory}
-          onValueChange={(value) => setFilterCategory(value as ConceptCategory | "all")}
+          onValueChange={(value) =>
+            setFilterCategory(value as ConceptCategory | "all")
+          }
         >
           <SelectTrigger className="w-48">
             <SelectValue />
@@ -233,7 +241,8 @@ export default function QuestionCoverageDashboard({
         <CardHeader>
           <CardTitle>Question Coverage Matrix</CardTitle>
           <CardDescription>
-            Shows approved questions from the question bank. Click cells for details.
+            Shows approved questions from the question bank. Click cells for
+            details.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -246,9 +255,11 @@ export default function QuestionCoverageDashboard({
                 <li>• No questions have been approved to question bank</li>
                 <li>• Questions are not linked to concepts</li>
               </ul>
-              <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-4">
                 <p className="text-sm text-blue-800">
-                  💡 <strong>Tip:</strong> Generate questions in the "Generation Planner" tab, then approve them in "Draft Review" to see coverage here.
+                  💡 <strong>Tip:</strong> Generate questions in the
+                  &quot;Generation Planner&quot; tab, then approve them in
+                  &quot;Draft Review&quot; to see coverage here.
                 </p>
               </div>
             </div>

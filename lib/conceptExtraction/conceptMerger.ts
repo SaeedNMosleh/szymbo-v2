@@ -1,6 +1,6 @@
 /**
  * Concept Merger Service
- * 
+ *
  * Provides reusable functionality for merging similar concepts.
  * This service can be used in both concept review and concept management hub.
  */
@@ -9,8 +9,7 @@ import Concept, { IConcept } from "@/datamodels/concept.model";
 import CourseConcept from "@/datamodels/courseConcept.model";
 import ConceptProgress from "@/datamodels/conceptProgress.model";
 import { ExtractedConcept } from "@/datamodels/conceptExtractionSession.model";
-import { ConceptCategory } from "@/lib/enum";
-import { logger, createOperationLogger } from "@/lib/utils/logger";
+import { createOperationLogger } from "@/lib/utils/logger";
 
 export interface MergeConceptData {
   targetConceptId: string;
@@ -34,18 +33,20 @@ export interface MergeResult {
 }
 
 export class ConceptMerger {
-  private logger = createOperationLogger('concept-merger');
+  private logger = createOperationLogger("concept-merger");
 
   /**
    * Merge an extracted concept into an existing concept
    * @param mergeData Data for the merge operation
    * @returns Result of the merge operation
    */
-  async mergeExtractedConcept(mergeData: MergeConceptData): Promise<MergeResult> {
-    this.logger.info('Starting extracted concept merge', {
+  async mergeExtractedConcept(
+    mergeData: MergeConceptData
+  ): Promise<MergeResult> {
+    this.logger.info("Starting extracted concept merge", {
       targetConceptId: mergeData.targetConceptId,
       hasExtractedConcept: !!mergeData.extractedConcept,
-      courseId: mergeData.courseId
+      courseId: mergeData.courseId,
     });
 
     try {
@@ -54,7 +55,7 @@ export class ConceptMerger {
         return {
           success: false,
           mergedConcept: null,
-          message: "Target concept ID is required"
+          message: "Target concept ID is required",
         };
       }
 
@@ -62,28 +63,28 @@ export class ConceptMerger {
         return {
           success: false,
           mergedConcept: null,
-          message: "Extracted concept data is required"
+          message: "Extracted concept data is required",
         };
       }
 
       // Get the target concept
-      const targetConcept = await Concept.findOne({ 
+      const targetConcept = await Concept.findOne({
         id: mergeData.targetConceptId,
-        isActive: true 
+        isActive: true,
       });
 
       if (!targetConcept) {
         return {
           success: false,
           mergedConcept: null,
-          message: `Target concept with ID ${mergeData.targetConceptId} not found`
+          message: `Target concept with ID ${mergeData.targetConceptId} not found`,
         };
       }
 
-      this.logger.debug('Found target concept', {
+      this.logger.debug("Found target concept", {
         targetId: targetConcept.id,
         targetName: targetConcept.name,
-        targetCategory: targetConcept.category
+        targetCategory: targetConcept.category,
       });
 
       // Prepare merge updates
@@ -104,7 +105,7 @@ export class ConceptMerger {
         return {
           success: false,
           mergedConcept: null,
-          message: "Failed to update target concept"
+          message: "Failed to update target concept",
         };
       }
 
@@ -118,23 +119,22 @@ export class ConceptMerger {
         );
       }
 
-      this.logger.success('Extracted concept merged successfully', {
+      this.logger.success("Extracted concept merged successfully", {
         targetId: mergeData.targetConceptId,
-        updatedFields: Object.keys(updates)
+        updatedFields: Object.keys(updates),
       });
 
       return {
         success: true,
         mergedConcept: updatedConcept.toObject(),
-        message: `Successfully merged "${mergeData.extractedConcept.name}" into "${updatedConcept.name}"`
+        message: `Successfully merged "${mergeData.extractedConcept.name}" into "${updatedConcept.name}"`,
       };
-
     } catch (error) {
-      this.logger.error('Error merging extracted concept', error as Error);
+      this.logger.error("Error merging extracted concept", error as Error);
       return {
         success: false,
         mergedConcept: null,
-        message: `Failed to merge concept: ${error instanceof Error ? error.message : 'Unknown error'}`
+        message: `Failed to merge concept: ${error instanceof Error ? error.message : "Unknown error"}`,
       };
     }
   }
@@ -144,61 +144,74 @@ export class ConceptMerger {
    * @param mergeData Data for the merge operation
    * @returns Result of the merge operation
    */
-  async mergeMultipleExistingConcepts(mergeData: MergeConceptData): Promise<MergeResult> {
-    this.logger.info('Starting multiple concepts merge', {
+  async mergeMultipleExistingConcepts(
+    mergeData: MergeConceptData
+  ): Promise<MergeResult> {
+    this.logger.info("Starting multiple concepts merge", {
       targetConceptId: mergeData.targetConceptId,
       sourceConceptIds: mergeData.sourceConceptIds,
-      sourceCount: mergeData.sourceConceptIds?.length || 0
+      sourceCount: mergeData.sourceConceptIds?.length || 0,
     });
 
     try {
       // Validate inputs
-      if (!mergeData.targetConceptId || !mergeData.sourceConceptIds || mergeData.sourceConceptIds.length === 0) {
+      if (
+        !mergeData.targetConceptId ||
+        !mergeData.sourceConceptIds ||
+        mergeData.sourceConceptIds.length === 0
+      ) {
         return {
           success: false,
           mergedConcept: null,
-          message: "Target concept ID and source concept IDs are required"
+          message: "Target concept ID and source concept IDs are required",
         };
       }
 
       // Get all concepts (target + sources)
-      const allConceptIds = [mergeData.targetConceptId, ...mergeData.sourceConceptIds];
-      const concepts = await Concept.find({ 
+      const allConceptIds = [
+        mergeData.targetConceptId,
+        ...mergeData.sourceConceptIds,
+      ];
+      const concepts = await Concept.find({
         id: { $in: allConceptIds },
-        isActive: true 
+        isActive: true,
       });
 
       if (concepts.length !== allConceptIds.length) {
-        const foundIds = concepts.map(c => c.id);
-        const missingIds = allConceptIds.filter(id => !foundIds.includes(id));
+        const foundIds = concepts.map((c) => c.id);
+        const missingIds = allConceptIds.filter((id) => !foundIds.includes(id));
         return {
           success: false,
           mergedConcept: null,
-          message: `Concepts not found: ${missingIds.join(', ')}`
+          message: `Concepts not found: ${missingIds.join(", ")}`,
         };
       }
 
-      const targetConcept = concepts.find(c => c.id === mergeData.targetConceptId);
-      const sourceConcepts = concepts.filter(c => mergeData.sourceConceptIds!.includes(c.id));
+      const targetConcept = concepts.find(
+        (c) => c.id === mergeData.targetConceptId
+      );
+      const sourceConcepts = concepts.filter((c) =>
+        mergeData.sourceConceptIds!.includes(c.id)
+      );
 
       if (!targetConcept) {
         return {
           success: false,
           mergedConcept: null,
-          message: `Target concept with ID ${mergeData.targetConceptId} not found`
+          message: `Target concept with ID ${mergeData.targetConceptId} not found`,
         };
       }
 
-      this.logger.debug('Found concepts for multiple merge', {
+      this.logger.debug("Found concepts for multiple merge", {
         targetName: targetConcept.name,
-        sourceNames: sourceConcepts.map(c => c.name),
-        sourceCount: sourceConcepts.length
+        sourceNames: sourceConcepts.map((c) => c.name),
+        sourceCount: sourceConcepts.length,
       });
 
       // Prepare merge updates from multiple sources
       const updates = await this.prepareMergeUpdatesFromMultipleConcepts(
         targetConcept.toObject(),
-        sourceConcepts.map(c => c.toObject()),
+        sourceConcepts.map((c) => c.toObject()),
         mergeData.finalConceptData,
         mergeData.additionalData
       );
@@ -214,7 +227,7 @@ export class ConceptMerger {
         return {
           success: false,
           mergedConcept: null,
-          message: "Failed to update target concept"
+          message: "Failed to update target concept",
         };
       }
 
@@ -227,33 +240,32 @@ export class ConceptMerger {
       // Deactivate all source concepts
       await Concept.updateMany(
         { id: { $in: mergeData.sourceConceptIds } },
-        { 
-          $set: { 
+        {
+          $set: {
             isActive: false,
             lastUpdated: new Date(),
-            mergedInto: mergeData.targetConceptId
-          }
+            mergedInto: mergeData.targetConceptId,
+          },
         }
       );
 
-      this.logger.success('Multiple concepts merged successfully', {
+      this.logger.success("Multiple concepts merged successfully", {
         targetId: mergeData.targetConceptId,
         sourceIds: mergeData.sourceConceptIds,
-        mergedConceptName: updatedConcept.name
+        mergedConceptName: updatedConcept.name,
       });
 
       return {
         success: true,
         mergedConcept: updatedConcept.toObject(),
-        message: `Successfully merged ${sourceConcepts.length} concepts into "${updatedConcept.name}"`
+        message: `Successfully merged ${sourceConcepts.length} concepts into "${updatedConcept.name}"`,
       };
-
     } catch (error) {
-      this.logger.error('Error merging multiple concepts', error as Error);
+      this.logger.error("Error merging multiple concepts", error as Error);
       return {
         success: false,
         mergedConcept: null,
-        message: `Failed to merge concepts: ${error instanceof Error ? error.message : 'Unknown error'}`
+        message: `Failed to merge concepts: ${error instanceof Error ? error.message : "Unknown error"}`,
       };
     }
   }
@@ -263,10 +275,12 @@ export class ConceptMerger {
    * @param mergeData Data for the merge operation
    * @returns Result of the merge operation
    */
-  async mergeExistingConcepts(mergeData: MergeConceptData): Promise<MergeResult> {
-    this.logger.info('Starting existing concepts merge', {
+  async mergeExistingConcepts(
+    mergeData: MergeConceptData
+  ): Promise<MergeResult> {
+    this.logger.info("Starting existing concepts merge", {
       targetConceptId: mergeData.targetConceptId,
-      sourceConceptId: mergeData.sourceConceptId
+      sourceConceptId: mergeData.sourceConceptId,
     });
 
     try {
@@ -275,7 +289,7 @@ export class ConceptMerger {
         return {
           success: false,
           mergedConcept: null,
-          message: "Both target and source concept IDs are required"
+          message: "Both target and source concept IDs are required",
         };
       }
 
@@ -283,27 +297,27 @@ export class ConceptMerger {
         return {
           success: false,
           mergedConcept: null,
-          message: "Cannot merge a concept with itself"
+          message: "Cannot merge a concept with itself",
         };
       }
 
       // Get both concepts
       const [targetConcept, sourceConcept] = await Promise.all([
         Concept.findOne({ id: mergeData.targetConceptId, isActive: true }),
-        Concept.findOne({ id: mergeData.sourceConceptId, isActive: true })
+        Concept.findOne({ id: mergeData.sourceConceptId, isActive: true }),
       ]);
 
       if (!targetConcept || !sourceConcept) {
         return {
           success: false,
           mergedConcept: null,
-          message: "One or both concepts not found"
+          message: "One or both concepts not found",
         };
       }
 
-      this.logger.debug('Found concepts for merge', {
+      this.logger.debug("Found concepts for merge", {
         targetName: targetConcept.name,
-        sourceName: sourceConcept.name
+        sourceName: sourceConcept.name,
       });
 
       // Prepare merge updates
@@ -324,45 +338,50 @@ export class ConceptMerger {
         return {
           success: false,
           mergedConcept: null,
-          message: "Failed to update target concept"
+          message: "Failed to update target concept",
         };
       }
 
       // Transfer course links from source to target
-      await this.transferCourseLinks(mergeData.sourceConceptId, mergeData.targetConceptId);
+      await this.transferCourseLinks(
+        mergeData.sourceConceptId,
+        mergeData.targetConceptId
+      );
 
       // Transfer progress data from source to target
-      await this.transferProgressData(mergeData.sourceConceptId, mergeData.targetConceptId);
+      await this.transferProgressData(
+        mergeData.sourceConceptId,
+        mergeData.targetConceptId
+      );
 
       // Deactivate the source concept
       await Concept.findOneAndUpdate(
         { id: mergeData.sourceConceptId },
-        { 
-          $set: { 
+        {
+          $set: {
             isActive: false,
             lastUpdated: new Date(),
-            mergedInto: mergeData.targetConceptId
-          }
+            mergedInto: mergeData.targetConceptId,
+          },
         }
       );
 
-      this.logger.success('Existing concepts merged successfully', {
+      this.logger.success("Existing concepts merged successfully", {
         targetId: mergeData.targetConceptId,
-        sourceId: mergeData.sourceConceptId
+        sourceId: mergeData.sourceConceptId,
       });
 
       return {
         success: true,
         mergedConcept: updatedConcept.toObject(),
-        message: `Successfully merged "${sourceConcept.name}" into "${updatedConcept.name}"`
+        message: `Successfully merged "${sourceConcept.name}" into "${updatedConcept.name}"`,
       };
-
     } catch (error) {
-      this.logger.error('Error merging existing concepts', error as Error);
+      this.logger.error("Error merging existing concepts", error as Error);
       return {
         success: false,
         mergedConcept: null,
-        message: `Failed to merge concepts: ${error instanceof Error ? error.message : 'Unknown error'}`
+        message: `Failed to merge concepts: ${error instanceof Error ? error.message : "Unknown error"}`,
       };
     }
   }
@@ -380,46 +399,52 @@ export class ConceptMerger {
     }
   ): Promise<Partial<IConcept>> {
     const updates: Partial<IConcept> = {
-      lastUpdated: new Date()
+      lastUpdated: new Date(),
     };
 
     // Merge examples
     const existingExamples = targetConcept.examples || [];
     const newExamples = [
       ...(extractedConcept.examples || []),
-      ...(additionalData?.examples || [])
+      ...(additionalData?.examples || []),
     ];
-    
-    const uniqueExamples = Array.from(new Set([
-      ...existingExamples,
-      ...newExamples.filter(example => example.trim() !== '')
-    ]));
+
+    const uniqueExamples = Array.from(
+      new Set([
+        ...existingExamples,
+        ...newExamples.filter((example) => example.trim() !== ""),
+      ])
+    );
 
     if (uniqueExamples.length > existingExamples.length) {
       updates.examples = uniqueExamples;
     }
 
     // Merge description if provided
-    if (additionalData?.description && additionalData.description !== targetConcept.description) {
+    if (
+      additionalData?.description &&
+      additionalData.description !== targetConcept.description
+    ) {
       const combinedDescription = [
         targetConcept.description,
-        additionalData.description
-      ].filter(desc => desc && desc.trim() !== '').join('\n\nAdditional: ');
-      
+        additionalData.description,
+      ]
+        .filter((desc) => desc && desc.trim() !== "")
+        .join("\n\nAdditional: ");
+
       updates.description = combinedDescription;
     }
 
     // Merge tags
     const existingTags = targetConcept.tags || [];
     const newTags = [
-      ...(extractedConcept.suggestedTags?.map(tag => tag.tag) || []),
-      ...(additionalData?.tags || [])
+      ...(extractedConcept.suggestedTags?.map((tag) => tag.tag) || []),
+      ...(additionalData?.tags || []),
     ];
-    
-    const uniqueTags = Array.from(new Set([
-      ...existingTags,
-      ...newTags.filter(tag => tag.trim() !== '')
-    ]));
+
+    const uniqueTags = Array.from(
+      new Set([...existingTags, ...newTags.filter((tag) => tag.trim() !== "")])
+    );
 
     if (uniqueTags.length > existingTags.length) {
       updates.tags = uniqueTags;
@@ -447,7 +472,7 @@ export class ConceptMerger {
     }
   ): Promise<Partial<IConcept>> {
     const updates: Partial<IConcept> = {
-      lastUpdated: new Date()
+      lastUpdated: new Date(),
     };
 
     // If finalConceptData is provided (from edit dialog), use it as the base
@@ -460,25 +485,28 @@ export class ConceptMerger {
     // Merge examples from all concepts
     const allExamples = [
       ...(targetConcept.examples || []),
-      ...sourceConcepts.flatMap(c => c.examples || []),
-      ...(additionalData?.examples || [])
+      ...sourceConcepts.flatMap((c) => c.examples || []),
+      ...(additionalData?.examples || []),
     ];
-    
-    const uniqueExamples = Array.from(new Set(
-      allExamples.filter(example => example.trim() !== '')
-    ));
+
+    const uniqueExamples = Array.from(
+      new Set(allExamples.filter((example) => example.trim() !== ""))
+    );
 
     updates.examples = uniqueExamples;
 
     // Merge descriptions from all concepts
     const allDescriptions = [
       targetConcept.description,
-      ...sourceConcepts.map(c => c.description),
-      additionalData?.description
-    ].filter(desc => desc && desc.trim() !== '');
+      ...sourceConcepts.map((c) => c.description),
+      additionalData?.description,
+    ].filter((desc) => desc && desc.trim() !== "");
 
     if (allDescriptions.length > 1) {
-      updates.description = `${allDescriptions[0]}\n\nMerged from:\n${allDescriptions.slice(1).map(desc => `• ${desc}`).join('\n')}`;
+      updates.description = `${allDescriptions[0]}\n\nMerged from:\n${allDescriptions
+        .slice(1)
+        .map((desc) => `• ${desc}`)
+        .join("\n")}`;
     } else if (allDescriptions.length === 1) {
       updates.description = allDescriptions[0];
     }
@@ -486,21 +514,21 @@ export class ConceptMerger {
     // Merge tags from all concepts
     const allTags = [
       ...(targetConcept.tags || []),
-      ...sourceConcepts.flatMap(c => c.tags || []),
-      ...(additionalData?.tags || [])
+      ...sourceConcepts.flatMap((c) => c.tags || []),
+      ...(additionalData?.tags || []),
     ];
-    
-    const uniqueTags = Array.from(new Set(
-      allTags.filter(tag => tag.trim() !== '')
-    ));
+
+    const uniqueTags = Array.from(
+      new Set(allTags.filter((tag) => tag.trim() !== ""))
+    );
 
     updates.tags = uniqueTags;
 
     // Take the highest confidence from all concepts
     const allConfidences = [
       targetConcept.confidence,
-      ...sourceConcepts.map(c => c.confidence)
-    ].filter(conf => typeof conf === 'number');
+      ...sourceConcepts.map((c) => c.confidence),
+    ].filter((conf) => typeof conf === "number");
 
     if (allConfidences.length > 0) {
       updates.confidence = Math.max(...allConfidences);
@@ -509,9 +537,9 @@ export class ConceptMerger {
     // Merge createdFrom arrays from all concepts
     const allCreatedFrom = [
       ...(targetConcept.createdFrom || []),
-      ...sourceConcepts.flatMap(c => c.createdFrom || [])
+      ...sourceConcepts.flatMap((c) => c.createdFrom || []),
     ];
-    
+
     updates.createdFrom = Array.from(new Set(allCreatedFrom));
 
     return updates;
@@ -530,19 +558,19 @@ export class ConceptMerger {
     }
   ): Promise<Partial<IConcept>> {
     const updates: Partial<IConcept> = {
-      lastUpdated: new Date()
+      lastUpdated: new Date(),
     };
 
     // Merge examples
     const allExamples = [
       ...(targetConcept.examples || []),
       ...(sourceConcept.examples || []),
-      ...(additionalData?.examples || [])
+      ...(additionalData?.examples || []),
     ];
-    
-    const uniqueExamples = Array.from(new Set(
-      allExamples.filter(example => example.trim() !== '')
-    ));
+
+    const uniqueExamples = Array.from(
+      new Set(allExamples.filter((example) => example.trim() !== ""))
+    );
 
     updates.examples = uniqueExamples;
 
@@ -550,23 +578,23 @@ export class ConceptMerger {
     const descriptions = [
       targetConcept.description,
       sourceConcept.description,
-      additionalData?.description
-    ].filter(desc => desc && desc.trim() !== '');
+      additionalData?.description,
+    ].filter((desc) => desc && desc.trim() !== "");
 
     if (descriptions.length > 1) {
-      updates.description = descriptions.join('\n\nMerged: ');
+      updates.description = descriptions.join("\n\nMerged: ");
     }
 
     // Merge tags
     const allTags = [
       ...(targetConcept.tags || []),
       ...(sourceConcept.tags || []),
-      ...(additionalData?.tags || [])
+      ...(additionalData?.tags || []),
     ];
-    
-    const uniqueTags = Array.from(new Set(
-      allTags.filter(tag => tag.trim() !== '')
-    ));
+
+    const uniqueTags = Array.from(
+      new Set(allTags.filter((tag) => tag.trim() !== ""))
+    );
 
     updates.tags = uniqueTags;
 
@@ -578,9 +606,9 @@ export class ConceptMerger {
     // Merge createdFrom arrays
     const allCreatedFrom = [
       ...(targetConcept.createdFrom || []),
-      ...(sourceConcept.createdFrom || [])
+      ...(sourceConcept.createdFrom || []),
     ];
-    
+
     updates.createdFrom = Array.from(new Set(allCreatedFrom));
 
     return updates;
@@ -603,43 +631,46 @@ export class ConceptMerger {
             confidence,
             sourceContent,
             isActive: true,
-            extractedDate: new Date()
-          }
+            extractedDate: new Date(),
+          },
         },
         { upsert: true }
       );
 
-      this.logger.debug('Course link created/updated', { conceptId, courseId });
+      this.logger.debug("Course link created/updated", { conceptId, courseId });
     } catch (error) {
-      this.logger.error('Error creating course link', error as Error);
+      this.logger.error("Error creating course link", error as Error);
     }
   }
 
   /**
    * Transfer course links from source to target concept
    */
-  private async transferCourseLinks(sourceConceptId: string, targetConceptId: string): Promise<void> {
+  private async transferCourseLinks(
+    sourceConceptId: string,
+    targetConceptId: string
+  ): Promise<void> {
     try {
       // Get all course links for source concept
-      const sourceLinks = await CourseConcept.find({ 
+      const sourceLinks = await CourseConcept.find({
         conceptId: sourceConceptId,
-        isActive: true 
+        isActive: true,
       });
 
       // Create corresponding links for target concept
       for (const link of sourceLinks) {
         await CourseConcept.findOneAndUpdate(
-          { 
-            conceptId: targetConceptId, 
-            courseId: link.courseId 
+          {
+            conceptId: targetConceptId,
+            courseId: link.courseId,
           },
           {
             $set: {
               confidence: Math.max(link.confidence, 0.8), // Ensure good confidence for merged concept
               sourceContent: `Merged from ${sourceConceptId}: ${link.sourceContent}`,
               isActive: true,
-              extractedDate: new Date()
-            }
+              extractedDate: new Date(),
+            },
           },
           { upsert: true }
         );
@@ -651,46 +682,58 @@ export class ConceptMerger {
         { $set: { isActive: false } }
       );
 
-      this.logger.debug('Course links transferred', { 
-        sourceConceptId, 
-        targetConceptId, 
-        linkCount: sourceLinks.length 
+      this.logger.debug("Course links transferred", {
+        sourceConceptId,
+        targetConceptId,
+        linkCount: sourceLinks.length,
       });
     } catch (error) {
-      this.logger.error('Error transferring course links', error as Error);
+      this.logger.error("Error transferring course links", error as Error);
     }
   }
 
   /**
    * Transfer progress data from source to target concept
    */
-  private async transferProgressData(sourceConceptId: string, targetConceptId: string): Promise<void> {
+  private async transferProgressData(
+    sourceConceptId: string,
+    targetConceptId: string
+  ): Promise<void> {
     try {
       // Get all progress records for source concept
-      const sourceProgress = await ConceptProgress.find({ conceptId: sourceConceptId });
+      const sourceProgress = await ConceptProgress.find({
+        conceptId: sourceConceptId,
+      });
 
       for (const progress of sourceProgress) {
         // Check if target already has progress for this user
         const existingProgress = await ConceptProgress.findOne({
           conceptId: targetConceptId,
-          userId: progress.userId
+          userId: progress.userId,
         });
 
         if (existingProgress) {
           // Merge progress data - take the better performance
           const updates = {
-            totalAttempts: existingProgress.totalAttempts + progress.totalAttempts,
-            correctAttempts: existingProgress.correctAttempts + progress.correctAttempts,
+            totalAttempts:
+              existingProgress.totalAttempts + progress.totalAttempts,
+            correctAttempts:
+              existingProgress.correctAttempts + progress.correctAttempts,
             streak: Math.max(existingProgress.streak, progress.streak),
-            lastReviewed: progress.lastReviewed > existingProgress.lastReviewed 
-              ? progress.lastReviewed 
-              : existingProgress.lastReviewed,
+            lastReviewed:
+              progress.lastReviewed > existingProgress.lastReviewed
+                ? progress.lastReviewed
+                : existingProgress.lastReviewed,
             // Keep the more favorable scheduling
-            nextReview: progress.nextReview < existingProgress.nextReview 
-              ? progress.nextReview 
-              : existingProgress.nextReview,
-            difficulty: Math.min(existingProgress.difficulty, progress.difficulty),
-            interval: Math.max(existingProgress.interval, progress.interval)
+            nextReview:
+              progress.nextReview < existingProgress.nextReview
+                ? progress.nextReview
+                : existingProgress.nextReview,
+            difficulty: Math.min(
+              existingProgress.difficulty,
+              progress.difficulty
+            ),
+            interval: Math.max(existingProgress.interval, progress.interval),
           };
 
           await ConceptProgress.findOneAndUpdate(
@@ -702,9 +745,9 @@ export class ConceptMerger {
           const newProgress = {
             ...progress.toObject(),
             conceptId: targetConceptId,
-            _id: undefined
+            _id: undefined,
           };
-          
+
           await ConceptProgress.create(newProgress);
         }
       }
@@ -712,13 +755,13 @@ export class ConceptMerger {
       // Remove source progress records
       await ConceptProgress.deleteMany({ conceptId: sourceConceptId });
 
-      this.logger.debug('Progress data transferred', { 
-        sourceConceptId, 
-        targetConceptId, 
-        progressCount: sourceProgress.length 
+      this.logger.debug("Progress data transferred", {
+        sourceConceptId,
+        targetConceptId,
+        progressCount: sourceProgress.length,
       });
     } catch (error) {
-      this.logger.error('Error transferring progress data', error as Error);
+      this.logger.error("Error transferring progress data", error as Error);
     }
   }
 
@@ -738,9 +781,9 @@ export class ConceptMerger {
     };
   }> {
     try {
-      const targetConcept = await Concept.findOne({ 
+      const targetConcept = await Concept.findOne({
         id: mergeData.targetConceptId,
-        isActive: true 
+        isActive: true,
       });
 
       if (!targetConcept) {
@@ -749,19 +792,23 @@ export class ConceptMerger {
           previewUpdates: {
             examples: [],
             tags: [],
-            description: '',
+            description: "",
             affectedCourses: [],
-            affectedUsers: []
-          }
+            affectedUsers: [],
+          },
         };
       }
 
       let sourceConcept: IConcept | null = null;
       if (mergeData.sourceConceptId) {
-        sourceConcept = await Concept.findOne({ 
+        const sourceConceptDoc = await Concept.findOne({
           id: mergeData.sourceConceptId,
-          isActive: true 
-        })?.toObject() || null;
+          isActive: true,
+        });
+
+        if (sourceConceptDoc) {
+          sourceConcept = sourceConceptDoc.toObject();
+        }
       }
 
       // Calculate preview updates
@@ -772,22 +819,30 @@ export class ConceptMerger {
             mergeData.additionalData
           )
         : sourceConcept
-        ? await this.prepareMergeUpdatesFromConcepts(
-            targetConcept.toObject(),
-            sourceConcept,
-            mergeData.additionalData
-          )
-        : {};
+          ? await this.prepareMergeUpdatesFromConcepts(
+              targetConcept.toObject(),
+              sourceConcept,
+              mergeData.additionalData
+            )
+          : {};
 
       // Get affected courses and users
       const [courseLinks, progressRecords] = await Promise.all([
-        CourseConcept.find({ 
-          conceptId: { $in: [mergeData.targetConceptId, mergeData.sourceConceptId].filter(Boolean) },
-          isActive: true 
+        CourseConcept.find({
+          conceptId: {
+            $in: [mergeData.targetConceptId, mergeData.sourceConceptId].filter(
+              Boolean
+            ),
+          },
+          isActive: true,
         }),
-        ConceptProgress.find({ 
-          conceptId: { $in: [mergeData.targetConceptId, mergeData.sourceConceptId].filter(Boolean) }
-        })
+        ConceptProgress.find({
+          conceptId: {
+            $in: [mergeData.targetConceptId, mergeData.sourceConceptId].filter(
+              Boolean
+            ),
+          },
+        }),
       ]);
 
       return {
@@ -797,13 +852,18 @@ export class ConceptMerger {
         previewUpdates: {
           examples: previewUpdates.examples || targetConcept.examples || [],
           tags: previewUpdates.tags || targetConcept.tags || [],
-          description: previewUpdates.description || targetConcept.description || '',
-          affectedCourses: Array.from(new Set(courseLinks.map(link => link.courseId))),
-          affectedUsers: Array.from(new Set(progressRecords.map(progress => progress.userId)))
-        }
+          description:
+            previewUpdates.description || targetConcept.description || "",
+          affectedCourses: Array.from(
+            new Set(courseLinks.map((link) => link.courseId))
+          ),
+          affectedUsers: Array.from(
+            new Set(progressRecords.map((progress) => progress.userId))
+          ),
+        },
       };
     } catch (error) {
-      this.logger.error('Error generating merge preview', error as Error);
+      this.logger.error("Error generating merge preview", error as Error);
       throw error;
     }
   }

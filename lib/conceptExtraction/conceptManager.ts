@@ -184,7 +184,7 @@ export class ConceptManager {
         if (returnStatus) {
           return {
             concept: existingConcept.toObject(),
-            wasCreated: false
+            wasCreated: false,
           };
         }
         return existingConcept.toObject();
@@ -195,7 +195,7 @@ export class ConceptManager {
       if (returnStatus) {
         return {
           concept: newConcept,
-          wasCreated: true
+          wasCreated: true,
         };
       }
       return newConcept;
@@ -722,22 +722,25 @@ export class ConceptManager {
       difficulty: extractedConcept.suggestedDifficulty,
       confidence: extractedConcept.confidence,
       createdFrom: [courseId.toString()],
-      tags: extractedConcept.suggestedTags?.map(tag => tag.tag) || [],
+      tags: extractedConcept.suggestedTags?.map((tag) => tag.tag) || [],
       isActive: true,
       lastUpdated: new Date(),
     };
 
     const concept = await this.createOrFindConcept(conceptData);
 
+    // Handle the different return types from createOrFindConcept
+    const conceptId = "concept" in concept ? concept.concept.id : concept.id;
+
     // Link to course
     await this.linkConceptToCourse(
-      concept.id,
+      conceptId,
       courseId,
       extractedConcept.confidence,
       extractedConcept.sourceContent
     );
 
-    return concept;
+    return "concept" in concept ? concept.concept : concept;
   }
 
   /**
@@ -852,19 +855,17 @@ export class ConceptManager {
     matchAll: boolean = false
   ): Promise<IConcept[]> {
     try {
-      const normalizedTags = tags.map(tag => tag.toLowerCase().trim());
-      
+      const normalizedTags = tags.map((tag) => tag.toLowerCase().trim());
+
       const query = matchAll
         ? { tags: { $all: normalizedTags }, isActive: true }
         : { tags: { $in: normalizedTags }, isActive: true };
 
-      const concepts = await Concept.find(query)
-        .sort({ name: 1 })
-        .lean();
+      const concepts = await Concept.find(query).sort({ name: 1 }).lean();
 
       return concepts as unknown as IConcept[];
     } catch (error) {
-      console.error('Error getting concepts by tags:', error);
+      console.error("Error getting concepts by tags:", error);
       return [];
     }
   }
@@ -882,12 +883,18 @@ export class ConceptManager {
     excludeGroupIds?: string[];
   }): Promise<IConcept[]> {
     try {
-      const { tags, category, difficulty, limit = 50, excludeGroupIds = [] } = tagQuery;
-      
+      const {
+        tags,
+        category,
+        difficulty,
+        limit = 50,
+        excludeGroupIds = [],
+      } = tagQuery;
+
       // Build base query
-      const query: any = {
-        tags: { $in: tags.map(tag => tag.toLowerCase().trim()) },
-        isActive: true
+      const query: Record<string, unknown> = {
+        tags: { $in: tags.map((tag) => tag.toLowerCase().trim()) },
+        isActive: true,
       };
 
       // Add category filter if specified
@@ -901,27 +908,32 @@ export class ConceptManager {
       }
 
       // Get concepts that match the criteria
-      let concepts = await Concept.find(query)
+      let concepts = (await Concept.find(query)
         .sort({ name: 1 })
         .limit(limit)
-        .lean() as unknown as IConcept[];
+        .lean()) as unknown as IConcept[];
 
       // Filter out concepts that are already in excluded groups
       if (excludeGroupIds.length > 0) {
-        const ConceptGroup = (await import('@/datamodels/conceptGroup.model')).default;
-        
+        const ConceptGroup = (await import("@/datamodels/conceptGroup.model"))
+          .default;
+
         const groupsWithConcepts = await ConceptGroup.find({
           id: { $in: excludeGroupIds },
-          isActive: true
-        }).select('memberConcepts');
+          isActive: true,
+        }).select("memberConcepts");
 
-        const excludedConceptIds = groupsWithConcepts.flatMap(group => group.memberConcepts);
-        concepts = concepts.filter(concept => !excludedConceptIds.includes(concept.id));
+        const excludedConceptIds = groupsWithConcepts.flatMap(
+          (group) => group.memberConcepts
+        );
+        concepts = concepts.filter(
+          (concept) => !excludedConceptIds.includes(concept.id)
+        );
       }
 
       return concepts;
     } catch (error) {
-      console.error('Error getting concepts for group assignment:', error);
+      console.error("Error getting concepts for group assignment:", error);
       return [];
     }
   }
@@ -950,28 +962,30 @@ export class ConceptManager {
       }
 
       // Extract keywords from name and description
-      const text = `${conceptData.name || ''} ${conceptData.description || ''}`.toLowerCase();
-      const words = text.split(/\s+/).filter(word => word.length > 3);
-      
+      const text =
+        `${conceptData.name || ""} ${conceptData.description || ""}`.toLowerCase();
+      const words = text.split(/\s+/).filter((word) => word.length > 3);
+
       // Add relevant words as potential tags
-      words.forEach(word => {
+      words.forEach((word) => {
         if (word.length > 3 && word.length < 20) {
           suggestions.add(word);
         }
       });
 
       // Match against existing tags for consistency
-      const matchingExistingTags = existingTags.filter(tag => 
-        text.includes(tag.toLowerCase()) || 
-        tag.toLowerCase().includes(conceptData.name?.toLowerCase() || '')
+      const matchingExistingTags = existingTags.filter(
+        (tag) =>
+          text.includes(tag.toLowerCase()) ||
+          tag.toLowerCase().includes(conceptData.name?.toLowerCase() || "")
       );
 
-      matchingExistingTags.forEach(tag => suggestions.add(tag));
+      matchingExistingTags.forEach((tag) => suggestions.add(tag));
 
       // Convert to array and limit to reasonable number
       return Array.from(suggestions).slice(0, 10);
     } catch (error) {
-      console.error('Error suggesting tags:', error);
+      console.error("Error suggesting tags:", error);
       return [];
     }
   }
@@ -983,9 +997,9 @@ export class ConceptManager {
    */
   async mergeTags(tags: string[]): Promise<string[]> {
     try {
-      const normalized = tags.map(tag => tag.toLowerCase().trim());
+      const normalized = tags.map((tag) => tag.toLowerCase().trim());
       const unique = Array.from(new Set(normalized));
-      
+
       // Group similar tags (basic similarity based on edit distance)
       const merged: string[] = [];
       const used = new Set<string>();
@@ -1009,7 +1023,7 @@ export class ConceptManager {
 
       return merged;
     } catch (error) {
-      console.error('Error merging tags:', error);
+      console.error("Error merging tags:", error);
       return Array.from(new Set(tags));
     }
   }
@@ -1019,20 +1033,22 @@ export class ConceptManager {
    * @param limit Number of tags to return
    * @returns Array of popular tags with usage counts
    */
-  async getPopularTags(limit: number = 20): Promise<{ tag: string; count: number }[]> {
+  async getPopularTags(
+    limit: number = 20
+  ): Promise<{ tag: string; count: number }[]> {
     try {
       const results = await Concept.aggregate([
         { $match: { isActive: true } },
-        { $unwind: '$tags' },
-        { $group: { _id: '$tags', count: { $sum: 1 } } },
+        { $unwind: "$tags" },
+        { $group: { _id: "$tags", count: { $sum: 1 } } },
         { $sort: { count: -1 } },
         { $limit: limit },
-        { $project: { tag: '$_id', count: 1, _id: 0 } }
+        { $project: { tag: "$_id", count: 1, _id: 0 } },
       ]);
 
       return results;
     } catch (error) {
-      console.error('Error getting popular tags:', error);
+      console.error("Error getting popular tags:", error);
       return [];
     }
   }

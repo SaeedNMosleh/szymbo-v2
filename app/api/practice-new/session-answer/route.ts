@@ -4,7 +4,9 @@ import { connectToDatabase } from "@/lib/dbConnect";
 import { validateAnswer } from "@/lib/LLMPracticeValidation/validateAnswer";
 import { ConceptPracticeEngine } from "@/lib/practiceEngine/conceptPracticeEngine";
 import { SRSCalculator } from "@/lib/practiceEngine/srsCalculator";
-import ConceptPracticeSession, { IConceptPracticeSession, IQuestionResponse } from "@/datamodels/conceptPracticeSession.model";
+import ConceptPracticeSession, {
+  IQuestionResponse,
+} from "@/datamodels/conceptPracticeSession.model";
 import QuestionBank from "@/datamodels/questionBank.model";
 import Course from "@/datamodels/course.model";
 import { z } from "zod";
@@ -33,7 +35,9 @@ export async function POST(request: NextRequest) {
       attemptNumber,
     } = sessionAnswerSchema.parse(body);
 
-    console.log(`🎯 Session ${sessionId}: Question ${questionId} - Attempt ${attemptNumber}`);
+    console.log(
+      `🎯 Session ${sessionId}: Question ${questionId} - Attempt ${attemptNumber}`
+    );
 
     // Get the practice session
     const session = await ConceptPracticeSession.findOne({
@@ -88,7 +92,8 @@ export async function POST(request: NextRequest) {
 
     const isCorrect = validationResult.isCorrect ?? false;
     const feedback = validationResult.feedback ?? "No feedback available";
-    const correctAnswer = validationResult.correctAnswer ?? question.correctAnswer;
+    const correctAnswer =
+      validationResult.correctAnswer ?? question.correctAnswer;
 
     // Check if this is the final attempt or question is correct
     const isQuestionCompleted = isCorrect || attemptNumber >= 3;
@@ -171,14 +176,14 @@ export async function POST(request: NextRequest) {
         validationDetails: {
           confidenceLevel: validationResult.analysisDetails?.confidence || 0,
           mistakeType: validationResult.analysisDetails?.mistakeType || null,
-          questionLevel: validationResult.analysisDetails?.questionLevel || "A2",
+          questionLevel:
+            validationResult.analysisDetails?.questionLevel || "A2",
           keywords: validationResult.keywords || [],
         },
       },
     };
 
     return NextResponse.json(response, { status: 200 });
-
   } catch (error) {
     console.error("Error processing session answer:", error);
 

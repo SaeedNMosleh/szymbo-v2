@@ -12,19 +12,16 @@ import { v4 as uuidv4 } from "uuid";
  * Extends the base ConceptManager with merge, split, archive, and group management
  */
 export class ConceptManagerEnhanced extends ConceptManager {
-  
   /**
    * Merge multiple concepts into a single concept
    * Preserves course linkages and tags from all source concepts
    * @param sourceConceptIds Array of concept IDs to merge
    * @param targetConceptData Data for the merged concept
-   * @param preserveHistory Whether to keep merge history
    * @returns The merged concept
    */
   async mergeConcepts(
     sourceConceptIds: string[],
-    targetConceptData: Partial<IConcept>,
-    preserveHistory: boolean = true
+    targetConceptData: Partial<IConcept>
   ): Promise<IConcept> {
     if (sourceConceptIds.length < 2) {
       throw new Error("At least 2 concepts required for merging");
@@ -32,50 +29,52 @@ export class ConceptManagerEnhanced extends ConceptManager {
 
     // Fetch all source concepts
     const sourceConcepts = await Promise.all(
-      sourceConceptIds.map(id => this.getConcept(id))
+      sourceConceptIds.map((id) => this.getConcept(id))
     );
 
     // Validate all concepts exist
-    const missingConcepts = sourceConcepts.filter(c => !c);
+    const missingConcepts = sourceConcepts.filter((c) => !c);
     if (missingConcepts.length > 0) {
       throw new Error("Some source concepts not found");
     }
 
-    const validSourceConcepts = sourceConcepts.filter(c => c !== null) as IConcept[];
+    const validSourceConcepts = sourceConcepts.filter(
+      (c) => c !== null
+    ) as IConcept[];
 
     // Aggregate data from source concepts
     const mergedData: Partial<IConcept> = {
       ...targetConceptData,
       id: targetConceptData.id || uuidv4(),
-      
+
       // Merge examples (remove duplicates)
       examples: [
         ...(targetConceptData.examples || []),
-        ...Array.from(new Set(
-          validSourceConcepts.flatMap(c => c.examples || [])
-        ))
+        ...Array.from(
+          new Set(validSourceConcepts.flatMap((c) => c.examples || []))
+        ),
       ],
-      
+
       // Merge tags
       tags: [
         ...(targetConceptData.tags || []),
-        ...Array.from(new Set(
-          validSourceConcepts.flatMap(c => c.tags || [])
-        ))
+        ...Array.from(
+          new Set(validSourceConcepts.flatMap((c) => c.tags || []))
+        ),
       ],
-      
+
       // Merge createdFrom
       createdFrom: [
         ...(targetConceptData.createdFrom || []),
-        ...Array.from(new Set(
-          validSourceConcepts.flatMap(c => c.createdFrom || [])
-        ))
+        ...Array.from(
+          new Set(validSourceConcepts.flatMap((c) => c.createdFrom || []))
+        ),
       ],
-      
+
       // Track merge history
-      // mergedFromIds: preserveHistory ? sourceConceptIds : [],
+      // mergedFromIds: sourceConceptIds,
       // version: 1,
-      sourceType: targetConceptData.sourceType || 'manual',
+      sourceType: targetConceptData.sourceType || "manual",
       lastUpdated: new Date(),
     };
 
@@ -85,7 +84,7 @@ export class ConceptManagerEnhanced extends ConceptManager {
     // Transfer all course linkages from source concepts
     for (const sourceConcept of validSourceConcepts) {
       const courseIds = await this.getCoursesForConcept(sourceConcept.id);
-      
+
       for (const courseId of courseIds) {
         try {
           await this.linkConceptToCourse(
@@ -95,14 +94,20 @@ export class ConceptManagerEnhanced extends ConceptManager {
             `Merged from concept: ${sourceConcept.name}`
           );
         } catch (error) {
-          console.warn(`Failed to link merged concept to course ${courseId}:`, error);
+          console.warn(
+            `Failed to link merged concept to course ${courseId}:`,
+            error
+          );
         }
       }
     }
 
     // Archive source concepts instead of deleting
     for (const conceptId of sourceConceptIds) {
-      await this.archiveConcept(conceptId, `Merged into concept: ${mergedConcept.name}`);
+      await this.archiveConcept(
+        conceptId,
+        `Merged into concept: ${mergedConcept.name}`
+      );
     }
 
     return mergedConcept;
@@ -136,7 +141,7 @@ export class ConceptManagerEnhanced extends ConceptManager {
       const subconceptWithInheritance: Partial<IConcept> = {
         ...subconceptData,
         id: subconceptData.id || uuidv4(),
-        
+
         // Inherit base properties if not specified
         category: subconceptData.category || sourceConcept.category,
         difficulty: subconceptData.difficulty || sourceConcept.difficulty,
@@ -144,10 +149,10 @@ export class ConceptManagerEnhanced extends ConceptManager {
         tags: [
           ...(subconceptData.tags || []),
           ...(sourceConcept.tags || []),
-          'split-concept',
-          `split-from-${sourceConcept.name.toLowerCase().replace(/\s+/g, '-')}`
+          "split-concept",
+          `split-from-${sourceConcept.name.toLowerCase().replace(/\s+/g, "-")}`,
         ],
-        sourceType: 'manual',
+        sourceType: "manual",
         // version: 1,
         lastUpdated: new Date(),
       };
@@ -159,8 +164,8 @@ export class ConceptManagerEnhanced extends ConceptManager {
     // Archive original concept if not preserving
     if (!preserveOriginal) {
       await this.archiveConcept(
-        sourceConceptId, 
-        `Split into subconcepts: ${createdSubconcepts.map(c => c.name).join(', ')}`
+        sourceConceptId,
+        `Split into subconcepts: ${createdSubconcepts.map((c) => c.name).join(", ")}`
       );
     }
 
@@ -209,25 +214,23 @@ export class ConceptManagerEnhanced extends ConceptManager {
 
     // Remove archive tags
     if (concept.tags) {
-      updates.tags = concept.tags.filter(tag => !tag.startsWith('archived:'));
+      updates.tags = concept.tags.filter((tag) => !tag.startsWith("archived:"));
     }
 
     await this.updateConcept(conceptId, updates);
 
     // Reactivate course linkages
-    await CourseConcept.updateMany(
-      { conceptId },
-      { $set: { isActive: true } }
-    );
+    await CourseConcept.updateMany({ conceptId }, { $set: { isActive: true } });
   }
-
 
   /**
    * Create a concept group following the hierarchical structure
    * @param groupData Data for the concept group
    * @returns Created concept group
    */
-  async createConceptGroup(groupData: Partial<IConceptGroup>): Promise<IConceptGroup> {
+  async createConceptGroup(
+    groupData: Partial<IConceptGroup>
+  ): Promise<IConceptGroup> {
     if (!groupData.name || !groupData.groupType) {
       throw new Error("Name and groupType are required for concept groups");
     }
@@ -235,18 +238,18 @@ export class ConceptManagerEnhanced extends ConceptManager {
     // Check if a group with the same name and groupType already exists
     let uniqueName = groupData.name;
     let counter = 1;
-    
+
     while (true) {
-      const existingGroup = await ConceptGroup.findOne({ 
-        name: uniqueName, 
+      const existingGroup = await ConceptGroup.findOne({
+        name: uniqueName,
         groupType: groupData.groupType,
-        isActive: true 
+        isActive: true,
       });
-      
+
       if (!existingGroup) {
         break; // Name is unique, we can use it
       }
-      
+
       // Generate a new name with counter
       counter++;
       uniqueName = `${groupData.name} (${counter})`;
@@ -255,7 +258,7 @@ export class ConceptManagerEnhanced extends ConceptManager {
     const group: IConceptGroup = {
       id: groupData.id || uuidv4(),
       name: uniqueName,
-      description: groupData.description || '',
+      description: groupData.description || "",
       memberConcepts: groupData.memberConcepts || [],
       parentGroup: groupData.parentGroup,
       childGroups: groupData.childGroups || [],
@@ -286,15 +289,18 @@ export class ConceptManagerEnhanced extends ConceptManager {
    * @param groupId Group ID
    * @param conceptIds Array of concept IDs to add
    */
-  async addConceptsToGroup(groupId: string, conceptIds: string[]): Promise<void> {
+  async addConceptsToGroup(
+    groupId: string,
+    conceptIds: string[]
+  ): Promise<void> {
     // Validate concepts exist
     const concepts = await Promise.all(
-      conceptIds.map(id => this.getConcept(id))
+      conceptIds.map((id) => this.getConcept(id))
     );
 
     const validConceptIds = concepts
-      .filter(c => c !== null)
-      .map(c => c!.id);
+      .filter((c) => c !== null)
+      .map((c) => c!.id);
 
     if (validConceptIds.length === 0) {
       throw new Error("No valid concepts found");
@@ -302,9 +308,9 @@ export class ConceptManagerEnhanced extends ConceptManager {
 
     await ConceptGroup.findOneAndUpdate(
       { id: groupId },
-      { 
+      {
         $addToSet: { memberConcepts: { $each: validConceptIds } },
-        $set: { lastUpdated: new Date() }
+        $set: { lastUpdated: new Date() },
       }
     );
   }
@@ -338,9 +344,12 @@ export class ConceptManagerEnhanced extends ConceptManager {
             true,
             maxDepth - 1
           );
-          allConceptIds.push(...childConcepts.map(c => c.id));
+          allConceptIds.push(...childConcepts.map((c) => c.id));
         } catch (error) {
-          console.warn(`Failed to get concepts from child group ${childGroupId}:`, error);
+          console.warn(
+            `Failed to get concepts from child group ${childGroupId}:`,
+            error
+          );
         }
       }
     }
@@ -348,10 +357,10 @@ export class ConceptManagerEnhanced extends ConceptManager {
     // Remove duplicates and fetch concepts
     const uniqueConceptIds = Array.from(new Set(allConceptIds));
     const concepts = await Promise.all(
-      uniqueConceptIds.map(id => this.getConcept(id))
+      uniqueConceptIds.map((id) => this.getConcept(id))
     );
 
-    return concepts.filter(c => c !== null) as IConcept[];
+    return concepts.filter((c) => c !== null) as IConcept[];
   }
 
   /**
@@ -366,11 +375,11 @@ export class ConceptManagerEnhanced extends ConceptManager {
   ): Promise<IConceptGroup> {
     const updatedGroup = await ConceptGroup.findOneAndUpdate(
       { id: groupId },
-      { 
-        $set: { 
+      {
+        $set: {
           ...updates,
-          lastUpdated: new Date()
-        }
+          lastUpdated: new Date(),
+        },
       },
       { new: true, runValidators: true }
     );
@@ -387,12 +396,15 @@ export class ConceptManagerEnhanced extends ConceptManager {
    * @param groupId Group ID
    * @param conceptIds Array of concept IDs to remove
    */
-  async removeConceptsFromGroup(groupId: string, conceptIds: string[]): Promise<void> {
+  async removeConceptsFromGroup(
+    groupId: string,
+    conceptIds: string[]
+  ): Promise<void> {
     await ConceptGroup.findOneAndUpdate(
       { id: groupId },
-      { 
+      {
         $pull: { memberConcepts: { $in: conceptIds } },
-        $set: { lastUpdated: new Date() }
+        $set: { lastUpdated: new Date() },
       }
     );
   }
@@ -408,7 +420,7 @@ export class ConceptManagerEnhanced extends ConceptManager {
     isActive?: boolean;
     level?: number;
   }): Promise<IConceptGroup[]> {
-    const query: any = {};
+    const query: Record<string, unknown> = {};
 
     if (filters?.groupType) {
       query.groupType = filters.groupType;
@@ -439,23 +451,25 @@ export class ConceptManagerEnhanced extends ConceptManager {
    * @returns Concept group or null if not found
    */
   async getConceptGroup(groupId: string): Promise<IConceptGroup | null> {
-    const group = await ConceptGroup.findOne({ id: groupId, isActive: true }).lean();
+    const group = await ConceptGroup.findOne({
+      id: groupId,
+      isActive: true,
+    }).lean();
     return group as IConceptGroup | null;
   }
 
   /**
    * Archive a concept group (soft delete)
    * @param groupId Group ID
-   * @param reason Reason for archiving
    */
-  async archiveConceptGroup(groupId: string, reason?: string): Promise<void> {
+  async archiveConceptGroup(groupId: string): Promise<void> {
     await ConceptGroup.findOneAndUpdate(
       { id: groupId },
-      { 
-        $set: { 
+      {
+        $set: {
           isActive: false,
-          lastUpdated: new Date()
-        }
+          lastUpdated: new Date(),
+        },
       }
     );
 
@@ -464,9 +478,9 @@ export class ConceptManagerEnhanced extends ConceptManager {
     if (group?.parentGroup) {
       await ConceptGroup.findOneAndUpdate(
         { id: group.parentGroup },
-        { 
+        {
           $pull: { childGroups: groupId },
-          $set: { lastUpdated: new Date() }
+          $set: { lastUpdated: new Date() },
         }
       );
     }
@@ -487,15 +501,20 @@ export class ConceptManagerEnhanced extends ConceptManager {
       throw new Error(`Concept group ${groupId} not found`);
     }
 
-    const enrichedGroup = rootGroup as IConceptGroup & { children?: IConceptGroup[] };
+    const enrichedGroup = rootGroup as IConceptGroup & {
+      children?: IConceptGroup[];
+    };
 
     // Recursively get children if depth allows
     if (maxDepth > 0 && rootGroup.childGroups.length > 0) {
       enrichedGroup.children = [];
-      
+
       for (const childGroupId of rootGroup.childGroups) {
         try {
-          const childGroup = await this.getGroupHierarchy(childGroupId, maxDepth - 1);
+          const childGroup = await this.getGroupHierarchy(
+            childGroupId,
+            maxDepth - 1
+          );
           enrichedGroup.children.push(childGroup);
         } catch (error) {
           console.warn(`Failed to get child group ${childGroupId}:`, error);
@@ -519,12 +538,12 @@ export class ConceptManagerEnhanced extends ConceptManager {
   ): Promise<void> {
     // Validate concepts exist
     const concepts = await Promise.all(
-      conceptIds.map(id => this.getConcept(id))
+      conceptIds.map((id) => this.getConcept(id))
     );
 
     const validConceptIds = concepts
-      .filter(c => c !== null)
-      .map(c => c!.id);
+      .filter((c) => c !== null)
+      .map((c) => c!.id);
 
     if (validConceptIds.length === 0) {
       throw new Error("No valid concepts found");

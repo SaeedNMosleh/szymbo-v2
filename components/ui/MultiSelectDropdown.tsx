@@ -1,7 +1,6 @@
-
 "use client";
 
-import React, { useState } from "react";
+import React from "react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -25,8 +24,6 @@ export function MultiSelectDropdown({
   onChange,
   placeholder = "Select...",
 }: MultiSelectDropdownProps) {
-  const [isOpen, setIsOpen] = useState(false);
-
   const handleSelectAll = () => {
     onChange(options);
   };
@@ -44,20 +41,21 @@ export function MultiSelectDropdown({
   };
 
   return (
-    <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
+    <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="outline" className="w-full justify-between">
           <span>
-            {selected.length > 0
-              ? `${selected.length} selected`
-              : placeholder}
+            {selected.length > 0 ? `${selected.length} selected` : placeholder}
           </span>
-          <ChevronDown className="h-4 w-4" />
+          <ChevronDown className="size-4" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent className="w-full">
-        <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
-          <div className="flex w-full items-center justify-between">
+        <DropdownMenuItem>
+          <div
+            className="flex w-full items-center justify-between"
+            onClick={(e) => e.stopPropagation()}
+          >
             <Button variant="link" onClick={handleSelectAll} className="px-2">
               Select All
             </Button>
@@ -71,7 +69,6 @@ export function MultiSelectDropdown({
             key={option}
             checked={selected.includes(option)}
             onCheckedChange={() => handleToggleOption(option)}
-            onSelect={(e) => e.preventDefault()}
           >
             {option}
           </DropdownMenuCheckboxItem>

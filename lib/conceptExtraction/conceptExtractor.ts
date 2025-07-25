@@ -386,8 +386,10 @@ export class ConceptExtractor {
             });
 
             // Link to course
+            const conceptId =
+              "concept" in newConcept ? newConcept.concept.id : newConcept.id;
             await this.conceptManager.linkConceptToCourse(
-              newConcept.id,
+              conceptId,
               courseId,
               concept.confidence,
               concept.sourceContent

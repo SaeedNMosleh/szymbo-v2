@@ -33,10 +33,10 @@ import {
   SimilarityMatch,
   ExtractedConceptSchema,
   SuggestedTag,
-  DuplicateDetectionResult,
 } from "@/datamodels/conceptExtractionSession.model";
 import { ConceptCategory, QuestionLevel } from "@/lib/enum";
-import { logger, createOperationLogger } from "@/lib/utils/logger";
+import { createOperationLogger } from "@/lib/utils/logger";
+import { AlertCircle } from "lucide-react";
 
 interface EnhancedConceptReviewProps {
   courseId: number;
@@ -46,6 +46,7 @@ interface EnhancedConceptReviewProps {
 interface ConceptDecisionState {
   action: "approve" | "edit" | "reject" | "merge" | "manual_add";
   editedConcept?: Partial<ExtractedConcept>;
+  targetConceptId?: string; // for link functionality
   mergeData?: {
     primaryConceptId: string;
     additionalData: {
@@ -63,11 +64,15 @@ export function EnhancedConceptReview({
   onReviewComplete,
 }: EnhancedConceptReviewProps) {
   // Create operation-specific loggers
-  const sessionLogger = createOperationLogger('session-management', { courseId });
-  const editLogger = createOperationLogger('concept-edit', { courseId });
-  const submitLogger = createOperationLogger('review-submit', { courseId });
-  const decisionLogger = createOperationLogger('concept-decision', { courseId });
-  
+  const sessionLogger = createOperationLogger("session-management", {
+    courseId,
+  });
+  const editLogger = createOperationLogger("concept-edit", { courseId });
+  const submitLogger = createOperationLogger("review-submit", { courseId });
+  const decisionLogger = createOperationLogger("concept-decision", {
+    courseId,
+  });
+
   const [session, setSession] = useState<IConceptExtractionSession | null>(
     null
   );
@@ -83,9 +88,11 @@ export function EnhancedConceptReview({
   const [showManualAdd, setShowManualAdd] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [availableTags, setAvailableTags] = useState<string[]>([]);
-  const [duplicateWarnings, setDuplicateWarnings] = useState<Set<string>>(new Set());
+  const [duplicateWarnings, setDuplicateWarnings] = useState<Set<string>>(
+    new Set()
+  );
 
-  sessionLogger.info('ConceptReview component initialized', { courseId });
+  sessionLogger.info("ConceptReview component initialized", { courseId });
 
   // Form for editing concepts
   const editForm = useForm<Partial<ExtractedConcept>>({
@@ -118,40 +125,43 @@ export function EnhancedConceptReview({
   });
 
   const loadExtractionSession = useCallback(async () => {
-    sessionLogger.info('Starting session load');
-    
+    sessionLogger.info("Starting session load");
+
     try {
       setIsLoading(true);
       setError(null);
 
-      sessionLogger.debug('Fetching extraction session from API');
+      sessionLogger.debug("Fetching extraction session from API");
       // Get latest extraction session for course - include both extracted and in_review status
       const response = await fetch(
         `/api/extraction-sessions?courseId=${courseId}&limit=1`
       );
       const data = await response.json();
 
-      sessionLogger.debug('API response received', { 
-        status: response.status, 
+      sessionLogger.debug("API response received", {
+        status: response.status,
         ok: response.ok,
         dataKeys: Object.keys(data || {}),
-        sessionCount: data.data?.sessions?.length || 0
+        sessionCount: data.data?.sessions?.length || 0,
       });
 
       if (!response.ok) {
-        sessionLogger.error('API response not ok', { status: response.status, error: data.error });
+        sessionLogger.error("API response not ok", {
+          status: response.status,
+          error: data.error,
+        });
         throw new Error(data.error || `API Error: ${response.status}`);
       }
 
       if (data.data?.sessions && data.data.sessions.length > 0) {
         const sessionData = data.data.sessions[0];
-        sessionLogger.success('Found existing session', { 
+        sessionLogger.success("Found existing session", {
           sessionId: sessionData.id,
           status: sessionData.status,
           conceptCount: sessionData.extractedConcepts?.length || 0,
-          existingDecisions: sessionData.reviewProgress?.decisions?.length || 0
+          existingDecisions: sessionData.reviewProgress?.decisions?.length || 0,
         });
-        
+
         setSession(sessionData);
 
         // Load existing decisions if any
@@ -161,33 +171,36 @@ export function EnhancedConceptReview({
             existingDecisions.set(decision.extractedConcept.name, {
               action: decision.action,
               editedConcept: decision.editedConcept,
-              targetConceptId: decision.targetConceptId,
               mergeData: decision.mergeData,
             });
           }
         );
         setDecisions(existingDecisions);
-        
+
         // Initialize duplicate warnings from session data
         if (sessionData.duplicateDetection?.hasDuplicates) {
-          const duplicateNames = new Set(
-            sessionData.duplicateDetection.duplicates.map(d => d.extractedConceptName)
+          const duplicateNames = new Set<string>(
+            sessionData.duplicateDetection.duplicates.map(
+              (d: { extractedConceptName: string }) => d.extractedConceptName
+            )
           );
           setDuplicateWarnings(duplicateNames);
-          sessionLogger.warn('Duplicates detected in session', { 
+          sessionLogger.warn("Duplicates detected in session", {
             duplicateCount: duplicateNames.size,
-            duplicateNames: Array.from(duplicateNames)
+            duplicateNames: Array.from(duplicateNames),
           });
         }
-        
-        sessionLogger.debug('Loaded existing decisions', { decisionCount: existingDecisions.size });
+
+        sessionLogger.debug("Loaded existing decisions", {
+          decisionCount: existingDecisions.size,
+        });
       } else {
-        sessionLogger.warn('No extraction session found, trying legacy system');
+        sessionLogger.warn("No extraction session found, trying legacy system");
         // No extraction session found, try to get from the old concept extraction system
         // Try fallback to legacy system
 
         try {
-          sessionLogger.debug('Attempting legacy API call');
+          sessionLogger.debug("Attempting legacy API call");
           // Try to get review data using the fallback API
           const extractorResponse = await fetch(
             "/api/concepts/prepare-review",
@@ -200,10 +213,10 @@ export function EnhancedConceptReview({
 
           if (extractorResponse.ok) {
             const reviewData = await extractorResponse.json();
-            sessionLogger.info("Legacy system data received", { 
+            sessionLogger.info("Legacy system data received", {
               courseName: reviewData.data?.courseName,
               conceptCount: reviewData.data?.extractedConcepts?.length || 0,
-              hasSimilarityMatches: !!reviewData.data?.similarityMatches
+              hasSimilarityMatches: !!reviewData.data?.similarityMatches,
             });
 
             // Convert old format to new session format
@@ -212,7 +225,7 @@ export function EnhancedConceptReview({
             const extractedConcepts = reviewData.data?.extractedConcepts || [];
             sessionLogger.debug("Extracted concepts from legacy data", {
               conceptCount: extractedConcepts.length,
-              firstConceptName: extractedConcepts[0]?.name
+              firstConceptName: extractedConcepts[0]?.name,
             });
 
             const mockSession: IConceptExtractionSession = {
@@ -247,12 +260,12 @@ export function EnhancedConceptReview({
               updatedAt: new Date(),
             };
 
-            sessionLogger.success("Created mock session", { 
+            sessionLogger.success("Created mock session", {
               sessionId: mockSession.id,
               conceptCount: mockSession.extractedConcepts.length,
-              similarityMatches: mockSession.similarityMatches.length
+              similarityMatches: mockSession.similarityMatches.length,
             });
-            
+
             // Save the legacy session to the database so it can be updated later
             // Only send the fields that the API expects
             const sessionPayload = {
@@ -260,42 +273,56 @@ export function EnhancedConceptReview({
               courseName: mockSession.courseName,
               extractedConcepts: mockSession.extractedConcepts,
               similarityMatches: mockSession.similarityMatches,
-              extractionMetadata: mockSession.extractionMetadata
+              extractionMetadata: mockSession.extractionMetadata,
             };
-            
-            sessionLogger.debug("Attempting to save legacy session to database");
-            
+
+            sessionLogger.debug(
+              "Attempting to save legacy session to database"
+            );
+
             try {
-              const saveResponse = await fetch('/api/extraction-sessions', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(sessionPayload)
+              const saveResponse = await fetch("/api/extraction-sessions", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(sessionPayload),
               });
-              
+
               if (saveResponse.ok) {
                 const savedSessionData = await saveResponse.json();
-                sessionLogger.success("Legacy session saved to database", { 
-                  sessionId: savedSessionData.data?.sessionId || savedSessionData.data?.session?.id,
-                  responseKeys: Object.keys(savedSessionData.data || {})
+                sessionLogger.success("Legacy session saved to database", {
+                  sessionId:
+                    savedSessionData.data?.sessionId ||
+                    savedSessionData.data?.session?.id,
+                  responseKeys: Object.keys(savedSessionData.data || {}),
                 });
                 // Use the session from the response, or fall back to the created session
-                setSession(savedSessionData.data?.session || savedSessionData.data || mockSession);
+                setSession(
+                  savedSessionData.data?.session ||
+                    savedSessionData.data ||
+                    mockSession
+                );
               } else {
                 const errorData = await saveResponse.json().catch(() => ({}));
-                sessionLogger.warn("Failed to save legacy session", { 
+                sessionLogger.warn("Failed to save legacy session", {
                   status: saveResponse.status,
-                  error: errorData
+                  error: errorData,
                 });
                 setSession(mockSession);
               }
             } catch (saveError) {
-              sessionLogger.error("Error saving legacy session", saveError as Error);
+              sessionLogger.error(
+                "Error saving legacy session",
+                saveError as Error
+              );
               setSession(mockSession);
             }
             return;
           }
         } catch (legacyError) {
-          sessionLogger.error("Failed to load from legacy system", legacyError as Error);
+          sessionLogger.error(
+            "Failed to load from legacy system",
+            legacyError as Error
+          );
         }
 
         sessionLogger.error("No extraction session found");
@@ -312,25 +339,25 @@ export function EnhancedConceptReview({
       setIsLoading(false);
       sessionLogger.debug("Session loading completed");
     }
-  }, [courseId]);
+  }, [courseId, sessionLogger]);
 
   // Load available tags
   const loadAvailableTags = useCallback(async () => {
-    sessionLogger.debug('Loading available tags');
+    sessionLogger.debug("Loading available tags");
     try {
       const response = await fetch(`/api/concepts/tags?courseId=${courseId}`);
       if (response.ok) {
         const data = await response.json();
         const tags = data.data?.tags || [];
         setAvailableTags(tags);
-        sessionLogger.success('Tags loaded', { tagCount: tags.length });
+        sessionLogger.success("Tags loaded", { tagCount: tags.length });
       } else {
-        sessionLogger.warn('Failed to load tags', { status: response.status });
+        sessionLogger.warn("Failed to load tags", { status: response.status });
       }
     } catch (error) {
       sessionLogger.error("Failed to load available tags", error as Error);
     }
-  }, [courseId]);
+  }, [courseId, sessionLogger]);
 
   // Load extraction session on mount
   useEffect(() => {
@@ -354,23 +381,25 @@ export function EnhancedConceptReview({
         editedConcept?: Partial<ExtractedConcept>;
       }
     ) => {
-      decisionLogger.info('Concept decision triggered', {
+      decisionLogger.info("Concept decision triggered", {
         conceptName,
         action,
         hasAdditionalData: !!additionalData,
         additionalDataKeys: additionalData ? Object.keys(additionalData) : [],
-        editedConceptFields: additionalData?.editedConcept ? Object.keys(additionalData.editedConcept) : []
+        editedConceptFields: additionalData?.editedConcept
+          ? Object.keys(additionalData.editedConcept)
+          : [],
       });
-      
+
       setDecisions((prev) => {
         const newDecisions = new Map(prev);
         const currentDecision = newDecisions.get(conceptName);
 
-        decisionLogger.debug('Current decision state', {
+        decisionLogger.debug("Current decision state", {
           conceptName,
           currentAction: currentDecision?.action,
           hasCurrentDecision: !!currentDecision,
-          totalDecisions: prev.size
+          totalDecisions: prev.size,
         });
 
         // Toggle behavior: if same action is clicked again, remove the decision
@@ -384,7 +413,7 @@ export function EnhancedConceptReview({
         ) {
           // Clicking approve while merge is active should clear the merge
           shouldToggle = true;
-          decisionLogger.debug('Toggle: approve clicked while merge active');
+          decisionLogger.debug("Toggle: approve clicked while merge active");
         } else if (
           action === "approve" &&
           currentDecision &&
@@ -392,26 +421,29 @@ export function EnhancedConceptReview({
         ) {
           // Clicking approve while edit is active should switch to approve (keep the edit data)
           shouldToggle = false;
-          decisionLogger.debug('No toggle: approve clicked while edit active');
+          decisionLogger.debug("No toggle: approve clicked while edit active");
         } else if (currentDecision && currentDecision.action === action) {
           if (action === "merge") {
             shouldToggle =
               currentDecision.mergeData?.primaryConceptId ===
               additionalData?.mergeData?.primaryConceptId;
-            decisionLogger.debug('Merge toggle check', { shouldToggle });
+            decisionLogger.debug("Merge toggle check", { shouldToggle });
           } else if (action === "edit") {
             // For edit action, we should never toggle - always update with new values
             shouldToggle = false;
-            decisionLogger.debug('Edit action: no toggle, will update');
+            decisionLogger.debug("Edit action: no toggle, will update");
           } else {
             shouldToggle = true; // For approve, reject actions
-            decisionLogger.debug('Standard action toggle', { action });
+            decisionLogger.debug("Standard action toggle", { action });
           }
         }
 
         if (shouldToggle) {
           newDecisions.delete(conceptName);
-          decisionLogger.info('Decision removed (toggled off)', { conceptName, action });
+          decisionLogger.info("Decision removed (toggled off)", {
+            conceptName,
+            action,
+          });
         } else {
           // UI Logic: Merge implies approval for user experience
           if (action === "merge") {
@@ -422,7 +454,11 @@ export function EnhancedConceptReview({
               impliesApproval: true,
             };
             newDecisions.set(conceptName, newDecision);
-            decisionLogger.success('Merge decision set', { conceptName, action, impliesApproval: true });
+            decisionLogger.success("Merge decision set", {
+              conceptName,
+              action,
+              impliesApproval: true,
+            });
           }
           // UI Logic: Reject clears any existing merge decisions
           else if (action === "reject") {
@@ -431,7 +467,7 @@ export function EnhancedConceptReview({
               ...additionalData,
             };
             newDecisions.set(conceptName, newDecision);
-            decisionLogger.success('Reject decision set', { conceptName });
+            decisionLogger.success("Reject decision set", { conceptName });
           }
           // Edit action should always update with the latest edited concept
           else if (action === "edit" && additionalData?.editedConcept) {
@@ -440,14 +476,15 @@ export function EnhancedConceptReview({
               editedConcept: additionalData.editedConcept,
             };
             newDecisions.set(conceptName, newDecision);
-            decisionLogger.success('Edit decision set', {
+            decisionLogger.success("Edit decision set", {
               conceptName,
               editedConceptFields: Object.keys(additionalData.editedConcept),
               editedConceptSample: {
                 name: additionalData.editedConcept.name,
                 category: additionalData.editedConcept.category,
-                tagCount: additionalData.editedConcept.suggestedTags?.length || 0
-              }
+                tagCount:
+                  additionalData.editedConcept.suggestedTags?.length || 0,
+              },
             });
           }
           // Standard actions
@@ -457,40 +494,43 @@ export function EnhancedConceptReview({
               ...additionalData,
             };
             newDecisions.set(conceptName, newDecision);
-            decisionLogger.success('Standard decision set', { conceptName, action });
+            decisionLogger.success("Standard decision set", {
+              conceptName,
+              action,
+            });
           }
         }
 
-        decisionLogger.info('Decision state updated', {
+        decisionLogger.info("Decision state updated", {
           conceptName,
           finalAction: newDecisions.get(conceptName)?.action,
           totalDecisions: newDecisions.size,
-          decisionExists: newDecisions.has(conceptName)
+          decisionExists: newDecisions.has(conceptName),
         });
 
         return newDecisions;
       });
     },
-    []
+    [decisionLogger]
   );
 
   const handleEditConcept = useCallback(
     (conceptName: string) => {
-      editLogger.info('Starting concept edit', { conceptName });
-      
+      editLogger.info("Starting concept edit", { conceptName });
+
       const concept = session?.extractedConcepts.find(
         (c) => c.name === conceptName
       );
-      
+
       if (concept) {
-        editLogger.debug('Found concept for editing', {
+        editLogger.debug("Found concept for editing", {
           conceptName,
           category: concept.category,
-          description: concept.description?.substring(0, 50) + '...',
+          description: concept.description?.substring(0, 50) + "...",
           exampleCount: concept.examples?.length || 0,
-          tagCount: concept.suggestedTags?.length || 0
+          tagCount: concept.suggestedTags?.length || 0,
         });
-        
+
         const formData = {
           name: concept.name,
           category: concept.category,
@@ -501,35 +541,35 @@ export function EnhancedConceptReview({
           suggestedDifficulty: concept.suggestedDifficulty,
           suggestedTags: concept.suggestedTags || [],
         };
-        
+
         editForm.reset(formData);
         setEditingConcept(conceptName);
-        
-        editLogger.success('Edit form initialized', { 
+
+        editLogger.success("Edit form initialized", {
           conceptName,
           formFields: Object.keys(formData),
-          formValid: editForm.formState.isValid
+          formValid: editForm.formState.isValid,
         });
       } else {
-        editLogger.error('Concept not found for editing', { conceptName });
+        editLogger.error("Concept not found for editing", { conceptName });
       }
     },
-    [session, editForm]
+    [session, editForm, editLogger]
   );
 
   const handleSaveEdit = useCallback(
     (values: Partial<ExtractedConcept>) => {
-      editLogger.info("Edit save triggered", { 
+      editLogger.info("Edit save triggered", {
         editingConcept,
         valueFields: Object.keys(values),
         valuesPreview: {
           name: values.name,
           category: values.category,
           tagCount: values.suggestedTags?.length || 0,
-          exampleCount: values.examples?.length || 0
-        }
+          exampleCount: values.examples?.length || 0,
+        },
       });
-      
+
       if (editingConcept) {
         // Ensure we have the original concept to merge with edited values
         const originalConcept = session?.extractedConcepts.find(
@@ -539,9 +579,9 @@ export function EnhancedConceptReview({
         if (originalConcept) {
           editLogger.debug("Found original concept for comparison", {
             originalName: originalConcept.name,
-            originalCategory: originalConcept.category
+            originalCategory: originalConcept.category,
           });
-          
+
           // Make a deep copy of the edited concept with all required fields
           const editedConcept: Partial<ExtractedConcept> = {
             ...values,
@@ -551,17 +591,19 @@ export function EnhancedConceptReview({
               : [],
           };
 
-          editLogger.success("Prepared edited concept data", { 
+          editLogger.success("Prepared edited concept data", {
             editingConcept,
             editedFields: Object.keys(editedConcept),
-            tagCount: editedConcept.suggestedTags?.length || 0
+            tagCount: editedConcept.suggestedTags?.length || 0,
           });
-          
+
           handleConceptDecision(editingConcept, "edit", {
             editedConcept,
           });
-          
-          editLogger.success("Edit decision called, closing modal", { editingConcept });
+
+          editLogger.success("Edit decision called, closing modal", {
+            editingConcept,
+          });
           setEditingConcept(null);
         } else {
           editLogger.error("Original concept not found", { editingConcept });
@@ -570,7 +612,7 @@ export function EnhancedConceptReview({
         editLogger.error("No concept being edited", { editingConcept });
       }
     },
-    [editingConcept, handleConceptDecision, session]
+    [editingConcept, handleConceptDecision, session, editLogger]
   );
 
   const handleManualAdd = useCallback(
@@ -638,10 +680,10 @@ export function EnhancedConceptReview({
               suggestedTags: concept.suggestedTags,
             };
           }
-          submitLogger.debug("Final edited concept in draft", { 
+          submitLogger.debug("Final edited concept in draft", {
             conceptName,
             editedFields: Object.keys(editedConcept),
-            tagCount: editedConcept.suggestedTags?.length || 0
+            tagCount: editedConcept.suggestedTags?.length || 0,
           });
         }
 
@@ -652,7 +694,7 @@ export function EnhancedConceptReview({
           editedConcept,
           mergeData: decision.mergeData,
           courseId,
-          reviewedAt: new Date().toISOString(),
+          reviewedAt: new Date(), // Use Date object instead of string
           reviewerId: "current-user", // TODO: Get from auth
         };
       });
@@ -695,10 +737,10 @@ export function EnhancedConceptReview({
 
   const handleSubmitReview = async () => {
     if (!session || decisions.size === 0) {
-      submitLogger.warn("Cannot submit review", { 
+      submitLogger.warn("Cannot submit review", {
         hasSession: !!session,
         sessionId: session?.id,
-        decisionCount: decisions.size
+        decisionCount: decisions.size,
       });
       return;
     }
@@ -706,12 +748,17 @@ export function EnhancedConceptReview({
     // Check for unresolved duplicates
     if (hasUnresolvedDuplicates()) {
       const unresolvedDuplicates = getUnresolvedDuplicates();
-      const duplicateNames = unresolvedDuplicates.join(', ');
-      setError(`Cannot submit review: The following concepts are duplicates and must be edited to have unique names: ${duplicateNames}`);
-      submitLogger.warn("Review submission blocked due to unresolved duplicates", { 
-        unresolvedDuplicates,
-        sessionId: session.id
-      });
+      const duplicateNames = unresolvedDuplicates.join(", ");
+      setError(
+        `Cannot submit review: The following concepts are duplicates and must be edited to have unique names: ${duplicateNames}`
+      );
+      submitLogger.warn(
+        "Review submission blocked due to unresolved duplicates",
+        {
+          unresolvedDuplicates,
+          sessionId: session.id,
+        }
+      );
       return;
     }
 
@@ -719,7 +766,7 @@ export function EnhancedConceptReview({
       sessionId: session.id,
       sessionStatus: session.status,
       decisionCount: decisions.size,
-      conceptCount: session.extractedConcepts?.length || 0
+      conceptCount: session.extractedConcepts?.length || 0,
     });
 
     try {
@@ -750,10 +797,10 @@ export function EnhancedConceptReview({
               suggestedTags: concept.suggestedTags,
             };
           }
-          submitLogger.debug("Processing edited concept", { 
+          submitLogger.debug("Processing edited concept", {
             conceptName,
             editedFields: Object.keys(editedConcept),
-            tagCount: editedConcept.suggestedTags?.length || 0
+            tagCount: editedConcept.suggestedTags?.length || 0,
           });
         }
 
@@ -764,15 +811,15 @@ export function EnhancedConceptReview({
           editedConcept,
           mergeData: decision.mergeData,
           courseId,
-          reviewedAt: new Date().toISOString(),
+          reviewedAt: new Date(), // Use Date object instead of string
           reviewerId: "current-user", // TODO: Get from auth
         };
 
-        submitLogger.debug("Created review decision", { 
+        submitLogger.debug("Created review decision", {
           conceptName,
           action: decision.action,
           hasEditedConcept: !!editedConcept,
-          hasTargetConceptId: !!decision.targetConceptId
+          hasTargetConceptId: !!decision.targetConceptId,
         });
 
         return reviewDecision;
@@ -793,7 +840,7 @@ export function EnhancedConceptReview({
         reviewedCount: requestBody.reviewProgress.reviewedCount,
         decisionCount: requestBody.reviewProgress.decisions.length,
         isDraft: requestBody.reviewProgress.isDraft,
-        status: requestBody.status
+        status: requestBody.status,
       });
 
       // Final submit with isDraft: false
@@ -803,24 +850,26 @@ export function EnhancedConceptReview({
         body: JSON.stringify(requestBody),
       });
 
-      submitLogger.info("Review submission API call completed", { 
+      submitLogger.info("Review submission API call completed", {
         status: response.status,
         ok: response.ok,
-        sessionId: session.id
+        sessionId: session.id,
       });
 
       if (!response.ok) {
         let errorMessage = "Failed to submit review";
         try {
           const errorData = await response.json();
-          submitLogger.error("Review submission API error", { 
+          submitLogger.error("Review submission API error", {
             status: response.status,
             errorData,
-            errorMessage: errorData.error || errorData.message
+            errorMessage: errorData.error || errorData.message,
           });
           errorMessage = errorData.error || errorData.message || errorMessage;
         } catch {
-          submitLogger.error("Could not parse error response", { status: response.status });
+          submitLogger.error("Could not parse error response", {
+            status: response.status,
+          });
         }
         throw new Error(errorMessage);
       }
@@ -829,7 +878,7 @@ export function EnhancedConceptReview({
       submitLogger.success("Review submission successful", {
         sessionId: session.id,
         responseKeys: Object.keys(responseData),
-        responseMessage: responseData.message
+        responseMessage: responseData.message,
       });
 
       // Call the completion callback
@@ -863,51 +912,59 @@ export function EnhancedConceptReview({
 
   const getDuplicateInfo = (conceptName: string) => {
     if (!session?.duplicateDetection?.hasDuplicates) return null;
-    
+
     return session.duplicateDetection.duplicates.find(
-      d => d.extractedConceptName === conceptName
+      (d) => d.extractedConceptName === conceptName
     );
   };
 
   const hasUnresolvedDuplicates = () => {
     if (!duplicateWarnings.size) return false;
-    
+
     // Check if all duplicate concepts have been edited to have unique names
     for (const duplicateName of duplicateWarnings) {
       const decision = decisions.get(duplicateName);
-      if (decision?.action !== 'edit') {
+      if (decision?.action !== "edit") {
         return true; // Still has unresolved duplicates
       }
-      
+
       // Check if the edited name is still a duplicate
       if (decision?.editedConcept?.name) {
         const editedName = decision.editedConcept.name;
         const duplicateInfo = getDuplicateInfo(duplicateName);
-        if (duplicateInfo && editedName.toLowerCase() === duplicateInfo.existingConcept.name.toLowerCase()) {
+        if (
+          duplicateInfo &&
+          editedName.toLowerCase() ===
+            duplicateInfo.existingConcept.name.toLowerCase()
+        ) {
           return true; // Still a duplicate after edit
         }
       }
     }
-    
+
     return false;
   };
 
   const getUnresolvedDuplicates = () => {
     const unresolved: string[] = [];
-    
+
     for (const duplicateName of duplicateWarnings) {
       const decision = decisions.get(duplicateName);
-      if (decision?.action !== 'edit') {
+      if (decision?.action !== "edit") {
         unresolved.push(duplicateName);
       } else if (decision?.editedConcept?.name) {
         const editedName = decision.editedConcept.name;
         const duplicateInfo = getDuplicateInfo(duplicateName);
-        if (duplicateInfo && editedName.toLowerCase() === duplicateInfo.existingConcept.name.toLowerCase()) {
+        if (
+          duplicateInfo &&
+          editedName.toLowerCase() ===
+            duplicateInfo.existingConcept.name.toLowerCase()
+        ) {
           unresolved.push(duplicateName);
         }
       }
     }
-    
+
     return unresolved;
   };
 
@@ -966,22 +1023,26 @@ export function EnhancedConceptReview({
         <div className="space-y-6">
           {/* Duplicate Detection Summary */}
           {duplicateWarnings.size > 0 && (
-            <div className="rounded-lg bg-orange-100 border border-orange-300 p-4">
-              <h3 className="mb-2 font-semibold text-orange-800 flex items-center gap-2">
+            <div className="rounded-lg border border-orange-300 bg-orange-100 p-4">
+              <h3 className="mb-2 flex items-center gap-2 font-semibold text-orange-800">
                 <AlertCircle className="size-5" />
                 Duplicate Detection Summary
               </h3>
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div className="text-orange-700">
-                  <strong>{duplicateWarnings.size}</strong> duplicate concepts detected
+                  <strong>{duplicateWarnings.size}</strong> duplicate concepts
+                  detected
                 </div>
                 <div className="text-orange-700">
-                  <strong>{getUnresolvedDuplicates().length}</strong> unresolved duplicates
+                  <strong>{getUnresolvedDuplicates().length}</strong> unresolved
+                  duplicates
                 </div>
               </div>
               {hasUnresolvedDuplicates() && (
                 <div className="mt-2 text-sm text-orange-700">
-                  <strong>Action Required:</strong> Edit the highlighted concepts to have unique names before you can submit the review.
+                  <strong>Action Required:</strong> Edit the highlighted
+                  concepts to have unique names before you can submit the
+                  review.
                 </div>
               )}
             </div>
@@ -1030,56 +1091,71 @@ export function EnhancedConceptReview({
                   const isDuplicate = duplicateWarnings.has(concept.name);
 
                   // Use edited concept data if available, otherwise use original
-                  const displayConcept = decision?.editedConcept 
+                  const displayConcept = decision?.editedConcept
                     ? { ...concept, ...decision.editedConcept }
                     : concept;
 
                   const isApproved =
-                    decision?.action === "approve" || 
-                    decision?.action === "edit" || 
+                    decision?.action === "approve" ||
+                    decision?.action === "edit" ||
                     decision?.impliesApproval;
                   const isRejected = decision?.action === "reject";
-                  
+
                   // Check if duplicate is resolved
-                  const isDuplicateResolved = isDuplicate && decision?.action === 'edit' && decision?.editedConcept?.name && 
-                    decision.editedConcept.name.toLowerCase() !== duplicateInfo?.existingConcept.name.toLowerCase();
+                  const isDuplicateResolved =
+                    isDuplicate &&
+                    decision?.action === "edit" &&
+                    decision?.editedConcept?.name &&
+                    decision.editedConcept.name.toLowerCase() !==
+                      duplicateInfo?.existingConcept.name.toLowerCase();
 
                   return (
                     <Card
                       key={`concept-${index}-${concept.name}`}
                       className={`p-4 ${
-                        isDuplicate && !isDuplicateResolved 
-                          ? "border-orange-500 bg-orange-50 border-2" 
+                        isDuplicate && !isDuplicateResolved
+                          ? "border-2 border-orange-500 bg-orange-50"
                           : isDuplicateResolved
-                          ? "border-blue-500 bg-blue-50"
-                          : isApproved 
-                          ? "border-green-500 bg-green-50" 
-                          : isRejected 
-                          ? "border-red-500 bg-red-50" 
-                          : ""
+                            ? "border-blue-500 bg-blue-50"
+                            : isApproved
+                              ? "border-green-500 bg-green-50"
+                              : isRejected
+                                ? "border-red-500 bg-red-50"
+                                : ""
                       }`}
                     >
                       <div className="space-y-4">
                         {/* Duplicate Warning */}
-                        {isDuplicate && !isDuplicateResolved && duplicateInfo && (
-                          <div className="rounded-lg bg-orange-100 border border-orange-300 p-3">
-                            <div className="flex items-center gap-2 text-orange-800">
-                              <AlertCircle className="size-5" />
-                              <span className="font-semibold">Duplicate Detected</span>
+                        {isDuplicate &&
+                          !isDuplicateResolved &&
+                          duplicateInfo && (
+                            <div className="rounded-lg border border-orange-300 bg-orange-100 p-3">
+                              <div className="flex items-center gap-2 text-orange-800">
+                                <AlertCircle className="size-5" />
+                                <span className="font-semibold">
+                                  Duplicate Detected
+                                </span>
+                              </div>
+                              <p className="mt-1 text-sm text-orange-700">
+                                This concept name already exists: &quot;
+                                <strong>
+                                  {duplicateInfo.existingConcept.name}
+                                </strong>
+                                &quot; in category{" "}
+                                {duplicateInfo.existingConcept.category}. You
+                                must edit this concept to have a unique name
+                                before submitting.
+                              </p>
                             </div>
-                            <p className="mt-1 text-sm text-orange-700">
-                              This concept name already exists: "<strong>{duplicateInfo.existingConcept.name}</strong>" 
-                              in category {duplicateInfo.existingConcept.category}. 
-                              You must edit this concept to have a unique name before submitting.
-                            </p>
-                          </div>
-                        )}
+                          )}
 
                         {/* Duplicate Resolved */}
                         {isDuplicateResolved && (
-                          <div className="rounded-lg bg-blue-100 border border-blue-300 p-3">
+                          <div className="rounded-lg border border-blue-300 bg-blue-100 p-3">
                             <div className="flex items-center gap-2 text-blue-800">
-                              <Badge className="bg-blue-600">✓ Duplicate Resolved</Badge>
+                              <Badge className="bg-blue-600">
+                                ✓ Duplicate Resolved
+                              </Badge>
                             </div>
                             <p className="mt-1 text-sm text-blue-700">
                               Concept name has been changed to be unique.
@@ -1128,24 +1204,32 @@ export function EnhancedConceptReview({
                             <Button
                               size="sm"
                               variant={
-                                decision?.action === "approve" || decision?.impliesApproval 
-                                  ? "default" 
+                                decision?.action === "approve" ||
+                                decision?.impliesApproval
+                                  ? "default"
                                   : "outline"
                               }
                               onClick={() =>
                                 handleConceptDecision(concept.name, "approve")
                               }
                             >
-                              {decision?.action === "approve" || decision?.impliesApproval 
-                                ? "✓ Approved" 
+                              {decision?.action === "approve" ||
+                              decision?.impliesApproval
+                                ? "✓ Approved"
                                 : "Approve"}
                             </Button>
                             <Button
                               size="sm"
-                              variant={decision?.action === "edit" ? "default" : "outline"}
+                              variant={
+                                decision?.action === "edit"
+                                  ? "default"
+                                  : "outline"
+                              }
                               onClick={() => handleEditConcept(concept.name)}
                             >
-                              {decision?.action === "edit" ? "✓ Edited" : "Edit"}
+                              {decision?.action === "edit"
+                                ? "✓ Edited"
+                                : "Edit"}
                             </Button>
                             {similarities.length > 0 && (
                               <Button
@@ -1171,7 +1255,9 @@ export function EnhancedConceptReview({
 
                         {/* Concept Content */}
                         <div className="space-y-2">
-                          <p className="text-gray-700">{displayConcept.description}</p>
+                          <p className="text-gray-700">
+                            {displayConcept.description}
+                          </p>
 
                           {displayConcept.examples.length > 0 && (
                             <div>
@@ -1196,13 +1282,13 @@ export function EnhancedConceptReview({
                           <div className="rounded bg-gray-50 p-2">
                             <div className="flex items-center gap-2 text-sm font-medium">
                               <span>Decision:</span>
-                              <Badge 
+                              <Badge
                                 className={
-                                  decision.action === "edit" 
-                                    ? "bg-blue-100 text-blue-800" 
+                                  decision.action === "edit"
+                                    ? "bg-blue-100 text-blue-800"
                                     : decision.action === "approve"
-                                    ? "bg-green-100 text-green-800"
-                                    : ""
+                                      ? "bg-green-100 text-green-800"
+                                      : ""
                                 }
                               >
                                 {decision.action.toUpperCase()}
@@ -1266,7 +1352,8 @@ export function EnhancedConceptReview({
                                             mergeData: {
                                               primaryConceptId: match.conceptId,
                                               additionalData: {
-                                                examples: displayConcept.examples,
+                                                examples:
+                                                  displayConcept.examples,
                                                 description:
                                                   displayConcept.description,
                                               },
@@ -1315,10 +1402,20 @@ export function EnhancedConceptReview({
               </Button>
               <Button
                 onClick={handleSubmitReview}
-                disabled={isSaving || decisions.size === 0 || hasUnresolvedDuplicates()}
-                className={hasUnresolvedDuplicates() ? "opacity-50 cursor-not-allowed" : ""}
+                disabled={
+                  isSaving || decisions.size === 0 || hasUnresolvedDuplicates()
+                }
+                className={
+                  hasUnresolvedDuplicates()
+                    ? "cursor-not-allowed opacity-50"
+                    : ""
+                }
               >
-                {isSaving ? "Submitting..." : hasUnresolvedDuplicates() ? "Resolve Duplicates First" : "Submit Review"}
+                {isSaving
+                  ? "Submitting..."
+                  : hasUnresolvedDuplicates()
+                    ? "Resolve Duplicates First"
+                    : "Submit Review"}
               </Button>
             </div>
           </div>
@@ -1326,7 +1423,7 @@ export function EnhancedConceptReview({
 
         {/* Edit Modal */}
         {editingConcept && (
-          <div 
+          <div
             className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
             onClick={(e) => {
               // Only close if clicking the backdrop, not the modal content
@@ -1335,7 +1432,7 @@ export function EnhancedConceptReview({
               }
             }}
           >
-            <Card 
+            <Card
               className="mx-4 max-h-[90vh] w-full max-w-2xl overflow-y-auto"
               onClick={(e) => e.stopPropagation()}
             >
@@ -1346,10 +1443,12 @@ export function EnhancedConceptReview({
                 <Form {...editForm}>
                   <form
                     onSubmit={(e) => {
-                      editLogger.info("Form submit event triggered", { editingConcept });
+                      editLogger.info("Form submit event triggered", {
+                        editingConcept,
+                      });
                       e.preventDefault();
                       e.stopPropagation();
-                      
+
                       // Get current form values
                       const formValues = editForm.getValues();
                       editLogger.debug("Current form values", {
@@ -1359,25 +1458,26 @@ export function EnhancedConceptReview({
                           name: formValues.name,
                           category: formValues.category,
                           tagCount: formValues.suggestedTags?.length || 0,
-                          exampleCount: formValues.examples?.length || 0
-                        }
+                          exampleCount: formValues.examples?.length || 0,
+                        },
                       });
-                      
+
                       // Validate form before submission
                       const isValid = editForm.formState.isValid;
-                      editLogger.debug("Form validation check", { 
+                      editLogger.debug("Form validation check", {
                         editingConcept,
                         isValid,
-                        errorCount: Object.keys(editForm.formState.errors).length
+                        errorCount: Object.keys(editForm.formState.errors)
+                          .length,
                       });
-                      
+
                       if (!isValid) {
-                        editLogger.warn("Form validation errors detected", { 
+                        editLogger.warn("Form validation errors detected", {
                           editingConcept,
-                          errors: editForm.formState.errors 
+                          errors: editForm.formState.errors,
                         });
                       }
-                      
+
                       // Call the form submission handler
                       editForm.handleSubmit(handleSaveEdit)(e);
                     }}
@@ -1522,16 +1622,27 @@ export function EnhancedConceptReview({
                           <FormLabel>Tags</FormLabel>
                           <FormControl>
                             <TagEditor
-                              tags={Array.isArray(field.value) ? field.value.map(tag => 
-                                typeof tag === 'string' 
-                                  ? { tag, source: "existing" as const, confidence: 1.0 }
-                                  : tag
-                              ) : []}
+                              tags={
+                                Array.isArray(field.value)
+                                  ? field.value.map((tag) =>
+                                      typeof tag === "string"
+                                        ? {
+                                            tag,
+                                            source: "existing" as const,
+                                            confidence: 1.0,
+                                          }
+                                        : tag
+                                    )
+                                  : []
+                              }
                               onTagsChange={(tags) => {
                                 editLogger.debug("Edit form tags changed", {
                                   editingConcept,
                                   tagCount: tags.length,
-                                  tags: tags.map(t => ({ tag: t.tag, source: t.source }))
+                                  tags: tags.map((t) => ({
+                                    tag: t.tag,
+                                    source: t.source,
+                                  })),
                                 });
                                 field.onChange(tags);
                               }}
@@ -1545,7 +1656,7 @@ export function EnhancedConceptReview({
                     />
 
                     <div className="flex gap-2">
-                      <Button 
+                      <Button
                         type="submit"
                         onClick={(e) => {
                           e.stopPropagation();
@@ -1574,7 +1685,7 @@ export function EnhancedConceptReview({
 
         {/* Manual Add Modal */}
         {showManualAdd && (
-          <div 
+          <div
             className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
             onClick={(e) => {
               // Only close if clicking the backdrop, not the modal content
@@ -1583,7 +1694,7 @@ export function EnhancedConceptReview({
               }
             }}
           >
-            <Card 
+            <Card
               className="mx-4 max-h-[90vh] w-full max-w-2xl overflow-y-auto"
               onClick={(e) => e.stopPropagation()}
             >
@@ -1721,15 +1832,26 @@ export function EnhancedConceptReview({
                           <FormLabel>Tags</FormLabel>
                           <FormControl>
                             <TagEditor
-                              tags={Array.isArray(field.value) ? field.value.map(tag => 
-                                typeof tag === 'string' 
-                                  ? { tag, source: "existing" as const, confidence: 1.0 }
-                                  : tag
-                              ) : []}
+                              tags={
+                                Array.isArray(field.value)
+                                  ? field.value.map((tag) =>
+                                      typeof tag === "string"
+                                        ? {
+                                            tag,
+                                            source: "existing" as const,
+                                            confidence: 1.0,
+                                          }
+                                        : tag
+                                    )
+                                  : []
+                              }
                               onTagsChange={(tags) => {
                                 editLogger.debug("Manual form tags changed", {
                                   tagCount: tags.length,
-                                  tags: tags.map(t => ({ tag: t.tag, source: t.source }))
+                                  tags: tags.map((t) => ({
+                                    tag: t.tag,
+                                    source: t.source,
+                                  })),
                                 });
                                 field.onChange(tags);
                               }}

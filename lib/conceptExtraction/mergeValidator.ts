@@ -1,6 +1,6 @@
 /**
  * Merge Validation Utilities
- * 
+ *
  * Provides validation functions for concept merging operations
  * in both concept review and concept management hub.
  */
@@ -21,7 +21,10 @@ export interface ConceptSummary {
 export interface MergeValidationResult {
   isValid: boolean;
   error?: string;
-  errorType?: 'category_incompatible' | 'insufficient_concepts' | 'inactive_concepts';
+  errorType?:
+    | "category_incompatible"
+    | "insufficient_concepts"
+    | "inactive_concepts";
 }
 
 export interface MergePreviewData {
@@ -48,36 +51,43 @@ export interface MergePreviewData {
  * @param concepts Array of concepts to validate for merging
  * @returns Validation result with error details if invalid
  */
-export function validateMergeCompatibility(concepts: ConceptSummary[]): MergeValidationResult {
+export function validateMergeCompatibility(
+  concepts: ConceptSummary[]
+): MergeValidationResult {
   // Check minimum concept count
   if (concepts.length < 2) {
     return {
       isValid: false,
       error: "At least 2 concepts must be selected for merging.",
-      errorType: 'insufficient_concepts'
+      errorType: "insufficient_concepts",
     };
   }
 
   // Check for active concepts only
-  const inactiveConcepts = concepts.filter(c => c.isActive === false);
+  const inactiveConcepts = concepts.filter((c) => c.isActive === false);
   if (inactiveConcepts.length > 0) {
     return {
       isValid: false,
-      error: `Cannot merge inactive concepts: ${inactiveConcepts.map(c => c.name).join(', ')}`,
-      errorType: 'inactive_concepts'
+      error: `Cannot merge inactive concepts: ${inactiveConcepts.map((c) => c.name).join(", ")}`,
+      errorType: "inactive_concepts",
     };
   }
 
   // Get unique categories
-  const categories = [...new Set(concepts.map(c => c.category.toLowerCase()))];
-  
+  const categories = [
+    ...new Set(concepts.map((c) => c.category.toLowerCase())),
+  ];
+
   // Check for Grammar + Vocabulary incompatibility
-  if (categories.includes(ConceptCategory.GRAMMAR.toLowerCase()) && 
-      categories.includes(ConceptCategory.VOCABULARY.toLowerCase())) {
+  if (
+    categories.includes(ConceptCategory.GRAMMAR.toLowerCase()) &&
+    categories.includes(ConceptCategory.VOCABULARY.toLowerCase())
+  ) {
     return {
       isValid: false,
-      error: "⚠️ Cannot merge Grammar and Vocabulary concepts.\n\nThese represent different types of learning content and should remain separate. Please select concepts from the same category.",
-      errorType: 'category_incompatible'
+      error:
+        "⚠️ Cannot merge Grammar and Vocabulary concepts.\n\nThese represent different types of learning content and should remain separate. Please select concepts from the same category.",
+      errorType: "category_incompatible",
     };
   }
 
@@ -90,30 +100,32 @@ export function validateMergeCompatibility(concepts: ConceptSummary[]): MergeVal
  * @param concepts Array of concepts to merge (first one becomes primary)
  * @returns Preview data for the merge dialog
  */
-export function prepareMergePreview(concepts: ConceptSummary[]): MergePreviewData {
+export function prepareMergePreview(
+  concepts: ConceptSummary[]
+): MergePreviewData {
   const [primary, ...secondary] = concepts;
-  
+
   // Aggregate examples from all concepts
   const allExamples: string[] = [];
-  concepts.forEach(concept => {
+  concepts.forEach(() => {
     // For now, we'll assume examples might be in description or need to be fetched
     // This will be enhanced when we have full concept data
   });
 
   // Aggregate tags from all concepts
-  const allTags = concepts.flatMap(c => c.tags || []);
-  const uniqueTags = [...new Set(allTags.filter(tag => tag.trim() !== ''))];
+  const allTags = concepts.flatMap((c) => c.tags || []);
+  const uniqueTags = [...new Set(allTags.filter((tag) => tag.trim() !== ""))];
 
   // Prepare descriptions list
   const sourceDescriptions = concepts
-    .map(c => c.name) // For now, using names as placeholder for descriptions
-    .filter(desc => desc && desc.trim() !== '');
+    .map((c) => c.name) // For now, using names as placeholder for descriptions
+    .filter((desc) => desc && desc.trim() !== "");
 
   // Create merged preview
   const mergedPreview = {
     name: primary.name, // Primary concept keeps its name
     category: primary.category,
-    description: `Merged concept combining: ${concepts.map(c => c.name).join(', ')}`,
+    description: `Merged concept combining: ${concepts.map((c) => c.name).join(", ")}`,
     examples: [], // Will be populated with full concept data
     tags: uniqueTags,
     difficulty: primary.difficulty, // Primary concept's difficulty
@@ -127,8 +139,8 @@ export function prepareMergePreview(concepts: ConceptSummary[]): MergePreviewDat
       totalExamples: allExamples.length,
       uniqueTags: uniqueTags.length,
       sourceDescriptions,
-      conceptNames: concepts.map(c => c.name),
-    }
+      conceptNames: concepts.map((c) => c.name),
+    },
   };
 }
 
@@ -138,12 +150,16 @@ export function prepareMergePreview(concepts: ConceptSummary[]): MergePreviewDat
  * @returns True if categories are compatible for merging
  */
 export function areCategoriesCompatible(categories: string[]): boolean {
-  const uniqueCategories = [...new Set(categories.map(c => c.toLowerCase()))];
-  
+  const uniqueCategories = [...new Set(categories.map((c) => c.toLowerCase()))];
+
   // Grammar and Vocabulary cannot be merged
-  const hasGrammar = uniqueCategories.includes(ConceptCategory.GRAMMAR.toLowerCase());
-  const hasVocabulary = uniqueCategories.includes(ConceptCategory.VOCABULARY.toLowerCase());
-  
+  const hasGrammar = uniqueCategories.includes(
+    ConceptCategory.GRAMMAR.toLowerCase()
+  );
+  const hasVocabulary = uniqueCategories.includes(
+    ConceptCategory.VOCABULARY.toLowerCase()
+  );
+
   return !(hasGrammar && hasVocabulary);
 }
 
@@ -152,21 +168,23 @@ export function areCategoriesCompatible(categories: string[]): boolean {
  * @param validationResult Result from validateMergeCompatibility
  * @returns Formatted error message for UI display
  */
-export function getMergeErrorMessage(validationResult: MergeValidationResult): string {
-  if (validationResult.isValid) return '';
-  
+export function getMergeErrorMessage(
+  validationResult: MergeValidationResult
+): string {
+  if (validationResult.isValid) return "";
+
   switch (validationResult.errorType) {
-    case 'category_incompatible':
+    case "category_incompatible":
       return "⚠️ Category Incompatibility\n\nGrammar and Vocabulary concepts represent different types of learning content and cannot be merged together. Please select concepts from compatible categories.";
-    
-    case 'insufficient_concepts':
+
+    case "insufficient_concepts":
       return "📋 Selection Required\n\nPlease select at least 2 concepts to perform a merge operation.";
-    
-    case 'inactive_concepts':
+
+    case "inactive_concepts":
       return "🚫 Inactive Concepts\n\nOne or more selected concepts are inactive and cannot be merged. Please select only active concepts.";
-    
+
     default:
-      return validationResult.error || 'Unknown merge validation error';
+      return validationResult.error || "Unknown merge validation error";
   }
 }
 
@@ -184,12 +202,12 @@ export function prepareMergeApiData(
 ) {
   return {
     targetConceptId: primaryConcept.id,
-    sourceConceptIds: secondaryConcepts.map(c => c.id),
+    sourceConceptIds: secondaryConcepts.map((c) => c.id),
     finalConceptData,
     mergeMetadata: {
-      mergedConceptNames: secondaryConcepts.map(c => c.name),
+      mergedConceptNames: secondaryConcepts.map((c) => c.name),
       totalConcepts: secondaryConcepts.length + 1,
       mergeDate: new Date().toISOString(),
-    }
+    },
   };
 }

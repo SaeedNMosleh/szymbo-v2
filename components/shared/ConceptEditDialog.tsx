@@ -25,7 +25,6 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { ConceptCategory, QuestionLevel } from "@/lib/enum";
-import { SuggestedTag } from "@/datamodels/conceptExtractionSession.model";
 
 // Schema for concept editing
 const ConceptEditSchema = z.object({
@@ -36,11 +35,15 @@ const ConceptEditSchema = z.object({
   sourceContent: z.string().optional(),
   confidence: z.number().min(0).max(1).optional(),
   suggestedDifficulty: z.nativeEnum(QuestionLevel),
-  suggestedTags: z.array(z.object({
-    tag: z.string(),
-    source: z.enum(["existing", "new"]),
-    confidence: z.number()
-  })).optional(),
+  suggestedTags: z
+    .array(
+      z.object({
+        tag: z.string(),
+        source: z.enum(["existing", "new"]),
+        confidence: z.number(),
+      })
+    )
+    .optional(),
 });
 
 export type ConceptEditFormData = z.infer<typeof ConceptEditSchema>;
@@ -50,7 +53,7 @@ export interface ConceptEditDialogProps {
   conceptName: string;
   initialData: Partial<ConceptEditFormData>;
   availableTags: string[];
-  mode: 'edit' | 'merge_preview';
+  mode: "edit" | "merge_preview";
   title?: string;
   description?: string;
   sourceDataSummary?: {
@@ -109,11 +112,16 @@ export function ConceptEditDialog({
 
   if (!isOpen) return null;
 
-  const dialogTitle = title || (mode === 'merge_preview' ? `Merge Preview: ${conceptName}` : `Edit Concept: ${conceptName}`);
-  const submitButtonText = mode === 'merge_preview' ? 'Confirm Merge' : 'Save Changes';
+  const dialogTitle =
+    title ||
+    (mode === "merge_preview"
+      ? `Merge Preview: ${conceptName}`
+      : `Edit Concept: ${conceptName}`);
+  const submitButtonText =
+    mode === "merge_preview" ? "Confirm Merge" : "Save Changes";
 
   return (
-    <div 
+    <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
       onClick={(e) => {
         if (e.target === e.currentTarget) {
@@ -121,7 +129,7 @@ export function ConceptEditDialog({
         }
       }}
     >
-      <Card 
+      <Card
         className="mx-4 max-h-[90vh] w-full max-w-2xl overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
@@ -133,12 +141,15 @@ export function ConceptEditDialog({
         </CardHeader>
         <CardContent>
           {/* Source Data Summary for merge mode */}
-          {mode === 'merge_preview' && sourceDataSummary && (
+          {mode === "merge_preview" && sourceDataSummary && (
             <div className="mb-6 rounded-lg bg-blue-50 p-4">
-              <h3 className="mb-2 font-semibold text-blue-800">📊 Merge Source Data</h3>
+              <h3 className="mb-2 font-semibold text-blue-800">
+                📊 Merge Source Data
+              </h3>
               <div className="grid grid-cols-2 gap-4 text-sm text-blue-700">
                 <div>
-                  <strong>Concepts being merged:</strong> {sourceDataSummary.conceptNames.length}
+                  <strong>Concepts being merged:</strong>{" "}
+                  {sourceDataSummary.conceptNames.length}
                   <div className="mt-1 text-xs">
                     {sourceDataSummary.conceptNames.map((name, i) => (
                       <div key={i}>• {name}</div>
@@ -146,7 +157,9 @@ export function ConceptEditDialog({
                   </div>
                 </div>
                 <div>
-                  <strong>Total Examples:</strong> {sourceDataSummary.totalExamples}<br/>
+                  <strong>Total Examples:</strong>{" "}
+                  {sourceDataSummary.totalExamples}
+                  <br />
                   <strong>Unique Tags:</strong> {sourceDataSummary.uniqueTags}
                 </div>
               </div>
@@ -189,13 +202,11 @@ export function ConceptEditDialog({
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {Object.values(ConceptCategory).map(
-                            (category) => (
-                              <SelectItem key={category} value={category}>
-                                {category.toUpperCase()}
-                              </SelectItem>
-                            )
-                          )}
+                          {Object.values(ConceptCategory).map((category) => (
+                            <SelectItem key={category} value={category}>
+                              {category.toUpperCase()}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                       <FormMessage />
@@ -275,7 +286,7 @@ export function ConceptEditDialog({
                 )}
               />
 
-              {mode === 'edit' && (
+              {mode === "edit" && (
                 <FormField
                   control={form.control}
                   name="sourceContent"
@@ -299,11 +310,19 @@ export function ConceptEditDialog({
                     <FormLabel>Tags</FormLabel>
                     <FormControl>
                       <TagEditor
-                        tags={Array.isArray(field.value) ? field.value.map(tag => 
-                          typeof tag === 'string' 
-                            ? { tag, source: "existing" as const, confidence: 1.0 }
-                            : tag
-                        ) : []}
+                        tags={
+                          Array.isArray(field.value)
+                            ? field.value.map((tag) =>
+                                typeof tag === "string"
+                                  ? {
+                                      tag,
+                                      source: "existing" as const,
+                                      confidence: 1.0,
+                                    }
+                                  : tag
+                              )
+                            : []
+                        }
                         onTagsChange={(tags) => {
                           field.onChange(tags);
                         }}
@@ -317,7 +336,7 @@ export function ConceptEditDialog({
               />
 
               <div className="flex gap-2">
-                <Button 
+                <Button
                   type="submit"
                   onClick={(e) => {
                     e.stopPropagation();

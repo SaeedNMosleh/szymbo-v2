@@ -5,14 +5,19 @@ import ConceptExtractionSession, {
   ReviewDecisionSchema,
   ExtractedConcept,
 } from "@/datamodels/conceptExtractionSession.model";
-import { createApiResponse, createErrorResponse } from "@/lib/utils/apiResponse";
+import {
+  createApiResponse,
+  createErrorResponse,
+} from "@/lib/utils/apiResponse";
 import dbConnect from "@/lib/dbConnect";
 import { v4 as uuidv4 } from "uuid";
 
 // Schema for enhanced review request
 const EnhancedReviewRequestSchema = z.object({
   sessionId: z.string().min(1, "Session ID is required"),
-  decisions: z.array(ReviewDecisionSchema).min(1, "At least one decision is required"),
+  decisions: z
+    .array(ReviewDecisionSchema)
+    .min(1, "At least one decision is required"),
   finalizeSession: z.boolean().default(true),
 });
 
@@ -64,13 +69,7 @@ export async function POST(request: NextRequest) {
     // Process each decision
     for (const decision of decisions) {
       try {
-        const {
-          action,
-          extractedConcept,
-          targetConceptId,
-          editedConcept,
-          mergeData,
-        } = decision;
+        const { action, extractedConcept, editedConcept, mergeData } = decision;
 
         switch (action) {
           case "approve": {
@@ -87,7 +86,9 @@ export async function POST(request: NextRequest) {
           case "edit": {
             // Create concept with edits
             if (!editedConcept) {
-              throw new Error("Edited concept data is required for edit action");
+              throw new Error(
+                "Edited concept data is required for edit action"
+              );
             }
             const mergedConcept = { ...extractedConcept, ...editedConcept };
             await createConceptFromExtracted(
@@ -96,21 +97,6 @@ export async function POST(request: NextRequest) {
               decision.courseId
             );
             results.edited++;
-            break;
-          }
-
-          case "link": {
-            // Link to existing concept
-            if (!targetConceptId) {
-              throw new Error("Target concept ID is required for link action");
-            }
-            await linkToExistingConcept(
-              conceptManager,
-              targetConceptId,
-              extractedConcept,
-              decision.courseId
-            );
-            results.linked++;
             break;
           }
 
@@ -174,7 +160,7 @@ export async function POST(request: NextRequest) {
 
     await ConceptExtractionSession.updateOne(
       { id: sessionId },
-      { 
+      {
         $set: {
           reviewProgress: updatedProgress,
           status: finalizeSession ? "reviewed" : "in_review",
@@ -218,7 +204,7 @@ async function createConceptFromExtracted(
   extractedConcept: ExtractedConcept,
   courseId: number
 ): Promise<void> {
-  const newConcept = await conceptManager.createOrFindConcept({
+  const newConceptResult = await conceptManager.createOrFindConcept({
     id: uuidv4(),
     name: extractedConcept.name,
     category: extractedConcept.category,
@@ -231,42 +217,12 @@ async function createConceptFromExtracted(
     lastUpdated: new Date(),
   });
 
+  // Handle different return types from createOrFindConcept
+  const newConcept =
+    "concept" in newConceptResult ? newConceptResult.concept : newConceptResult;
+
   await conceptManager.linkConceptToCourse(
     newConcept.id,
-    courseId,
-    extractedConcept.confidence,
-    extractedConcept.sourceContent
-  );
-}
-
-/**
- * Helper function to link to an existing concept
- */
-async function linkToExistingConcept(
-  conceptManager: ConceptManager,
-  targetConceptId: string,
-  extractedConcept: ExtractedConcept,
-  courseId: number
-): Promise<void> {
-  // Get existing concept
-  const existingConcept = await conceptManager.getConcept(targetConceptId);
-  if (!existingConcept) {
-    throw new Error(`Target concept ${targetConceptId} not found`);
-  }
-
-  // Update existing concept to include this course
-  const createdFrom = [...(existingConcept.createdFrom || [])];
-  if (!createdFrom.includes(courseId.toString())) {
-    createdFrom.push(courseId.toString());
-    await conceptManager.updateConcept(targetConceptId, {
-      createdFrom,
-      lastUpdated: new Date(),
-    });
-  }
-
-  // Link to course
-  await conceptManager.linkConceptToCourse(
-    targetConceptId,
     courseId,
     extractedConcept.confidence,
     extractedConcept.sourceContent
@@ -310,7 +266,7 @@ async function mergeWithExistingConcept(
     additionalData.description &&
     additionalData.description !== existingConcept.description
   ) {
-    updates.description = `${existingConcept.description}\n\nAdditional: ${ 
+    updates.description = `${existingConcept.description}\n\nAdditional: ${
       additionalData.description
     }`;
   }

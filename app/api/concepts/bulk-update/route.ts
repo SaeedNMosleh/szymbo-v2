@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/dbConnect";
 import { ConceptManagerEnhanced } from "@/lib/conceptExtraction/conceptManagerEnhanced";
-import { ConceptLLMService } from "@/lib/conceptExtraction/conceptLLM";
+// Imported but not currently used - will be needed for future LLM analysis implementation
+// import { ConceptLLMService } from "@/lib/conceptExtraction/conceptLLM";
 import { IConcept } from "@/datamodels/concept.model";
 import { z } from "zod";
 import { ConceptCategory, QuestionLevel } from "@/lib/enum";
@@ -17,21 +18,20 @@ interface ChangeBase {
 }
 
 interface TagAssignmentChange extends ChangeBase {
-  operation: 'tag-assignment';
+  operation: "tag-assignment";
   oldValue: string[];
   newValue: string[];
 }
 
 interface CategoryChange extends ChangeBase {
-  operation: 'category-change';
+  operation: "category-change";
   newValue: ConceptCategory;
 }
 
 interface DifficultyChange extends ChangeBase {
-  operation: 'difficulty-change';
+  operation: "difficulty-change";
   newValue: QuestionLevel;
 }
-
 
 // Type for bulk operation results
 interface BulkOperationResult {
@@ -43,23 +43,27 @@ interface BulkOperationResult {
 
 // Request validation schemas for bulk operations
 const bulkUpdateSchema = z.object({
-  operation: z.enum(['tag-assignment', 'category-change', 'difficulty-change']),
+  operation: z.enum(["tag-assignment", "category-change", "difficulty-change"]),
   conceptIds: z.array(z.string()).min(1),
   parameters: z.object({
     // For tag assignment
     tags: z.array(z.string()).optional(),
-    
+
     // For category/difficulty changes
-    newCategory: z.enum([ConceptCategory.GRAMMAR, ConceptCategory.VOCABULARY]).optional(),
-    newDifficulty: z.enum([
-      QuestionLevel.A1,
-      QuestionLevel.A2,
-      QuestionLevel.B1,
-      QuestionLevel.B2,
-      QuestionLevel.C1,
-      QuestionLevel.C2,
-    ]).optional(),
-    
+    newCategory: z
+      .enum([ConceptCategory.GRAMMAR, ConceptCategory.VOCABULARY])
+      .optional(),
+    newDifficulty: z
+      .enum([
+        QuestionLevel.A1,
+        QuestionLevel.A2,
+        QuestionLevel.B1,
+        QuestionLevel.B2,
+        QuestionLevel.C1,
+        QuestionLevel.C2,
+      ])
+      .optional(),
+
     // For LLM analysis
     analysisPrompt: z.string().optional(),
     autoApprove: z.boolean().default(false),
@@ -77,14 +81,15 @@ export async function POST(request: NextRequest) {
     const validatedData = bulkUpdateSchema.parse(body);
 
     const conceptManager = new ConceptManagerEnhanced();
-    const llmService = new ConceptLLMService();
+    // LLM service will be used in future implementation for LLM analysis of concepts
+    // Initialization removed to avoid unused variable warning
 
     // Fetch all concepts to operate on
     const concepts = await Promise.all(
-      validatedData.conceptIds.map(id => conceptManager.getConcept(id))
+      validatedData.conceptIds.map((id) => conceptManager.getConcept(id))
     );
 
-    const validConcepts = concepts.filter(c => c !== null) as IConcept[];
+    const validConcepts = concepts.filter((c) => c !== null) as IConcept[];
     if (validConcepts.length === 0) {
       return NextResponse.json(
         {
@@ -103,7 +108,7 @@ export async function POST(request: NextRequest) {
     };
 
     switch (validatedData.operation) {
-      case 'tag-assignment':
+      case "tag-assignment":
         results = await handleTagAssignment(
           conceptManager,
           validConcepts,
@@ -112,7 +117,7 @@ export async function POST(request: NextRequest) {
         );
         break;
 
-      case 'category-change':
+      case "category-change":
         results = await handleCategoryChange(
           conceptManager,
           validConcepts,
@@ -121,7 +126,7 @@ export async function POST(request: NextRequest) {
         );
         break;
 
-      case 'difficulty-change':
+      case "difficulty-change":
         results = await handleDifficultyChange(
           conceptManager,
           validConcepts,
@@ -177,11 +182,11 @@ async function handleTagAssignment(
   for (const concept of concepts) {
     const existingTags = concept.tags || [];
     const newTags = Array.from(new Set([...existingTags, ...tags]));
-    
+
     const change: TagAssignmentChange = {
       conceptId: concept.id,
       conceptName: concept.name,
-      operation: 'tag-assignment',
+      operation: "tag-assignment",
       oldValue: existingTags,
       newValue: newTags,
       applied: false,
@@ -192,7 +197,7 @@ async function handleTagAssignment(
         await conceptManager.updateConcept(concept.id, { tags: newTags });
         change.applied = true;
       } catch (error) {
-        change.error = error instanceof Error ? error.message : 'Unknown error';
+        change.error = error instanceof Error ? error.message : "Unknown error";
       }
     }
 
@@ -200,14 +205,16 @@ async function handleTagAssignment(
   }
 
   return {
-    operation: 'tag-assignment',
+    operation: "tag-assignment",
     conceptsProcessed: concepts.length,
     preview,
     changes,
     summary: {
       totalTags: tags.length,
-      conceptsAffected: changes.filter(c => c.newValue.length > c.oldValue.length).length,
-      appliedChanges: changes.filter(c => c.applied).length,
+      conceptsAffected: changes.filter(
+        (c) => c.newValue.length > c.oldValue.length
+      ).length,
+      appliedChanges: changes.filter((c) => c.applied).length,
     },
   };
 }
@@ -229,7 +236,7 @@ async function handleCategoryChange(
     const change: CategoryChange = {
       conceptId: concept.id,
       conceptName: concept.name,
-      operation: 'category-change',
+      operation: "category-change",
       oldValue: concept.category,
       newValue: newCategory,
       applied: false,
@@ -237,10 +244,12 @@ async function handleCategoryChange(
 
     if (!preview) {
       try {
-        await conceptManager.updateConcept(concept.id, { category: newCategory });
+        await conceptManager.updateConcept(concept.id, {
+          category: newCategory,
+        });
         change.applied = true;
       } catch (error) {
-        change.error = error instanceof Error ? error.message : 'Unknown error';
+        change.error = error instanceof Error ? error.message : "Unknown error";
       }
     }
 
@@ -248,14 +257,14 @@ async function handleCategoryChange(
   }
 
   return {
-    operation: 'category-change',
+    operation: "category-change",
     conceptsProcessed: concepts.length,
     preview,
     changes,
     summary: {
       targetCategory: newCategory,
       conceptsToChange: changes.length,
-      appliedChanges: changes.filter(c => c.applied).length,
+      appliedChanges: changes.filter((c) => c.applied).length,
     },
   };
 }
@@ -277,7 +286,7 @@ async function handleDifficultyChange(
     const change: DifficultyChange = {
       conceptId: concept.id,
       conceptName: concept.name,
-      operation: 'difficulty-change',
+      operation: "difficulty-change",
       oldValue: concept.difficulty,
       newValue: newDifficulty,
       applied: false,
@@ -285,10 +294,12 @@ async function handleDifficultyChange(
 
     if (!preview) {
       try {
-        await conceptManager.updateConcept(concept.id, { difficulty: newDifficulty });
+        await conceptManager.updateConcept(concept.id, {
+          difficulty: newDifficulty,
+        });
         change.applied = true;
       } catch (error) {
-        change.error = error instanceof Error ? error.message : 'Unknown error';
+        change.error = error instanceof Error ? error.message : "Unknown error";
       }
     }
 
@@ -296,15 +307,14 @@ async function handleDifficultyChange(
   }
 
   return {
-    operation: 'difficulty-change',
+    operation: "difficulty-change",
     conceptsProcessed: concepts.length,
     preview,
     changes,
     summary: {
       targetDifficulty: newDifficulty,
       conceptsToChange: changes.length,
-      appliedChanges: changes.filter(c => c.applied).length,
+      appliedChanges: changes.filter((c) => c.applied).length,
     },
   };
 }
-

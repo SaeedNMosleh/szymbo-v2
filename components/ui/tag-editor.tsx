@@ -46,7 +46,9 @@ export function TagEditor({
         .filter((tag) =>
           tag.toLowerCase().includes(inputValue.toLowerCase().trim())
         )
-        .filter((tag) => !tags.some((t) => t.tag.toLowerCase() === tag.toLowerCase()))
+        .filter(
+          (tag) => !tags.some((t) => t.tag.toLowerCase() === tag.toLowerCase())
+        )
         .slice(0, 5); // Limit to 5 suggestions
       setFilteredSuggestions(filtered);
       setSelectedSuggestionIndex(-1);
@@ -100,10 +102,13 @@ export function TagEditor({
     [tags, onTagsChange]
   );
 
-  const startEditing = useCallback((index: number) => {
-    setEditingIndex(index);
-    setEditValue(tags[index].tag);
-  }, [tags]);
+  const startEditing = useCallback(
+    (index: number) => {
+      setEditingIndex(index);
+      setEditValue(tags[index].tag);
+    },
+    [tags]
+  );
 
   const saveEdit = useCallback(() => {
     if (editingIndex !== null && editValue.trim()) {
@@ -181,7 +186,7 @@ export function TagEditor({
   return (
     <div className={cn("space-y-2", className)}>
       {/* Tags Display */}
-      <div className="flex flex-wrap gap-1 min-h-[2rem] p-2 border rounded-md">
+      <div className="flex min-h-8 flex-wrap gap-1 rounded-md border p-2">
         {tags.map((tag, index) => (
           <div key={index} className="relative">
             {editingIndex === index ? (
@@ -190,7 +195,7 @@ export function TagEditor({
                 value={editValue}
                 onChange={(e) => setEditValue(e.target.value)}
                 onKeyDown={handleEditKeyDown}
-                onBlur={(e) => {
+                onBlur={() => {
                   // Only save if we're not clicking on another element in the same component
                   setTimeout(() => {
                     if (editingIndex !== null) {
@@ -199,15 +204,17 @@ export function TagEditor({
                   }, 100);
                 }}
                 className="h-6 w-auto min-w-[60px] px-2 text-xs"
-                style={{ width: `${Math.max(editValue.length * 8 + 16, 60)}px` }}
+                style={{
+                  width: `${Math.max(editValue.length * 8 + 16, 60)}px`,
+                }}
               />
             ) : (
               <Badge
                 variant="outline"
                 className={cn(
                   "cursor-pointer hover:bg-blue-50 transition-colors group",
-                  tag.source === "existing" 
-                    ? "bg-green-50 text-green-700 border-green-200" 
+                  tag.source === "existing"
+                    ? "bg-green-50 text-green-700 border-green-200"
                     : "bg-blue-50 text-blue-700 border-blue-200"
                 )}
                 onClick={() => startEditing(index)}
@@ -216,7 +223,7 @@ export function TagEditor({
                 <Button
                   size="sm"
                   variant="ghost"
-                  className="h-3 w-3 p-0 hover:bg-red-100 opacity-0 group-hover:opacity-100 transition-opacity"
+                  className="size-3 p-0 opacity-0 transition-opacity hover:bg-red-100 group-hover:opacity-100"
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
@@ -227,7 +234,7 @@ export function TagEditor({
                     e.stopPropagation();
                   }}
                 >
-                  <X className="h-2 w-2" />
+                  <X className="size-2" />
                 </Button>
               </Badge>
             )}
@@ -242,7 +249,7 @@ export function TagEditor({
             className="h-6 px-2 text-xs text-gray-500 hover:text-gray-700"
             onClick={() => setIsAddingTag(true)}
           >
-            <Plus className="h-3 w-3 mr-1" />
+            <Plus className="mr-1 size-3" />
             Add tag
           </Button>
         ) : (
@@ -268,7 +275,7 @@ export function TagEditor({
 
             {/* Suggestions Dropdown */}
             {filteredSuggestions.length > 0 && (
-              <div className="absolute top-full left-0 z-50 mt-1 w-48 bg-white border border-gray-200 rounded-md shadow-lg max-h-32 overflow-y-auto">
+              <div className="absolute left-0 top-full z-50 mt-1 max-h-32 w-48 overflow-y-auto rounded-md border border-gray-200 bg-white shadow-lg">
                 {filteredSuggestions.map((suggestion, index) => (
                   <button
                     key={suggestion}
@@ -294,7 +301,7 @@ export function TagEditor({
 
       {/* Help Text */}
       <div className="text-xs text-gray-500">
-        Click tags to edit them, or add new tags. 
+        Click tags to edit them, or add new tags.
         {availableTags.length > 0 && " Start typing to see suggestions."}
       </div>
     </div>

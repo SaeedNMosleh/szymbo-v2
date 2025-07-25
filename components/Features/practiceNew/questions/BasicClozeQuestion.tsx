@@ -2,7 +2,6 @@
 
 import React from "react";
 import { QuestionComponentProps } from "../types/questionTypes";
-import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
@@ -19,7 +18,7 @@ export function BasicClozeQuestion({
   // Parse the question text to find cloze gaps
   const renderQuestionWithGaps = () => {
     const text = question.question;
-    
+
     // Handle both bracket format [gap] and underscore format _____
     let parts: string[];
     if (text.includes("[") && text.includes("]")) {
@@ -31,7 +30,10 @@ export function BasicClozeQuestion({
     }
 
     return parts.map((part, index) => {
-      if ((part.startsWith("[") && part.endsWith("]")) || /^_{3,}$/.test(part)) {
+      if (
+        (part.startsWith("[") && part.endsWith("]")) ||
+        /^_{3,}$/.test(part)
+      ) {
         // This is a gap
         const gapId = `gap-${index}`;
         return (
@@ -56,14 +58,10 @@ export function BasicClozeQuestion({
     <div className="space-y-4">
       <Label className="text-base font-medium">Fill in the blank:</Label>
 
-      <div className="text-lg leading-relaxed">
-        {renderQuestionWithGaps()}
-      </div>
+      <div className="text-lg leading-relaxed">{renderQuestionWithGaps()}</div>
 
       <div className="text-sm text-gray-600">
-        <p>
-          Complete the sentence by filling in the missing word or phrase.
-        </p>
+        <p>Complete the sentence by filling in the missing word or phrase.</p>
       </div>
     </div>
   );

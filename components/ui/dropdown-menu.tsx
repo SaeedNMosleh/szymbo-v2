@@ -1,98 +1,126 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import { cn } from "@/lib/utils"
+import * as React from "react";
+import { cn } from "@/lib/utils";
 
 // Simple dropdown menu implementation without Radix UI
 interface DropdownMenuProps {
-  children: React.ReactNode
+  children: React.ReactNode;
 }
 
 interface DropdownMenuTriggerProps {
-  children: React.ReactNode
-  asChild?: boolean
+  children: React.ReactNode;
+  asChild?: boolean;
 }
 
 interface DropdownMenuContentProps {
-  children: React.ReactNode
-  align?: "start" | "center" | "end"
-  className?: string
+  children: React.ReactNode;
+  align?: "start" | "center" | "end";
+  className?: string;
 }
 
 interface DropdownMenuItemProps {
-  children: React.ReactNode
-  onClick?: () => void
-  className?: string
+  children: React.ReactNode;
+  onClick?: () => void;
+  className?: string;
 }
 
 interface DropdownMenuSeparatorProps {
-  className?: string
+  className?: string;
+}
+
+interface DropdownMenuComponentProps {
+  isOpen?: boolean;
+  setIsOpen?: (open: boolean) => void;
 }
 
 const DropdownMenu = ({ children }: DropdownMenuProps) => {
-  const [isOpen, setIsOpen] = React.useState(false)
-  
+  const [isOpen, setIsOpen] = React.useState(false);
+
   return (
     <div className="relative">
       {React.Children.map(children, (child) => {
         if (React.isValidElement(child)) {
-          return React.cloneElement(child, Object.assign({}, child.props, {
-            isOpen, 
-            setIsOpen 
-          }) as any)
+          return React.cloneElement(
+            child,
+            Object.assign({}, child.props, {
+              isOpen,
+              setIsOpen,
+            }) as DropdownMenuComponentProps
+          );
         }
-        return child
+        return child;
       })}
     </div>
-  )
-}
+  );
+};
 
-const DropdownMenuTrigger = ({ children, asChild, ...props }: DropdownMenuTriggerProps & { isOpen?: boolean, setIsOpen?: (open: boolean) => void }) => {
+const DropdownMenuTrigger = ({
+  children,
+  asChild,
+  ...props
+}: DropdownMenuTriggerProps & {
+  isOpen?: boolean;
+  setIsOpen?: (open: boolean) => void;
+}) => {
   const handleClick = (e: React.MouseEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
+    e.preventDefault();
+    e.stopPropagation();
     if (props.setIsOpen) {
-      props.setIsOpen(!props.isOpen)
+      props.setIsOpen(!props.isOpen);
     }
-  }
+  };
 
   if (asChild && React.isValidElement(children)) {
-    return React.cloneElement(children, Object.assign({}, children.props, {
-      onClick: handleClick
-    }) as any)
+    return React.cloneElement(
+      children,
+      Object.assign({}, children.props, {
+        onClick: handleClick,
+      }) as React.HTMLAttributes<HTMLElement>
+    );
   }
 
-  return (
-    <div onClick={handleClick}>
-      {children}
-    </div>
-  )
-}
+  return <div onClick={handleClick}>{children}</div>;
+};
 
-const DropdownMenuContent = ({ children, align = "end", className, ...props }: DropdownMenuContentProps & { isOpen?: boolean, setIsOpen?: (open: boolean) => void }) => {
-  const contentRef = React.useRef<HTMLDivElement>(null)
-  
+const DropdownMenuContent = ({
+  children,
+  align = "end",
+  className,
+  isOpen,
+  setIsOpen,
+}: DropdownMenuContentProps & DropdownMenuComponentProps) => {
+  const contentRef = React.useRef<HTMLDivElement>(null);
+
   React.useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (contentRef.current && !contentRef.current.contains(event.target as Node)) {
-        if (props.setIsOpen) {
-          props.setIsOpen(false)
+      if (
+        contentRef.current &&
+        !contentRef.current.contains(event.target as Node)
+      ) {
+        if (setIsOpen) {
+          setIsOpen(false);
         }
       }
-    }
+    };
 
-    if (props.isOpen) {
-      document.addEventListener('mousedown', handleClickOutside)
+    if (isOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
     }
 
     return () => {
-      document.removeEventListener('mousedown', handleClickOutside)
-    }
-  }, [props.isOpen, props.setIsOpen])
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isOpen, setIsOpen]);
 
-  if (!props.isOpen) return null
+  if (!isOpen) return null;
 
-  const alignClass = align === "end" ? "right-0" : align === "start" ? "left-0" : "left-1/2 -translate-x-1/2"
+  const alignClass =
+    align === "end"
+      ? "right-0"
+      : align === "start"
+        ? "left-0"
+        : "left-1/2 -translate-x-1/2";
 
   return (
     <div
@@ -106,26 +134,34 @@ const DropdownMenuContent = ({ children, align = "end", className, ...props }: D
       <div className="p-1">
         {React.Children.map(children, (child) => {
           if (React.isValidElement(child)) {
-            return React.cloneElement(child, Object.assign({}, child.props, {
-              setIsOpen: props.setIsOpen 
-            }) as any)
+            return React.cloneElement(
+              child,
+              Object.assign({}, child.props, {
+                setIsOpen,
+              }) as DropdownMenuComponentProps
+            );
           }
-          return child
+          return child;
         })}
       </div>
     </div>
-  )
-}
+  );
+};
 
-const DropdownMenuItem = ({ children, onClick, className, ...props }: DropdownMenuItemProps & { setIsOpen?: (open: boolean) => void }) => {
+const DropdownMenuItem = ({
+  children,
+  onClick,
+  className,
+  ...props
+}: DropdownMenuItemProps & { setIsOpen?: (open: boolean) => void }) => {
   const handleClick = () => {
     if (onClick) {
-      onClick()
+      onClick();
     }
     if (props.setIsOpen) {
-      props.setIsOpen(false)
+      props.setIsOpen(false);
     }
-  }
+  };
 
   return (
     <div
@@ -137,14 +173,12 @@ const DropdownMenuItem = ({ children, onClick, className, ...props }: DropdownMe
     >
       {children}
     </div>
-  )
-}
+  );
+};
 
 const DropdownMenuSeparator = ({ className }: DropdownMenuSeparatorProps) => {
-  return (
-    <div className={cn("-mx-1 my-1 h-px bg-gray-200", className)} />
-  )
-}
+  return <div className={cn("-mx-1 my-1 h-px bg-gray-200", className)} />;
+};
 
 interface DropdownMenuCheckboxItemProps extends DropdownMenuItemProps {
   checked?: boolean;
@@ -179,7 +213,7 @@ const DropdownMenuCheckboxItem = ({
       )}
       {...props}
     >
-      <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
+      <span className="absolute left-2 flex size-3.5 items-center justify-center">
         {checked && (
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -189,7 +223,7 @@ const DropdownMenuCheckboxItem = ({
             strokeWidth="2"
             strokeLinecap="round"
             strokeLinejoin="round"
-            className="h-4 w-4"
+            className="size-4"
           >
             <polyline points="20 6 9 17 4 12" />
           </svg>
@@ -207,4 +241,4 @@ export {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuCheckboxItem,
-}
+};

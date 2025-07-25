@@ -2,7 +2,6 @@
 
 import React, { useState, useMemo } from "react";
 import { QuestionComponentProps } from "../types/questionTypes";
-import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
@@ -17,7 +16,7 @@ export function MultiClozeQuestion({
   // Parse the question to find all gaps and their positions
   const questionParts = useMemo(() => {
     const text = question.question;
-    
+
     // Handle both bracket format [gap] and underscore format _____
     let parts: string[];
     if (text.includes("[") && text.includes("]")) {
@@ -27,11 +26,14 @@ export function MultiClozeQuestion({
       // Underscore format: _____ (3 or more underscores)
       parts = text.split(/(_{3,})/g);
     }
-    
+
     let gapIndex = 0;
 
     return parts.map((part, index) => {
-      if ((part.startsWith("[") && part.endsWith("]")) || /^_{3,}$/.test(part)) {
+      if (
+        (part.startsWith("[") && part.endsWith("]")) ||
+        /^_{3,}$/.test(part)
+      ) {
         const gapId = `gap-${gapIndex++}`;
         return { type: "gap" as const, content: part, gapId, index };
       }
@@ -66,9 +68,7 @@ export function MultiClozeQuestion({
 
   return (
     <div className="space-y-4">
-      <Label className="text-base font-medium">
-        Fill in all the blanks:
-      </Label>
+      <Label className="text-base font-medium">Fill in all the blanks:</Label>
 
       <div className="text-lg leading-relaxed">
         {questionParts.map((part) => {
@@ -77,9 +77,7 @@ export function MultiClozeQuestion({
               <span key={part.index} className="mx-1 inline-block">
                 <Input
                   value={gapAnswers[part.gapId] || ""}
-                  onChange={(e) =>
-                    handleGapChange(part.gapId, e.target.value)
-                  }
+                  onChange={(e) => handleGapChange(part.gapId, e.target.value)}
                   disabled={disabled}
                   className="inline-block h-8 w-32 text-center"
                   placeholder="..."
@@ -93,13 +91,10 @@ export function MultiClozeQuestion({
       </div>
 
       <div className="text-sm text-gray-600">
-        <p>
-          Complete the sentence by filling in all missing words or phrases.
-        </p>
+        <p>Complete the sentence by filling in all missing words or phrases.</p>
         {questionParts.filter((p) => p.type === "gap").length > 0 && (
           <p className="mt-1">
-            Gaps to fill:{" "}
-            {questionParts.filter((p) => p.type === "gap").length}
+            Gaps to fill: {questionParts.filter((p) => p.type === "gap").length}
           </p>
         )}
       </div>
