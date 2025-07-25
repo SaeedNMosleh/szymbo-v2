@@ -96,7 +96,7 @@ npm run build
 npm start
 ```
 
-Visit [https://szymbo-pro.vercel.app/](https://szymbo-pro.vercel.app/) to see the application.
+Visit [http://localhost:3000](http://localhost:3000) to see the application.
 
 ## Project Structure
 
