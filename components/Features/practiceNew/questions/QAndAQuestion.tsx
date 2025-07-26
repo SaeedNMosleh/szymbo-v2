@@ -29,6 +29,10 @@ export function QAndAQuestion({
         className="min-h-[120px]"
         disabled={disabled}
         aria-label="Open-ended question answer"
+        autoComplete="off"
+        autoCapitalize="off"
+        autoCorrect="off"
+        spellCheck="false"
       />
 
       <div className="text-sm text-gray-600">

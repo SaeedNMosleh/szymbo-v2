@@ -13,6 +13,11 @@ export function VocabChoiceQuestion({
   disabled,
 }: QuestionComponentProps) {
   const options = question.options || [];
+  
+  // Debug logging for options
+  if (options.length === 0) {
+    console.log(`❌ VocabChoiceQuestion: No options provided for question:`, question);
+  }
 
   const handleAnswerChange = (value: string) => {
     onAnswerChange(value);

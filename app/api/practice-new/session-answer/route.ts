@@ -4,6 +4,11 @@ import { connectToDatabase } from "@/lib/dbConnect";
 import { validateAnswer } from "@/lib/LLMPracticeValidation/validateAnswer";
 import { ConceptPracticeEngine } from "@/lib/practiceEngine/conceptPracticeEngine";
 import { SRSCalculator } from "@/lib/practiceEngine/srsCalculator";
+import {
+  shouldUseClientValidation,
+  validateAnswerClientSide,
+  getValidationMethodInfo,
+} from "@/lib/practiceEngine/clientValidation";
 import ConceptPracticeSession, {
   IQuestionResponse,
 } from "@/datamodels/conceptPracticeSession.model";
@@ -14,7 +19,7 @@ import { z } from "zod";
 const sessionAnswerSchema = z.object({
   sessionId: z.string().min(1),
   questionId: z.string().min(1),
-  userAnswer: z.string().min(1),
+  userAnswer: z.union([z.string().min(1), z.array(z.string())]),
   responseTime: z.number().min(0),
   userId: z.string().optional().default("default"),
   attemptNumber: z.number().min(1).max(3),
@@ -72,28 +77,53 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get course information for validation context
-    const course = await Course.findOne({ courseId: 1 }); // Default course for now
+    // Determine validation method based on question type
+    const validationMethod = getValidationMethodInfo(question.questionType);
+    let validationResult;
+    let llmResult = null; // Store LLM result for later reference
 
-    // Validate the answer using LLM
-    const validationResult = await validateAnswer(
-      question.question,
-      userAnswer,
-      course || {
-        courseId: 1,
-        courseName: "Default Polish Course",
-        courseDescription: "Polish language learning course",
-        courseType: "new",
-        coursePeriod: "semester",
-        isActive: true,
-      },
-      attemptNumber
+    console.log(
+      `🔍 Using ${validationMethod.method} validation for ${question.questionType}: ${validationMethod.reason}`
     );
 
-    const isCorrect = validationResult.isCorrect ?? false;
-    const feedback = validationResult.feedback ?? "No feedback available";
-    const correctAnswer =
-      validationResult.correctAnswer ?? question.correctAnswer;
+    if (shouldUseClientValidation(question.questionType)) {
+      // Use fast client-side validation for deterministic questions
+      validationResult = validateAnswerClientSide(
+        question.questionType,
+        userAnswer,
+        question.correctAnswer
+      );
+      console.log(`⚡ Client validation completed in <1ms`);
+    } else {
+      // Use LLM validation for open-ended questions
+      const course = await Course.findOne({ courseId: 1 }); // Default course for now
+
+      llmResult = await validateAnswer(
+        question.question,
+        Array.isArray(userAnswer) ? userAnswer.join(", ") : userAnswer,
+        course || {
+          courseId: 1,
+          courseName: "Default Polish Course",
+          courseDescription: "Polish language learning course",
+          courseType: "new",
+          coursePeriod: "semester",
+          isActive: true,
+        },
+        attemptNumber
+      );
+
+      validationResult = {
+        isCorrect: llmResult.isCorrect ?? false,
+        feedback: llmResult.feedback ?? "No feedback available",
+        correctAnswer: llmResult.correctAnswer ?? question.correctAnswer,
+        confidence: llmResult.analysisDetails?.confidence || 0,
+      };
+      console.log(`🤖 LLM validation completed`);
+    }
+
+    const isCorrect = validationResult.isCorrect;
+    const feedback = validationResult.feedback;
+    const correctAnswer = validationResult.correctAnswer;
 
     // Check if this is the final attempt or question is correct
     const isQuestionCompleted = isCorrect || attemptNumber >= 3;
@@ -108,7 +138,9 @@ export async function POST(request: NextRequest) {
       questionResponse.attempts = attemptNumber;
       questionResponse.isCorrect = isCorrect;
       questionResponse.responseTime += responseTime; // Accumulate response time
-      questionResponse.userAnswer = userAnswer;
+      questionResponse.userAnswer = Array.isArray(userAnswer)
+        ? userAnswer.join(", ")
+        : userAnswer;
       questionResponse.timestamp = new Date();
     } else {
       // Create new response
@@ -117,7 +149,9 @@ export async function POST(request: NextRequest) {
         attempts: attemptNumber,
         isCorrect,
         responseTime,
-        userAnswer,
+        userAnswer: Array.isArray(userAnswer)
+          ? userAnswer.join(", ")
+          : userAnswer,
         timestamp: new Date(),
       };
       session.questionResponses.push(questionResponse);
@@ -174,11 +208,18 @@ export async function POST(request: NextRequest) {
           ).length,
         },
         validationDetails: {
-          confidenceLevel: validationResult.analysisDetails?.confidence || 0,
-          mistakeType: validationResult.analysisDetails?.mistakeType || null,
-          questionLevel:
-            validationResult.analysisDetails?.questionLevel || "A2",
-          keywords: validationResult.keywords || [],
+          method: validationMethod.method,
+          reason: validationMethod.reason,
+          confidenceLevel: validationResult.confidence || 0,
+          mistakeType: shouldUseClientValidation(question.questionType)
+            ? null
+            : llmResult?.analysisDetails?.mistakeType || null,
+          questionLevel: shouldUseClientValidation(question.questionType)
+            ? question.difficulty
+            : llmResult?.analysisDetails?.questionLevel || "A2",
+          keywords: shouldUseClientValidation(question.questionType)
+            ? []
+            : llmResult?.keywords || [],
         },
       },
     };

@@ -7,13 +7,7 @@ import QuestionBank, { IQuestionBank } from "@/datamodels/questionBank.model";
 import ConceptGroup, { IConceptGroup } from "@/datamodels/conceptGroup.model";
 import { SRSCalculator } from "./srsCalculator";
 import { ContextBuilder } from "./contextBuilder";
-import { generateQuestion } from "@/lib/LLMPracticeValidation/generateQuestion";
-import {
-  PracticeMode,
-  QuestionType,
-  QuestionLevel,
-  CourseType,
-} from "@/lib/enum";
+import { PracticeMode, QuestionType, QuestionLevel } from "@/lib/enum";
 import { v4 as uuidv4 } from "uuid";
 
 export interface ConceptSelection {
@@ -606,18 +600,50 @@ export class ConceptPracticeEngine {
 
   /**
    * Get questions from QuestionBank with proper prioritization
+   * Prioritizes: manual > generated > momentary
    */
   private async getQuestionBankQuestions(
     conceptIds: string[],
     maxQuestions: number
   ): Promise<IQuestionBank[]> {
     try {
-      return await QuestionBank.find({
+      // First try to get non-momentary questions (manual and generated)
+      const nonMomentaryQuestions = await QuestionBank.find({
         targetConcepts: { $in: conceptIds },
         isActive: true,
+        source: { $in: ["manual", "generated"] },
       })
-        .sort({ timesUsed: 1, successRate: -1 }) // Prefer less used, higher success rate
+        .sort({
+          source: 1, // manual comes before generated alphabetically
+          timesUsed: 1,
+          successRate: -1,
+        })
         .limit(maxQuestions);
+
+      // If we have enough non-momentary questions, return them
+      if (nonMomentaryQuestions.length >= maxQuestions) {
+        console.log(
+          `✅ Using ${nonMomentaryQuestions.length} high-quality (non-momentary) questions`
+        );
+        return nonMomentaryQuestions;
+      }
+
+      // If we need more, supplement with momentary questions
+      const remainingCount = maxQuestions - nonMomentaryQuestions.length;
+      const momentaryQuestions = await QuestionBank.find({
+        targetConcepts: { $in: conceptIds },
+        isActive: true,
+        source: "momentary",
+      })
+        .sort({ timesUsed: 1, successRate: -1 })
+        .limit(remainingCount);
+
+      const allQuestions = [...nonMomentaryQuestions, ...momentaryQuestions];
+      console.log(
+        `✅ Using ${nonMomentaryQuestions.length} high-quality + ${momentaryQuestions.length} momentary questions`
+      );
+
+      return allQuestions;
     } catch (error) {
       console.error("❌ Error getting QuestionBank questions:", error);
       return [];
@@ -632,23 +658,84 @@ export class ConceptPracticeEngine {
     maxConcepts: number = 10
   ): Promise<string[]> {
     try {
-      const weakProgress = await ConceptProgress.find({
+      // Get all active concepts
+      const allConcepts = await Concept.find({
+        isActive: true,
+      })
+        .select("id")
+        .lean();
+
+      const allConceptIds = allConcepts.map((c) => c.id);
+
+      // Get progress for all concepts (if any)
+      const progressMap = new Map<string, IConceptProgress>();
+      const allProgress = await ConceptProgress.find({
         userId,
         isActive: true,
-        $or: [
-          { masteryLevel: { $lt: 0.5 } },
-          { successRate: { $lt: 0.6 } },
-          { timesIncorrect: { $gt: 2 } },
-        ],
-      })
-        .sort({
-          masteryLevel: 1,
-          successRate: 1,
-          timesIncorrect: -1,
-        })
-        .limit(maxConcepts);
+        conceptId: { $in: allConceptIds },
+      });
 
-      return weakProgress.map((p) => p.conceptId);
+      allProgress.forEach((progress) => {
+        progressMap.set(progress.conceptId, progress);
+      });
+
+      // Create weakness score for each concept
+      const conceptsWithWeakness = allConceptIds.map((conceptId) => {
+        const progress = progressMap.get(conceptId);
+
+        let weaknessScore = 0;
+
+        if (!progress) {
+          // No practice history = weakest (highest score)
+          weaknessScore = 1000;
+        } else {
+          // Calculate weakness based on multiple factors
+          // Lower mastery = higher weakness
+          const masteryWeakness = (1 - progress.masteryLevel) * 100;
+
+          // Lower success rate = higher weakness
+          const successWeakness = (1 - progress.successRate) * 100;
+
+          // More incorrect attempts = higher weakness
+          const incorrectAttempts = Math.round(
+            progress.totalAttempts * (1 - progress.successRate)
+          );
+          const incorrectWeakness = Math.min(incorrectAttempts * 10, 100);
+
+          // Combine factors (mastery is most important)
+          weaknessScore =
+            masteryWeakness * 0.5 +
+            successWeakness * 0.3 +
+            incorrectWeakness * 0.2;
+        }
+
+        return {
+          conceptId,
+          weaknessScore,
+          progress,
+        };
+      });
+
+      // Sort by weakness (highest weakness score first)
+      conceptsWithWeakness.sort((a, b) => b.weaknessScore - a.weaknessScore);
+
+      // Limit results if maxConcepts is specified and > 0
+      const limitedConcepts =
+        maxConcepts > 0
+          ? conceptsWithWeakness.slice(0, maxConcepts)
+          : conceptsWithWeakness;
+
+      console.log(
+        `🎯 Drill weakness selection: ${limitedConcepts.length} concepts sorted by weakness`
+      );
+      console.log(
+        `   - ${conceptsWithWeakness.filter((c) => c.weaknessScore >= 1000).length} concepts with no practice history`
+      );
+      console.log(
+        `   - ${conceptsWithWeakness.filter((c) => c.weaknessScore < 1000).length} concepts with practice history`
+      );
+
+      return limitedConcepts.map((c) => c.conceptId);
     } catch (error) {
       console.error("❌ Error getting drill concepts by weakness:", error);
       return [];
@@ -879,7 +966,7 @@ export class ConceptPracticeEngine {
   }
 
   /**
-   * Generate new questions for concepts
+   * Generate new momentary questions for concepts (limited to specific types)
    */
   private async generateNewQuestions(
     conceptIds: string[],
@@ -888,7 +975,7 @@ export class ConceptPracticeEngine {
     if (count <= 0) return [];
 
     console.log(
-      `🎯 Generating ${count} new questions for concepts: ${conceptIds.join(", ")}`
+      `🎯 Generating ${count} new momentary questions for concepts: ${conceptIds.join(", ")}`
     );
 
     try {
@@ -902,76 +989,95 @@ export class ConceptPracticeEngine {
         return [];
       }
 
-      const context = concepts
-        .map(
-          (c) =>
-            `${c.name}: ${c.description}. Examples: ${c.examples.join(", ")}`
-        )
-        .join("\n");
+      // Import the question generation service
+      const { QuestionLLMService } = await import(
+        "@/lib/questionGeneration/questionLLM"
+      );
+      const questionLLM = new QuestionLLMService();
+
+      // Define allowed question types for momentary questions
+      const allowedTypes = [
+        QuestionType.BASIC_CLOZE,
+        QuestionType.MULTI_CLOZE,
+        QuestionType.VOCAB_CHOICE,
+        QuestionType.MULTI_SELECT,
+      ];
 
       const savedQuestions: IQuestionBank[] = [];
+      const questionsPerType = Math.ceil(count / allowedTypes.length);
 
-      // Generate questions one by one
-      for (let i = 0; i < Math.min(count, 3); i++) {
+      // Generate questions for each allowed type
+      for (const questionType of allowedTypes) {
+        if (savedQuestions.length >= count) break;
+
         try {
-          const mockCourse = {
-            courseId: 0,
-            date: new Date(),
-            courseType: CourseType.NEW,
-            notes: context,
-            practice: context,
-            keywords: concepts.flatMap((c) => [c.name]),
-            newWords: concepts.flatMap((c) => c.examples.slice(0, 2)),
-          };
-
-          const previousQuestions = savedQuestions.map((q) => q.question);
-          const questionText = await generateQuestion(
-            mockCourse,
-            previousQuestions
+          const remainingCount = Math.min(
+            questionsPerType,
+            count - savedQuestions.length
           );
 
-          if (!questionText || questionText.includes("Failed to generate")) {
-            console.log(`❌ Failed to generate question ${i + 1}, skipping`);
-            continue;
-          }
-
-          // Create question with valid required fields
-          const questionData: IQuestionBank = {
-            id: uuidv4(),
-            question: questionText,
-            correctAnswer: "To be determined during practice",
-            questionType: QuestionType.Q_A,
-            targetConcepts: conceptIds,
+          const generatedQuestions = await questionLLM.generateQuestions({
+            concepts,
+            questionType,
             difficulty: this.inferDifficulty(concepts),
-            timesUsed: 0,
-            successRate: 0,
-            lastUsed: new Date(),
-            createdDate: new Date(),
-            isActive: true,
-            source: "generated",
-          };
+            quantity: remainingCount,
+            specialInstructions:
+              "Generate high-quality questions for immediate practice use",
+          });
 
-          // Save directly to database with proper validation
-          const savedQuestion = await QuestionBank.create(questionData);
-          savedQuestions.push(savedQuestion.toObject());
-          console.log(
-            `✅ Generated and saved question ${i + 1}: ${questionText.substring(0, 50)}...`
-          );
-        } catch (error) {
-          console.error(`❌ Error generating question ${i + 1}:`, error);
+          // Validate and filter questions based on type requirements
+          for (const genQ of generatedQuestions) {
+            if (savedQuestions.length >= count) break;
 
-          // Log the specific validation error for debugging
-          if (
-            error instanceof Error &&
-            error.message.includes("validation failed")
-          ) {
-            console.error(`❌ Validation details:`, error);
+            // Validate that multi-choice questions have proper options
+            if (
+              questionType === QuestionType.VOCAB_CHOICE ||
+              questionType === QuestionType.MULTI_SELECT
+            ) {
+              if (!genQ.options || genQ.options.length < 2) {
+                console.log(
+                  `❌ Dropping ${questionType} question without proper options`
+                );
+                continue;
+              }
+            }
+
+            // Create question with momentary source
+            const questionData: IQuestionBank = {
+              id: uuidv4(),
+              question: genQ.question,
+              correctAnswer: genQ.correctAnswer,
+              questionType: genQ.questionType,
+              targetConcepts: conceptIds,
+              difficulty: genQ.difficulty,
+              timesUsed: 0,
+              successRate: 0,
+              lastUsed: new Date(),
+              createdDate: new Date(),
+              isActive: true,
+              source: "momentary",
+              options: genQ.options,
+              audioUrl: genQ.audioUrl,
+              imageUrl: genQ.imageUrl,
+            };
+
+            // Save directly to database
+            const savedQuestion = await QuestionBank.create(questionData);
+            savedQuestions.push(savedQuestion.toObject());
+            console.log(
+              `✅ Generated momentary ${questionType} question: ${genQ.question.substring(0, 50)}...`
+            );
           }
+        } catch (error) {
+          console.error(
+            `❌ Error generating ${questionType} questions:`,
+            error
+          );
         }
       }
 
       console.log(
-        `✅ Successfully generated ${savedQuestions.length} questions`
+        `✅ Successfully generated ${savedQuestions.length} momentary questions`
       );
       return savedQuestions;
     } catch (error) {

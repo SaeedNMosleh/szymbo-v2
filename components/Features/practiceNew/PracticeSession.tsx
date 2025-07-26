@@ -28,16 +28,16 @@ function mapQuestionType(questionType: string): QuestionType {
 
   // Handle potential mismatches or legacy formats
   const typeMap: Record<string, QuestionType> = {
-    "q_a": QuestionType.Q_A,
-    "qa": QuestionType.Q_A,
-    "question_answer": QuestionType.Q_A,
-    "basic_cloze": QuestionType.BASIC_CLOZE,
-    "multi_cloze": QuestionType.MULTI_CLOZE,
-    "vocab_choice": QuestionType.VOCAB_CHOICE,
-    "multi_select": QuestionType.MULTI_SELECT,
-    "case_transform": QuestionType.CASE_TRANSFORM,
-    "translation_pl": QuestionType.TRANSLATION_PL,
-    "translation_en": QuestionType.TRANSLATION_EN,
+    q_a: QuestionType.Q_A,
+    qa: QuestionType.Q_A,
+    question_answer: QuestionType.Q_A,
+    basic_cloze: QuestionType.BASIC_CLOZE,
+    multi_cloze: QuestionType.MULTI_CLOZE,
+    vocab_choice: QuestionType.VOCAB_CHOICE,
+    multi_select: QuestionType.MULTI_SELECT,
+    case_transform: QuestionType.CASE_TRANSFORM,
+    translation_pl: QuestionType.TRANSLATION_PL,
+    translation_en: QuestionType.TRANSLATION_EN,
   };
 
   const mapped = typeMap[questionType.toLowerCase()];
@@ -57,7 +57,10 @@ interface Question {
   questionType: string;
   difficulty: string;
   targetConcepts: string[];
-  correctAnswer?: string; // This might be empty for newly generated questions
+  correctAnswer?: string; // This might be empty for newly generated questions,
+  options?: string[];
+  audioUrl?: string;
+  imageUrl?: string;
 }
 
 interface SessionData {
@@ -92,6 +95,7 @@ export function PracticeSession({
   const [questionResult, setQuestionResult] = useState<ValidationResult | null>(
     null
   );
+  const [currentAttempts, setCurrentAttempts] = useState(0);
   const [isValidating, setIsValidating] = useState(false);
   const [sessionResults, setSessionResults] = useState<ValidationResult[]>([]);
   const [questionStartTime, setQuestionStartTime] = useState<number>(
@@ -109,6 +113,7 @@ export function PracticeSession({
   useEffect(() => {
     setQuestionStartTime(Date.now());
     setValidationError(null);
+    setCurrentAttempts(0); // Reset attempts for new question
   }, [currentQuestionIndex]);
 
   // Enhanced Question Bank Service
@@ -266,10 +271,10 @@ export function PracticeSession({
   };
 
   const handleSubmitAnswer = async () => {
-    const hasAnswer = Array.isArray(userAnswer) 
-      ? userAnswer.some(answer => answer.trim()) 
+    const hasAnswer = Array.isArray(userAnswer)
+      ? userAnswer.some((answer) => answer.trim())
       : userAnswer.trim();
-    
+
     if (!hasAnswer || isValidating) return;
 
     setIsValidating(true);
@@ -287,11 +292,12 @@ export function PracticeSession({
         newWords: [],
       };
 
-      const attempts = (questionResult?.attempts || 0) + 1;
-      const answerString = Array.isArray(userAnswer) 
-        ? userAnswer.join(", ") 
+      const attempts = currentAttempts + 1;
+      setCurrentAttempts(attempts);
+      const answerString = Array.isArray(userAnswer)
+        ? userAnswer.join(", ")
         : userAnswer;
-        
+
       const result = await validateAnswer(
         currentQuestion.question,
         answerString,
@@ -305,6 +311,8 @@ export function PracticeSession({
         correctAnswer: result.correctAnswer || "",
         attempts,
         responseTime,
+        previousAnswer: userAnswer, // Store the user's current answer
+        showFinalAnswer: !result.isCorrect && attempts >= 3, // Show final answer after 3 failed attempts
       };
 
       setQuestionResult(newResult);
@@ -408,6 +416,7 @@ export function PracticeSession({
       setQuestionResult(null);
       setValidationError(null);
       setQuestionStartTime(Date.now());
+      // currentAttempts will be reset by useEffect when currentQuestionIndex changes
     } else {
       // Session complete
       setIsSessionComplete(true);
@@ -415,10 +424,14 @@ export function PracticeSession({
   };
 
   const handleRetryQuestion = () => {
-    setUserAnswer(Array.isArray(userAnswer) ? [] : "");
+    // Preserve the previous answer if available
+    if (questionResult?.previousAnswer) {
+      setUserAnswer(questionResult.previousAnswer);
+    }
     setQuestionResult(null);
     setValidationError(null);
     setQuestionStartTime(Date.now());
+    // Keep currentAttempts - don't reset it during retry
   };
 
   if (isSessionComplete) {
@@ -531,15 +544,7 @@ export function PracticeSession({
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">{currentQuestion.question}</CardTitle>
-          <div className="flex gap-2 text-xs text-gray-500">
-            <span className="rounded bg-gray-100 px-2 py-1">
-              {currentQuestion.difficulty}
-            </span>
-            <span className="rounded bg-blue-100 px-2 py-1">
-              {currentQuestion.questionType}
-            </span>
-          </div>
+          <></>
         </CardHeader>
 
         <CardContent className="space-y-4">
@@ -564,16 +569,53 @@ export function PracticeSession({
             onRetry={handleRetryQuestion}
             onNext={handleNextQuestion}
             showSubmit={!questionResult}
-            showRetry={!!questionResult && !questionResult.isCorrect && questionResult.attempts < 3}
+            showRetry={
+              !!questionResult &&
+              !questionResult.isCorrect &&
+              questionResult.attempts < 3
+            }
             showNext={!!questionResult}
           />
+
+          {(() => {
+            const questionType = mapQuestionType(currentQuestion.questionType);
+            const missingOptions =
+              (questionType === QuestionType.MULTI_SELECT ||
+                questionType === QuestionType.VOCAB_CHOICE) &&
+              (!currentQuestion.options ||
+                currentQuestion.options.length === 0);
+            const missingAudio =
+              questionType === QuestionType.AUDIO_COMPREHENSION && !currentQuestion.audioUrl;
+
+            if (missingOptions || missingAudio) {
+              return (
+                <div>
+                  {missingAudio && (
+                    <p className="mb-2 text-red-600">
+                      No audio file provided for this question.
+                    </p>
+                  )}
+                  <button
+                    onClick={handleNextQuestion}
+                    className="mt-4 rounded bg-blue-500 px-4 py-2 font-bold text-white hover:bg-blue-600"
+                  >
+                    Skip Question
+                  </button>
+                </div>
+              );
+            }
+
+            return null;
+          })()}
 
           <QuestionControls
             validationResult={questionResult}
             isValidating={isValidating}
-            hasAnswer={Array.isArray(userAnswer) 
-              ? userAnswer.some(answer => answer.trim()) 
-              : !!userAnswer.trim()}
+            hasAnswer={
+              Array.isArray(userAnswer)
+                ? userAnswer.some((answer) => answer.trim())
+                : !!userAnswer.trim()
+            }
             onSubmit={handleSubmitAnswer}
             onRetry={handleRetryQuestion}
             onNext={handleNextQuestion}

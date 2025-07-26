@@ -51,6 +51,10 @@ export function CaseTransformQuestion({
             disabled={disabled}
             className="text-lg"
             aria-label="Case transformation answer"
+            autoComplete="off"
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck="false"
           />
           
           <div className="text-sm text-gray-600">

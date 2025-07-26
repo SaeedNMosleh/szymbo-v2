@@ -57,6 +57,10 @@ export function TranslationQuestion({
               placeholder={`Type your ${targetLanguage} translation here...`}
               className="min-h-[100px]"
               disabled={disabled}
+              autoComplete="off"
+              autoCapitalize="off"
+              autoCorrect="off"
+              spellCheck="false"
               aria-label={`Translation to ${targetLanguage}`}
             />
           </div>

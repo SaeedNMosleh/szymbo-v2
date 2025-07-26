@@ -16,6 +16,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { TagEditor } from "@/components/ui/tag-editor";
 import {
   Upload,
   FileText,
@@ -56,13 +57,22 @@ interface CSVMapping {
   tags?: number;
 }
 
+interface Tag {
+  tag: string;
+  source: "existing" | "new";
+  confidence: number;
+}
+
 interface ManualConcept {
   name: string;
   category: "grammar" | "vocabulary";
   description: string;
   examples: string[];
-  tags: string[];
+  tags: Tag[];
   difficulty: string;
+  sourceType: "course" | "document" | "manual" | "import";
+  isActive: boolean;
+  confidence: number;
   vocabularyData?: {
     word: string;
     translation: string;
@@ -92,9 +102,7 @@ interface ImportRequestBody {
 export const ConceptImporter: React.FC<ConceptImporterProps> = ({
   onImportComplete,
 }) => {
-  const [activeTab, setActiveTab] = useState<ImportTab>(
-    "csv"
-  );
+  const [activeTab, setActiveTab] = useState<ImportTab>("csv");
   const [isLoading, setIsLoading] = useState(false);
   const [lastResult, setLastResult] = useState<ImportResult | null>(null);
 
@@ -174,12 +182,18 @@ export const ConceptImporter: React.FC<ConceptImporterProps> = ({
           };
           break;
 
-        case "manual":
+        case "manual": {
+          // Convert Tag objects to simple strings for API
+          const conceptsForApi = manualConcepts.map((concept) => ({
+            ...concept,
+            tags: concept.tags.map((tag) => tag),
+          }));
           requestBody = {
             type: "manual",
-            concepts: manualConcepts,
+            concepts: conceptsForApi,
           };
           break;
+        }
 
         case "document":
           requestBody = {
@@ -232,6 +246,17 @@ export const ConceptImporter: React.FC<ConceptImporterProps> = ({
       examples: [],
       tags: [],
       difficulty: "A1",
+      sourceType: "manual",
+      isActive: true,
+      confidence: 1,
+      vocabularyData: {
+        word: "",
+        translation: "",
+        partOfSpeech: "noun",
+        gender: undefined,
+        pluralForm: undefined,
+        pronunciation: undefined,
+      },
     };
     setManualConcepts([...manualConcepts, newConcept]);
     setEditingConcept(manualConcepts.length);
@@ -488,27 +513,58 @@ export const ConceptImporter: React.FC<ConceptImporterProps> = ({
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <label className="mb-1 block text-sm font-medium">
-                          Name
+                          Name *
                         </label>
                         <Input
                           value={concept.name}
-                          onChange={(e) =>
-                            updateManualConcept(index, { name: e.target.value })
-                          }
+                          onChange={(e) => {
+                            const name = e.target.value;
+                            const updates: Partial<ManualConcept> = { name };
+
+                            // Auto-update vocabularyData.word for vocabulary concepts
+                            if (
+                              concept.category === "vocabulary" &&
+                              concept.vocabularyData
+                            ) {
+                              updates.vocabularyData = {
+                                ...concept.vocabularyData,
+                                word: name,
+                              };
+                            }
+
+                            updateManualConcept(index, updates);
+                          }}
                           placeholder="Concept name"
                         />
                       </div>
                       <div>
                         <label className="mb-1 block text-sm font-medium">
-                          Category
+                          Category *
                         </label>
                         <Select
                           value={concept.category}
-                          onValueChange={(value) =>
-                            updateManualConcept(index, {
-                              category: value as "grammar" | "vocabulary",
-                            })
-                          }
+                          onValueChange={(value) => {
+                            const category = value as "grammar" | "vocabulary";
+                            const updates: Partial<ManualConcept> = {
+                              category,
+                            };
+
+                            // Add vocabularyData for vocabulary concepts, remove for grammar
+                            if (
+                              category === "vocabulary" &&
+                              !concept.vocabularyData
+                            ) {
+                              updates.vocabularyData = {
+                                word: concept.name,
+                                translation: "",
+                                partOfSpeech: "noun",
+                              };
+                            } else if (category === "grammar") {
+                              updates.vocabularyData = undefined;
+                            }
+
+                            updateManualConcept(index, updates);
+                          }}
                         >
                           <SelectTrigger>
                             <SelectValue />
@@ -525,7 +581,7 @@ export const ConceptImporter: React.FC<ConceptImporterProps> = ({
 
                     <div>
                       <label className="mb-1 block text-sm font-medium">
-                        Description
+                        Description *
                       </label>
                       <Textarea
                         value={concept.description}
@@ -538,6 +594,224 @@ export const ConceptImporter: React.FC<ConceptImporterProps> = ({
                         rows={2}
                       />
                     </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="mb-1 block text-sm font-medium">
+                          Difficulty *
+                        </label>
+                        <Select
+                          value={concept.difficulty}
+                          onValueChange={(value) =>
+                            updateManualConcept(index, { difficulty: value })
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Object.values(QuestionLevel).map((level) => (
+                              <SelectItem key={level} value={level}>
+                                {level}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div>
+                        <label className="mb-1 block text-sm font-medium">
+                          Confidence (0-1)
+                        </label>
+                        <Input
+                          type="number"
+                          min="0"
+                          max="1"
+                          step="0.1"
+                          value={concept.confidence}
+                          onChange={(e) =>
+                            updateManualConcept(index, {
+                              confidence: parseFloat(e.target.value) || 0,
+                            })
+                          }
+                          placeholder="0.8"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-sm font-medium">
+                        Examples (one per line)
+                      </label>
+                      <Textarea
+                        value={concept.examples.join("\n")}
+                        onChange={(e) =>
+                          updateManualConcept(index, {
+                            examples: e.target.value
+                              .split("\n")
+                              .filter((ex) => ex.trim()),
+                          })
+                        }
+                        placeholder="Example 1\nExample 2\nExample 3"
+                        rows={3}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-sm font-medium">
+                        Tags
+                      </label>
+                      <TagEditor
+                        tags={concept.tags}
+                        onTagsChange={(tags) =>
+                          updateManualConcept(index, { tags })
+                        }
+                        placeholder="Add tag..."
+                      />
+                    </div>
+
+                    {concept.category === "vocabulary" && (
+                      <div className="space-y-3 border-t pt-3">
+                        <h4 className="font-medium text-blue-700">
+                          Vocabulary-Specific Fields
+                        </h4>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="mb-1 block text-sm font-medium">
+                              Translation *
+                            </label>
+                            <Input
+                              value={concept.vocabularyData?.translation || ""}
+                              onChange={(e) =>
+                                updateManualConcept(index, {
+                                  vocabularyData: {
+                                    ...concept.vocabularyData!,
+                                    translation: e.target.value,
+                                  },
+                                })
+                              }
+                              placeholder="English translation"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="mb-1 block text-sm font-medium">
+                              Part of Speech *
+                            </label>
+                            <Select
+                              value={
+                                concept.vocabularyData?.partOfSpeech || "noun"
+                              }
+                              onValueChange={(value) =>
+                                updateManualConcept(index, {
+                                  vocabularyData: {
+                                    ...concept.vocabularyData!,
+                                    partOfSpeech: value,
+                                  },
+                                })
+                              }
+                            >
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="noun">Noun</SelectItem>
+                                <SelectItem value="verb">Verb</SelectItem>
+                                <SelectItem value="adjective">
+                                  Adjective
+                                </SelectItem>
+                                <SelectItem value="adverb">Adverb</SelectItem>
+                                <SelectItem value="preposition">
+                                  Preposition
+                                </SelectItem>
+                                <SelectItem value="conjunction">
+                                  Conjunction
+                                </SelectItem>
+                                <SelectItem value="interjection">
+                                  Interjection
+                                </SelectItem>
+                                <SelectItem value="pronoun">Pronoun</SelectItem>
+                                <SelectItem value="numeral">Numeral</SelectItem>
+                                <SelectItem value="particle">
+                                  Particle
+                                </SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="mb-1 block text-sm font-medium">
+                              Gender (for nouns)
+                            </label>
+                            <Select
+                              value={concept.vocabularyData?.gender || "none"}
+                              onValueChange={(value) =>
+                                updateManualConcept(index, {
+                                  vocabularyData: {
+                                    ...concept.vocabularyData!,
+                                    gender:
+                                      value === "none" ? undefined : value,
+                                  },
+                                })
+                              }
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select gender" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="none">None</SelectItem>
+                                <SelectItem value="masculine">
+                                  Masculine
+                                </SelectItem>
+                                <SelectItem value="feminine">
+                                  Feminine
+                                </SelectItem>
+                                <SelectItem value="neuter">Neuter</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          <div>
+                            <label className="mb-1 block text-sm font-medium">
+                              Plural Form
+                            </label>
+                            <Input
+                              value={concept.vocabularyData?.pluralForm || ""}
+                              onChange={(e) =>
+                                updateManualConcept(index, {
+                                  vocabularyData: {
+                                    ...concept.vocabularyData!,
+                                    pluralForm: e.target.value || undefined,
+                                  },
+                                })
+                              }
+                              placeholder="Plural form (if applicable)"
+                            />
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="mb-1 block text-sm font-medium">
+                            Pronunciation (IPA or phonetic)
+                          </label>
+                          <Input
+                            value={concept.vocabularyData?.pronunciation || ""}
+                            onChange={(e) =>
+                              updateManualConcept(index, {
+                                vocabularyData: {
+                                  ...concept.vocabularyData!,
+                                  pronunciation: e.target.value || undefined,
+                                },
+                              })
+                            }
+                            placeholder="/nuʂ/ or nush"
+                          />
+                        </div>
+                      </div>
+                    )}
 
                     <div className="flex gap-2">
                       <Button size="sm" onClick={() => setEditingConcept(null)}>
@@ -563,6 +837,24 @@ export const ConceptImporter: React.FC<ConceptImporterProps> = ({
                       <div className="flex items-center gap-2 text-sm text-gray-600">
                         <Badge variant="outline">{concept.category}</Badge>
                         <span>{concept.description || "No description"}</span>
+                        {concept.tags.length > 0 && (
+                          <div className="flex gap-1">
+                            {concept.tags.slice(0, 3).map((tag, tagIndex) => (
+                              <Badge
+                                key={tagIndex}
+                                variant="secondary"
+                                className="text-xs"
+                              >
+                                {tag.tag}
+                              </Badge>
+                            ))}
+                            {concept.tags.length > 3 && (
+                              <Badge variant="secondary" className="text-xs">
+                                +{concept.tags.length - 3}
+                              </Badge>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
                     <Button
@@ -580,7 +872,8 @@ export const ConceptImporter: React.FC<ConceptImporterProps> = ({
 
           {manualConcepts.length === 0 && (
             <div className="py-8 text-center text-gray-500">
-              No concepts added yet. Click &quot;Add Concept&quot; to get started.
+              No concepts added yet. Click &quot;Add Concept&quot; to get
+              started.
             </div>
           )}
         </div>

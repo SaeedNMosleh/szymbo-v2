@@ -89,16 +89,25 @@ export async function PUT(request: NextRequest) {
       return createErrorResponse("Draft ID is required", 400);
     }
 
-    // Find and update the draft (simplified - just edit content)
-    const updatedDraft = await QuestionDraft.findOneAndUpdate(
-      { id },
-      updates,
-      { new: true }
-    );
-
-    if (!updatedDraft) {
+    // Get the current draft to check its source
+    const currentDraft = await QuestionDraft.findOne({ id });
+    if (!currentDraft) {
       return createErrorResponse("Draft not found", 404);
     }
+
+    // If the current source is "momentary" and we're updating, change it to "generated"
+    const finalUpdates = { ...updates };
+    if (currentDraft.source === "momentary") {
+      finalUpdates.source = "generated";
+      console.log(`🔄 Converting momentary question to generated after editing: ${id}`);
+    }
+
+    // Find and update the draft
+    const updatedDraft = await QuestionDraft.findOneAndUpdate(
+      { id },
+      finalUpdates,
+      { new: true }
+    );
 
     return createApiResponse({
       message: "Draft updated successfully",

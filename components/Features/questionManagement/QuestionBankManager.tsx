@@ -55,7 +55,7 @@ interface QuestionBankItem {
   lastUsed: Date | null;
   createdDate: Date;
   isActive: boolean;
-  source: "generated" | "manual";
+  source: "manual" | "generated" | "momentary";
   options?: string[];
   audioUrl?: string;
   imageUrl?: string;
@@ -72,6 +72,7 @@ interface Filters {
   search: string;
   conceptIds: string;
   questionType: string;
+  source: string;
   difficulty: string;
   isActive: string;
   successRateMin: string;
@@ -87,12 +88,14 @@ interface EditingQuestion {
   options: string[];
   targetConcepts: string[];
   difficulty: QuestionLevel;
+  source?: "manual" | "generated" | "momentary";
 }
 
 const DEFAULT_FILTERS: Filters = {
   search: "",
   conceptIds: "",
   questionType: "",
+  source: "",
   difficulty: "",
   isActive: "true",
   successRateMin: "",
@@ -207,6 +210,7 @@ export default function QuestionBankManager() {
       options: question.options || [],
       targetConcepts: question.targetConcepts,
       difficulty: question.difficulty,
+      source: question.source,
     });
   };
 
@@ -214,10 +218,19 @@ export default function QuestionBankManager() {
     if (!editingQuestion) return;
 
     try {
+      // If the question was "momentary", change it to "generated" when edited
+      const questionToSave = {
+        ...editingQuestion,
+        source:
+          editingQuestion.source === "momentary"
+            ? "generated"
+            : editingQuestion.source,
+      };
+
       const response = await fetch("/api/question-bank", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(editingQuestion),
+        body: JSON.stringify(questionToSave),
       });
 
       const data = await response.json();
@@ -296,13 +309,27 @@ export default function QuestionBankManager() {
                 >
                   {question.isActive ? "Active" : "Inactive"}
                 </Badge>
+                <Badge
+                  variant={
+                    question.source === "momentary"
+                      ? "destructive"
+                      : "secondary"
+                  }
+                  className={
+                    question.source === "momentary"
+                      ? "bg-orange-100 text-orange-800 hover:bg-orange-100"
+                      : ""
+                  }
+                >
+                  {question.source}
+                </Badge>
                 <span className="text-sm text-muted-foreground">
                   {Math.round(question.successRate * 100)}% success
                 </span>
               </div>
               {isEditing ? (
                 <Textarea
-                  value={editingQuestion.question}
+                  value={editingQuestion?.question || ""}
                   onChange={(e) =>
                     setEditingQuestion((prev) =>
                       prev ? { ...prev, question: e.target.value } : null
@@ -427,11 +454,20 @@ export default function QuestionBankManager() {
         {isExpanded && (
           <CardContent className="pt-0">
             <div className="space-y-4">
+              {isEditing && editingQuestion?.source === "momentary" && (
+                <Alert className="border-orange-300 bg-orange-50">
+                  <AlertTriangle className="size-4" />
+                  <AlertDescription>
+                    This momentary question will be changed to
+                    &quot;generated&quot; status when saved.
+                  </AlertDescription>
+                </Alert>
+              )}
               <div>
                 <strong>Correct Answer:</strong>
                 {isEditing ? (
                   <Input
-                    value={editingQuestion.correctAnswer}
+                    value={editingQuestion?.correctAnswer || ""}
                     onChange={(e) =>
                       setEditingQuestion((prev) =>
                         prev ? { ...prev, correctAnswer: e.target.value } : null
@@ -444,16 +480,68 @@ export default function QuestionBankManager() {
                 )}
               </div>
 
-              {question.options && question.options.length > 0 && (
+              {(question.options && question.options.length > 0) ||
+              isEditing ? (
                 <div>
                   <strong>Options:</strong>
-                  <ul className="mt-1 list-inside list-disc">
-                    {question.options.map((option, idx) => (
-                      <li key={idx}>{option}</li>
-                    ))}
-                  </ul>
+                  {isEditing ? (
+                    <div className="mt-1 space-y-2">
+                      {editingQuestion?.options?.map((option, idx) => (
+                        <div key={idx} className="flex items-center gap-2">
+                          <Input
+                            value={option}
+                            onChange={(e) =>
+                              setEditingQuestion((prev) => {
+                                if (!prev) return null;
+                                const newOptions = [...prev.options];
+                                newOptions[idx] = e.target.value;
+                                return { ...prev, options: newOptions };
+                              })
+                            }
+                            placeholder={`Option ${idx + 1}`}
+                            className="flex-1"
+                          />
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() =>
+                              setEditingQuestion((prev) => {
+                                if (!prev) return null;
+                                const newOptions = prev.options.filter(
+                                  (_, i) => i !== idx
+                                );
+                                return { ...prev, options: newOptions };
+                              })
+                            }
+                          >
+                            <X className="size-4" />
+                          </Button>
+                        </div>
+                      ))}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() =>
+                          setEditingQuestion((prev) =>
+                            prev
+                              ? { ...prev, options: [...prev.options, ""] }
+                              : null
+                          )
+                        }
+                        className="w-full"
+                      >
+                        Add Option
+                      </Button>
+                    </div>
+                  ) : (
+                    <ul className="mt-1 list-inside list-disc">
+                      {question.options?.map((option, idx) => (
+                        <li key={idx}>{option}</li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
-              )}
+              ) : null}
 
               <div className="grid grid-cols-2 gap-4 text-sm md:grid-cols-4">
                 <div>
@@ -502,7 +590,7 @@ export default function QuestionBankManager() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-3 lg:grid-cols-4">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3 lg:grid-cols-5">
               <div>
                 <Input
                   placeholder="Search questions..."
@@ -550,6 +638,23 @@ export default function QuestionBankManager() {
                       {level}
                     </SelectItem>
                   ))}
+                </SelectContent>
+              </Select>
+
+              <Select
+                value={filters.source || "all"}
+                onValueChange={(value) =>
+                  handleFilterChange("source", value === "all" ? "" : value)
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Source" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Sources</SelectItem>
+                  <SelectItem value="manual">Manual</SelectItem>
+                  <SelectItem value="generated">Generated</SelectItem>
+                  <SelectItem value="momentary">Momentary</SelectItem>
                 </SelectContent>
               </Select>
 

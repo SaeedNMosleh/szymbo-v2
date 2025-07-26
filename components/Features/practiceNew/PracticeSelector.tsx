@@ -133,7 +133,7 @@ export function PracticeSelector({
       color: "border-red-200 hover:border-red-300 bg-red-50",
       buttonColor: "bg-red-600 hover:bg-red-700",
       features: [
-        "Target weak concepts",
+        "All concepts sorted by weakness",
         "Course-specific drilling",
         "User-controlled selection",
         "Intensive practice",
@@ -290,7 +290,7 @@ export function PracticeSelector({
                           Starting...
                         </div>
                       ) : (
-                        "Drill Weak Concepts"
+                        "Drill All Concepts (Weakest First)"
                       )}
                     </Button>
                     <Button

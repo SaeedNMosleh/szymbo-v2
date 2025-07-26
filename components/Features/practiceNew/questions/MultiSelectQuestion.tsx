@@ -14,6 +14,11 @@ export function MultiSelectQuestion({
 }: QuestionComponentProps) {
   const options = question.options || [];
   const selectedAnswers = Array.isArray(userAnswer) ? userAnswer : [];
+  
+  // Debug logging for options
+  if (options.length === 0) {
+    console.log(`❌ MultiSelectQuestion: No options provided for question:`, question);
+  }
 
   const handleOptionChange = (option: string, checked: boolean) => {
     let newAnswers: string[];

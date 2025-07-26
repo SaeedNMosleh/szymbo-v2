@@ -27,9 +27,8 @@ export function QuestionControls({
   onNext,
   currentQuestionIndex,
   totalQuestions,
-  validationError
+  validationError,
 }: QuestionControlsProps) {
-
   if (validationError) {
     return (
       <Card className="border-2 border-red-200 bg-red-50">
@@ -51,8 +50,8 @@ export function QuestionControls({
       <div className="space-y-4">
         <Card
           className={`border-2 ${
-            validationResult.isCorrect 
-              ? "border-green-200 bg-green-50" 
+            validationResult.isCorrect
+              ? "border-green-200 bg-green-50"
               : "border-red-200 bg-red-50"
           }`}
         >
@@ -66,8 +65,8 @@ export function QuestionControls({
               <div className="flex-1 space-y-2">
                 <p
                   className={`font-medium ${
-                    validationResult.isCorrect 
-                      ? "text-green-800" 
+                    validationResult.isCorrect
+                      ? "text-green-800"
                       : "text-red-800"
                   }`}
                 >
@@ -78,11 +77,24 @@ export function QuestionControls({
                     {validationResult.feedback}
                   </p>
                 )}
-                {!validationResult.isCorrect && validationResult.correctAnswer && (
-                  <p className="text-sm">
-                    <strong>Correct answer:</strong> {validationResult.correctAnswer}
-                  </p>
-                )}
+                {!validationResult.isCorrect &&
+                  validationResult.correctAnswer &&
+                  validationResult.showFinalAnswer && (
+                    <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 p-3">
+                      <p className="mb-1 text-sm font-medium text-blue-800">
+                        Final Answer:
+                      </p>
+                      <p className="text-sm text-blue-700">
+                        {validationResult.correctAnswer}
+                      </p>
+                    </div>
+                  )}
+                {!validationResult.isCorrect &&
+                  validationResult.attempts < 3 && (
+                    <p className="text-sm font-medium text-orange-600">
+                      Attempt {validationResult.attempts} of 3
+                    </p>
+                  )}
               </div>
             </div>
           </CardContent>
@@ -90,15 +102,19 @@ export function QuestionControls({
 
         <div className="flex gap-3">
           {!validationResult.isCorrect && validationResult.attempts < 3 && (
-            <Button
-              variant="outline"
-              onClick={onRetry}
-              className="flex-1"
-            >
+            <Button variant="outline" onClick={onRetry} className="flex-1">
               Try Again
             </Button>
           )}
-          <Button onClick={onNext} className="flex-1">
+          <Button
+            onClick={onNext}
+            className={
+              (!validationResult.isCorrect && validationResult.attempts >= 3) ||
+              validationResult.showFinalAnswer
+                ? "w-full"
+                : "flex-1"
+            }
+          >
             {currentQuestionIndex < totalQuestions - 1
               ? "Next Question"
               : "Complete Session"}

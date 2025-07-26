@@ -35,7 +35,6 @@ import {
   SuggestedTag,
 } from "@/datamodels/conceptExtractionSession.model";
 import { ConceptCategory, QuestionLevel } from "@/lib/enum";
-import { createOperationLogger } from "@/lib/utils/logger";
 import { AlertCircle } from "lucide-react";
 
 interface EnhancedConceptReviewProps {
@@ -63,16 +62,6 @@ export function EnhancedConceptReview({
   courseId,
   onReviewComplete,
 }: EnhancedConceptReviewProps) {
-  // Create operation-specific loggers
-  const sessionLogger = createOperationLogger("session-management", {
-    courseId,
-  });
-  const editLogger = createOperationLogger("concept-edit", { courseId });
-  const submitLogger = createOperationLogger("review-submit", { courseId });
-  const decisionLogger = createOperationLogger("concept-decision", {
-    courseId,
-  });
-
   const [session, setSession] = useState<IConceptExtractionSession | null>(
     null
   );
@@ -91,8 +80,6 @@ export function EnhancedConceptReview({
   const [duplicateWarnings, setDuplicateWarnings] = useState<Set<string>>(
     new Set()
   );
-
-  sessionLogger.info("ConceptReview component initialized", { courseId });
 
   // Form for editing concepts
   const editForm = useForm<Partial<ExtractedConcept>>({
@@ -125,20 +112,20 @@ export function EnhancedConceptReview({
   });
 
   const loadExtractionSession = useCallback(async () => {
-    sessionLogger.info("Starting session load");
+    console.log("Starting session load for course:", courseId);
 
     try {
       setIsLoading(true);
       setError(null);
 
-      sessionLogger.debug("Fetching extraction session from API");
+      console.log("Fetching extraction session from API");
       // Get latest extraction session for course - include both extracted and in_review status
       const response = await fetch(
         `/api/extraction-sessions?courseId=${courseId}&limit=1`
       );
       const data = await response.json();
 
-      sessionLogger.debug("API response received", {
+      console.log("API response received", {
         status: response.status,
         ok: response.ok,
         dataKeys: Object.keys(data || {}),
@@ -146,7 +133,7 @@ export function EnhancedConceptReview({
       });
 
       if (!response.ok) {
-        sessionLogger.error("API response not ok", {
+        console.error("API response not ok", {
           status: response.status,
           error: data.error,
         });
@@ -155,7 +142,7 @@ export function EnhancedConceptReview({
 
       if (data.data?.sessions && data.data.sessions.length > 0) {
         const sessionData = data.data.sessions[0];
-        sessionLogger.success("Found existing session", {
+        console.log("Found existing session", {
           sessionId: sessionData.id,
           status: sessionData.status,
           conceptCount: sessionData.extractedConcepts?.length || 0,
@@ -185,22 +172,22 @@ export function EnhancedConceptReview({
             )
           );
           setDuplicateWarnings(duplicateNames);
-          sessionLogger.warn("Duplicates detected in session", {
+          console.log("Duplicates detected in session", {
             duplicateCount: duplicateNames.size,
             duplicateNames: Array.from(duplicateNames),
           });
         }
 
-        sessionLogger.debug("Loaded existing decisions", {
+        console.log("Loaded existing decisions", {
           decisionCount: existingDecisions.size,
         });
       } else {
-        sessionLogger.warn("No extraction session found, trying legacy system");
+        console.log("No extraction session found, trying legacy system");
         // No extraction session found, try to get from the old concept extraction system
         // Try fallback to legacy system
 
         try {
-          sessionLogger.debug("Attempting legacy API call");
+          console.log("Attempting legacy API call");
           // Try to get review data using the fallback API
           const extractorResponse = await fetch(
             "/api/concepts/prepare-review",
@@ -213,17 +200,17 @@ export function EnhancedConceptReview({
 
           if (extractorResponse.ok) {
             const reviewData = await extractorResponse.json();
-            sessionLogger.info("Legacy system data received", {
+            console.log("Legacy system data received", {
               courseName: reviewData.data?.courseName,
               conceptCount: reviewData.data?.extractedConcepts?.length || 0,
               hasSimilarityMatches: !!reviewData.data?.similarityMatches,
             });
 
             // Convert old format to new session format
-            sessionLogger.debug("Converting legacy data to session format");
+            console.log("Converting legacy data to session format");
 
             const extractedConcepts = reviewData.data?.extractedConcepts || [];
-            sessionLogger.debug("Extracted concepts from legacy data", {
+            console.log("Extracted concepts from legacy data", {
               conceptCount: extractedConcepts.length,
               firstConceptName: extractedConcepts[0]?.name,
             });
@@ -260,7 +247,7 @@ export function EnhancedConceptReview({
               updatedAt: new Date(),
             };
 
-            sessionLogger.success("Created mock session", {
+            console.log("Created mock session", {
               sessionId: mockSession.id,
               conceptCount: mockSession.extractedConcepts.length,
               similarityMatches: mockSession.similarityMatches.length,
@@ -276,9 +263,7 @@ export function EnhancedConceptReview({
               extractionMetadata: mockSession.extractionMetadata,
             };
 
-            sessionLogger.debug(
-              "Attempting to save legacy session to database"
-            );
+            console.log("Attempting to save legacy session to database");
 
             try {
               const saveResponse = await fetch("/api/extraction-sessions", {
@@ -289,7 +274,7 @@ export function EnhancedConceptReview({
 
               if (saveResponse.ok) {
                 const savedSessionData = await saveResponse.json();
-                sessionLogger.success("Legacy session saved to database", {
+                console.log("Legacy session saved to database", {
                   sessionId:
                     savedSessionData.data?.sessionId ||
                     savedSessionData.data?.session?.id,
@@ -303,61 +288,55 @@ export function EnhancedConceptReview({
                 );
               } else {
                 const errorData = await saveResponse.json().catch(() => ({}));
-                sessionLogger.warn("Failed to save legacy session", {
+                console.log("Failed to save legacy session", {
                   status: saveResponse.status,
                   error: errorData,
                 });
                 setSession(mockSession);
               }
             } catch (saveError) {
-              sessionLogger.error(
-                "Error saving legacy session",
-                saveError as Error
-              );
+              console.error("Error saving legacy session", saveError);
               setSession(mockSession);
             }
             return;
           }
         } catch (legacyError) {
-          sessionLogger.error(
-            "Failed to load from legacy system",
-            legacyError as Error
-          );
+          console.error("Failed to load from legacy system", legacyError);
         }
 
-        sessionLogger.error("No extraction session found");
+        console.error("No extraction session found");
         setError(
           "No extraction session found for this course. Please extract concepts first."
         );
       }
     } catch (err) {
-      sessionLogger.error("Session loading failed", err as Error);
+      console.error("Session loading failed", err);
       setError(
         err instanceof Error ? err.message : "Failed to load extraction session"
       );
     } finally {
       setIsLoading(false);
-      sessionLogger.debug("Session loading completed");
+      console.log("Session loading completed");
     }
-  }, [courseId, sessionLogger]);
+  }, [courseId]);
 
   // Load available tags
   const loadAvailableTags = useCallback(async () => {
-    sessionLogger.debug("Loading available tags");
+    console.log("Loading available tags");
     try {
       const response = await fetch(`/api/concepts/tags?courseId=${courseId}`);
       if (response.ok) {
         const data = await response.json();
         const tags = data.data?.tags || [];
         setAvailableTags(tags);
-        sessionLogger.success("Tags loaded", { tagCount: tags.length });
+        console.log("Tags loaded", { tagCount: tags.length });
       } else {
-        sessionLogger.warn("Failed to load tags", { status: response.status });
+        console.log("Failed to load tags", { status: response.status });
       }
     } catch (error) {
-      sessionLogger.error("Failed to load available tags", error as Error);
+      console.error("Failed to load available tags", error);
     }
-  }, [courseId, sessionLogger]);
+  }, [courseId]);
 
   // Load extraction session on mount
   useEffect(() => {
@@ -381,7 +360,7 @@ export function EnhancedConceptReview({
         editedConcept?: Partial<ExtractedConcept>;
       }
     ) => {
-      decisionLogger.info("Concept decision triggered", {
+      console.log("Concept decision triggered", {
         conceptName,
         action,
         hasAdditionalData: !!additionalData,
@@ -395,7 +374,7 @@ export function EnhancedConceptReview({
         const newDecisions = new Map(prev);
         const currentDecision = newDecisions.get(conceptName);
 
-        decisionLogger.debug("Current decision state", {
+        console.log("Current decision state", {
           conceptName,
           currentAction: currentDecision?.action,
           hasCurrentDecision: !!currentDecision,
@@ -413,7 +392,7 @@ export function EnhancedConceptReview({
         ) {
           // Clicking approve while merge is active should clear the merge
           shouldToggle = true;
-          decisionLogger.debug("Toggle: approve clicked while merge active");
+          console.log("Toggle: approve clicked while merge active");
         } else if (
           action === "approve" &&
           currentDecision &&
@@ -421,26 +400,26 @@ export function EnhancedConceptReview({
         ) {
           // Clicking approve while edit is active should switch to approve (keep the edit data)
           shouldToggle = false;
-          decisionLogger.debug("No toggle: approve clicked while edit active");
+          console.log("No toggle: approve clicked while edit active");
         } else if (currentDecision && currentDecision.action === action) {
           if (action === "merge") {
             shouldToggle =
               currentDecision.mergeData?.primaryConceptId ===
               additionalData?.mergeData?.primaryConceptId;
-            decisionLogger.debug("Merge toggle check", { shouldToggle });
+            console.log("Merge toggle check", { shouldToggle });
           } else if (action === "edit") {
             // For edit action, we should never toggle - always update with new values
             shouldToggle = false;
-            decisionLogger.debug("Edit action: no toggle, will update");
+            console.log("Edit action: no toggle, will update");
           } else {
             shouldToggle = true; // For approve, reject actions
-            decisionLogger.debug("Standard action toggle", { action });
+            console.log("Standard action toggle", { action });
           }
         }
 
         if (shouldToggle) {
           newDecisions.delete(conceptName);
-          decisionLogger.info("Decision removed (toggled off)", {
+          console.log("Decision removed (toggled off)", {
             conceptName,
             action,
           });
@@ -454,7 +433,7 @@ export function EnhancedConceptReview({
               impliesApproval: true,
             };
             newDecisions.set(conceptName, newDecision);
-            decisionLogger.success("Merge decision set", {
+            console.log("Merge decision set", {
               conceptName,
               action,
               impliesApproval: true,
@@ -467,7 +446,7 @@ export function EnhancedConceptReview({
               ...additionalData,
             };
             newDecisions.set(conceptName, newDecision);
-            decisionLogger.success("Reject decision set", { conceptName });
+            console.log("Reject decision set", { conceptName });
           }
           // Edit action should always update with the latest edited concept
           else if (action === "edit" && additionalData?.editedConcept) {
@@ -476,7 +455,7 @@ export function EnhancedConceptReview({
               editedConcept: additionalData.editedConcept,
             };
             newDecisions.set(conceptName, newDecision);
-            decisionLogger.success("Edit decision set", {
+            console.log("Edit decision set", {
               conceptName,
               editedConceptFields: Object.keys(additionalData.editedConcept),
               editedConceptSample: {
@@ -494,14 +473,14 @@ export function EnhancedConceptReview({
               ...additionalData,
             };
             newDecisions.set(conceptName, newDecision);
-            decisionLogger.success("Standard decision set", {
+            console.log("Standard decision set", {
               conceptName,
               action,
             });
           }
         }
 
-        decisionLogger.info("Decision state updated", {
+        console.log("Decision state updated", {
           conceptName,
           finalAction: newDecisions.get(conceptName)?.action,
           totalDecisions: newDecisions.size,
@@ -511,19 +490,19 @@ export function EnhancedConceptReview({
         return newDecisions;
       });
     },
-    [decisionLogger]
+    []
   );
 
   const handleEditConcept = useCallback(
     (conceptName: string) => {
-      editLogger.info("Starting concept edit", { conceptName });
+      console.log("Starting concept edit", { conceptName });
 
       const concept = session?.extractedConcepts.find(
         (c) => c.name === conceptName
       );
 
       if (concept) {
-        editLogger.debug("Found concept for editing", {
+        console.log("Found concept for editing", {
           conceptName,
           category: concept.category,
           description: concept.description?.substring(0, 50) + "...",
@@ -545,21 +524,21 @@ export function EnhancedConceptReview({
         editForm.reset(formData);
         setEditingConcept(conceptName);
 
-        editLogger.success("Edit form initialized", {
+        console.log("Edit form initialized", {
           conceptName,
           formFields: Object.keys(formData),
           formValid: editForm.formState.isValid,
         });
       } else {
-        editLogger.error("Concept not found for editing", { conceptName });
+        console.error("Concept not found for editing", { conceptName });
       }
     },
-    [session, editForm, editLogger]
+    [session, editForm]
   );
 
   const handleSaveEdit = useCallback(
     (values: Partial<ExtractedConcept>) => {
-      editLogger.info("Edit save triggered", {
+      console.log("Edit save triggered", {
         editingConcept,
         valueFields: Object.keys(values),
         valuesPreview: {
@@ -577,7 +556,7 @@ export function EnhancedConceptReview({
         );
 
         if (originalConcept) {
-          editLogger.debug("Found original concept for comparison", {
+          console.log("Found original concept for comparison", {
             originalName: originalConcept.name,
             originalCategory: originalConcept.category,
           });
@@ -591,7 +570,7 @@ export function EnhancedConceptReview({
               : [],
           };
 
-          editLogger.success("Prepared edited concept data", {
+          console.log("Prepared edited concept data", {
             editingConcept,
             editedFields: Object.keys(editedConcept),
             tagCount: editedConcept.suggestedTags?.length || 0,
@@ -601,18 +580,18 @@ export function EnhancedConceptReview({
             editedConcept,
           });
 
-          editLogger.success("Edit decision called, closing modal", {
+          console.log("Edit decision called, closing modal", {
             editingConcept,
           });
           setEditingConcept(null);
         } else {
-          editLogger.error("Original concept not found", { editingConcept });
+          console.error("Original concept not found", { editingConcept });
         }
       } else {
-        editLogger.error("No concept being edited", { editingConcept });
+        console.error("No concept being edited", { editingConcept });
       }
     },
-    [editingConcept, handleConceptDecision, session, editLogger]
+    [editingConcept, handleConceptDecision, session]
   );
 
   const handleManualAdd = useCallback(
@@ -680,7 +659,7 @@ export function EnhancedConceptReview({
               suggestedTags: concept.suggestedTags,
             };
           }
-          submitLogger.debug("Final edited concept in draft", {
+          console.log("Final edited concept in draft", {
             conceptName,
             editedFields: Object.keys(editedConcept),
             tagCount: editedConcept.suggestedTags?.length || 0,
@@ -728,7 +707,7 @@ export function EnhancedConceptReview({
       // Show success feedback
       setError(null);
     } catch (err) {
-      submitLogger.error("Save draft error", err as Error);
+      console.error("Save draft error", err);
       setError(err instanceof Error ? err.message : "Failed to save draft");
     } finally {
       setIsSaving(false);
@@ -737,7 +716,7 @@ export function EnhancedConceptReview({
 
   const handleSubmitReview = async () => {
     if (!session || decisions.size === 0) {
-      submitLogger.warn("Cannot submit review", {
+      console.log("Cannot submit review", {
         hasSession: !!session,
         sessionId: session?.id,
         decisionCount: decisions.size,
@@ -752,17 +731,14 @@ export function EnhancedConceptReview({
       setError(
         `Cannot submit review: The following concepts are duplicates and must be edited to have unique names: ${duplicateNames}`
       );
-      submitLogger.warn(
-        "Review submission blocked due to unresolved duplicates",
-        {
-          unresolvedDuplicates,
-          sessionId: session.id,
-        }
-      );
+      console.log("Review submission blocked due to unresolved duplicates", {
+        unresolvedDuplicates,
+        sessionId: session.id,
+      });
       return;
     }
 
-    submitLogger.info("Starting review submission", {
+    console.log("Starting review submission", {
       sessionId: session.id,
       sessionStatus: session.status,
       decisionCount: decisions.size,
@@ -773,18 +749,22 @@ export function EnhancedConceptReview({
       setIsSaving(true);
       setError(null);
 
-      submitLogger.debug("Processing decisions for submission");
+      console.log("Processing decisions for submission");
 
-      const reviewDecisions: ReviewDecision[] = Array.from(
-        decisions.entries()
-      ).map(([conceptName, decision]) => {
+      const reviewDecisions: ReviewDecision[] = [];
+
+      for (const [conceptName, decision] of decisions.entries()) {
         const concept = session.extractedConcepts.find(
           (c) => c.name === conceptName
         );
 
         if (!concept) {
-          submitLogger.error("Concept not found for decision", { conceptName });
-          throw new Error(`Concept not found: ${conceptName}`);
+          console.error("Concept not found for decision", { conceptName });
+          // Instead of throwing which would stop processing, skip this concept and continue
+          setError(
+            `Warning: Concept "${conceptName}" not found in session. Skipping this concept.`
+          );
+          continue;
         }
 
         // For edit decisions, ensure we have all the necessary data
@@ -797,7 +777,7 @@ export function EnhancedConceptReview({
               suggestedTags: concept.suggestedTags,
             };
           }
-          submitLogger.debug("Processing edited concept", {
+          console.log("Processing edited concept", {
             conceptName,
             editedFields: Object.keys(editedConcept),
             tagCount: editedConcept.suggestedTags?.length || 0,
@@ -815,19 +795,27 @@ export function EnhancedConceptReview({
           reviewerId: "current-user", // TODO: Get from auth
         };
 
-        submitLogger.debug("Created review decision", {
+        console.log("Created review decision", {
           conceptName,
           action: decision.action,
           hasEditedConcept: !!editedConcept,
           hasTargetConceptId: !!decision.targetConceptId,
         });
 
-        return reviewDecision;
-      });
+        reviewDecisions.push(reviewDecision);
+      }
+
+      console.log(
+        "Total review decisions processed:",
+        reviewDecisions.length,
+        "from",
+        decisions.size,
+        "decisions"
+      );
 
       const requestBody = {
         reviewProgress: {
-          reviewedCount: decisions.size,
+          reviewedCount: reviewDecisions.length, // Use actual processed count, not decision map size
           decisions: reviewDecisions,
           lastReviewedAt: new Date().toISOString(),
           isDraft: false,
@@ -835,7 +823,7 @@ export function EnhancedConceptReview({
         status: "reviewed",
       };
 
-      submitLogger.info("Prepared submission payload", {
+      console.log("Prepared submission payload", {
         sessionId: session.id,
         reviewedCount: requestBody.reviewProgress.reviewedCount,
         decisionCount: requestBody.reviewProgress.decisions.length,
@@ -850,7 +838,7 @@ export function EnhancedConceptReview({
         body: JSON.stringify(requestBody),
       });
 
-      submitLogger.info("Review submission API call completed", {
+      console.log("Review submission API call completed", {
         status: response.status,
         ok: response.ok,
         sessionId: session.id,
@@ -860,14 +848,14 @@ export function EnhancedConceptReview({
         let errorMessage = "Failed to submit review";
         try {
           const errorData = await response.json();
-          submitLogger.error("Review submission API error", {
+          console.error("Review submission API error", {
             status: response.status,
             errorData,
             errorMessage: errorData.error || errorData.message,
           });
           errorMessage = errorData.error || errorData.message || errorMessage;
         } catch {
-          submitLogger.error("Could not parse error response", {
+          console.error("Could not parse error response", {
             status: response.status,
           });
         }
@@ -875,7 +863,7 @@ export function EnhancedConceptReview({
       }
 
       const responseData = await response.json();
-      submitLogger.success("Review submission successful", {
+      console.log("Review submission successful", {
         sessionId: session.id,
         responseKeys: Object.keys(responseData),
         responseMessage: responseData.message,
@@ -883,17 +871,17 @@ export function EnhancedConceptReview({
 
       // Call the completion callback
       if (onReviewComplete) {
-        submitLogger.debug("Calling onReviewComplete callback");
+        console.log("Calling onReviewComplete callback");
         onReviewComplete();
       } else {
-        submitLogger.warn("No onReviewComplete callback provided");
+        console.log("No onReviewComplete callback provided");
       }
     } catch (err) {
-      submitLogger.error("Review submission failed", err as Error);
+      console.error("Review submission failed", err);
       setError(err instanceof Error ? err.message : "Failed to submit review");
     } finally {
       setIsSaving(false);
-      submitLogger.debug("Review submission completed");
+      console.log("Review submission completed");
     }
   };
 
@@ -1098,6 +1086,7 @@ export function EnhancedConceptReview({
                   const isApproved =
                     decision?.action === "approve" ||
                     decision?.action === "edit" ||
+                    decision?.action === "merge" ||
                     decision?.impliesApproval;
                   const isRejected = decision?.action === "reject";
 
@@ -1205,6 +1194,7 @@ export function EnhancedConceptReview({
                               size="sm"
                               variant={
                                 decision?.action === "approve" ||
+                                decision?.action === "merge" ||
                                 decision?.impliesApproval
                                   ? "default"
                                   : "outline"
@@ -1214,6 +1204,7 @@ export function EnhancedConceptReview({
                               }
                             >
                               {decision?.action === "approve" ||
+                              decision?.action === "merge" ||
                               decision?.impliesApproval
                                 ? "✓ Approved"
                                 : "Approve"}
@@ -1288,12 +1279,15 @@ export function EnhancedConceptReview({
                                     ? "bg-blue-100 text-blue-800"
                                     : decision.action === "approve"
                                       ? "bg-green-100 text-green-800"
-                                      : ""
+                                      : decision.action === "merge"
+                                        ? "bg-purple-100 text-purple-800"
+                                        : ""
                                 }
                               >
                                 {decision.action.toUpperCase()}
                               </Badge>
-                              {decision.action === "edit" && (
+                              {(decision.action === "edit" ||
+                                decision.action === "merge") && (
                                 <Badge
                                   variant="default"
                                   className="bg-green-600"
@@ -1443,7 +1437,7 @@ export function EnhancedConceptReview({
                 <Form {...editForm}>
                   <form
                     onSubmit={(e) => {
-                      editLogger.info("Form submit event triggered", {
+                      console.log("Form submit event triggered", {
                         editingConcept,
                       });
                       e.preventDefault();
@@ -1451,7 +1445,7 @@ export function EnhancedConceptReview({
 
                       // Get current form values
                       const formValues = editForm.getValues();
-                      editLogger.debug("Current form values", {
+                      console.log("Current form values", {
                         editingConcept,
                         formFields: Object.keys(formValues),
                         valuesPreview: {
@@ -1464,7 +1458,7 @@ export function EnhancedConceptReview({
 
                       // Validate form before submission
                       const isValid = editForm.formState.isValid;
-                      editLogger.debug("Form validation check", {
+                      console.log("Form validation check", {
                         editingConcept,
                         isValid,
                         errorCount: Object.keys(editForm.formState.errors)
@@ -1472,7 +1466,7 @@ export function EnhancedConceptReview({
                       });
 
                       if (!isValid) {
-                        editLogger.warn("Form validation errors detected", {
+                        console.log("Form validation errors detected", {
                           editingConcept,
                           errors: editForm.formState.errors,
                         });
@@ -1636,7 +1630,7 @@ export function EnhancedConceptReview({
                                   : []
                               }
                               onTagsChange={(tags) => {
-                                editLogger.debug("Edit form tags changed", {
+                                console.log("Edit form tags changed", {
                                   editingConcept,
                                   tagCount: tags.length,
                                   tags: tags.map((t) => ({
@@ -1846,7 +1840,7 @@ export function EnhancedConceptReview({
                                   : []
                               }
                               onTagsChange={(tags) => {
-                                editLogger.debug("Manual form tags changed", {
+                                console.log("Manual form tags changed", {
                                   tagCount: tags.length,
                                   tags: tags.map((t) => ({
                                     tag: t.tag,

@@ -62,14 +62,14 @@ export async function POST(request: NextRequest) {
           `Course drill selection: ${conceptIds.length} concepts from course ${courseId}`
         );
       } else {
-        // Weakness-based drilling (default)
+        // Weakness-based drilling (default) - show ALL concepts sorted by weakness
         conceptIds = await practiceEngine.getDrillConceptsByWeakness(
           userId,
-          maxConcepts
+          0 // 0 means no limit - show all concepts sorted by weakness
         );
-        rationale = "Drilling weak concepts based on performance";
+        rationale = "Drilling all concepts sorted by weakness (weakest first)";
         console.log(
-          `Weakness drill selection: ${conceptIds.length} weak concepts`
+          `Weakness drill selection: ${conceptIds.length} concepts sorted by weakness`
         );
       }
     } else {
@@ -93,9 +93,9 @@ export async function POST(request: NextRequest) {
       maxQuestions
     );
 
-    // Enhanced error handling with specific messages
+    // Enhanced error handling with specific messages - PREVENT ZERO QUESTION SESSIONS
     if (questions.length === 0) {
-      console.log(`❌ No questions found even after fallback strategies`);
+      console.log(`❌ CRITICAL: No questions found even after fallback strategies - Practice session will NOT be created`);
       
       // Different error messages based on mode
       let errorMessage = "No questions are currently available for practice.";
@@ -146,6 +146,30 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Additional safety check - minimum question threshold
+    if (questions.length < 3) {
+      console.log(`⚠️ WARNING: Only ${questions.length} questions available - recommending user to add more content`);
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Only ${questions.length} question(s) available for practice. A minimum of 3 questions is recommended.`,
+          suggestions: [
+            "Add more courses with Polish content",
+            "Extract concepts from existing courses",
+            "Use the Question Management Hub to create more questions",
+            "Try a different practice mode or concept selection"
+          ],
+          debug: {
+            mode,
+            conceptsFound: conceptIds.length,
+            questionsFound: questions.length,
+            minimumRequired: 3
+          }
+        },
+        { status: 400 }
+      );
+    }
+
     // Create session ID
     const sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
@@ -183,6 +207,10 @@ export async function POST(request: NextRequest) {
             questionType: q.questionType,
             difficulty: q.difficulty,
             targetConcepts: q.targetConcepts,
+            correctAnswer: q.correctAnswer,
+            options: q.options,
+            audioUrl: q.audioUrl,
+            imageUrl: q.imageUrl,
           })),
           metadata: {
             mode,

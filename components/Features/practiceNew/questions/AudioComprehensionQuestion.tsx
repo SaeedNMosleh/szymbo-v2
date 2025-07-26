@@ -59,6 +59,10 @@ export function AudioComprehensionQuestion({
             className="min-h-[100px]"
             disabled={disabled}
             aria-label="Audio comprehension answer"
+            autoComplete="off"
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck="false"
           />
           
           <div className="text-sm text-gray-600">

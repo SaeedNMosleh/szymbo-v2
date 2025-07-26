@@ -6,6 +6,8 @@ export interface ValidationResult {
   correctAnswer: string;
   attempts: number;
   responseTime: number;
+  previousAnswer?: string | string[]; // Store user's previous answer for retry
+  showFinalAnswer?: boolean; // Show final answer after 3 attempts
 }
 
 export interface QuestionData {

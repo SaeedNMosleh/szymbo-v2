@@ -21,6 +21,7 @@ const questionBankQuerySchema = z.object({
   search: z.string().optional(),
   conceptIds: z.string().optional(),
   questionType: z.string().optional(),
+  source: z.string().optional(),
   difficulty: z.string().optional(),
   isActive: z.string().optional(),
   successRateMin: z.string().optional(),
@@ -40,6 +41,7 @@ const updateQuestionBankSchema = z.object({
   difficulty: z
     .enum(Object.values(QuestionLevel) as [QuestionLevel, ...QuestionLevel[]])
     .optional(),
+  source: z.enum(["manual", "generated", "momentary"]).optional(),
 });
 
 const deleteQuestionSchema = z.object({
@@ -57,6 +59,7 @@ export async function GET(request: NextRequest) {
       search,
       conceptIds,
       questionType,
+      source,
       difficulty,
       isActive,
       successRateMin,
@@ -72,6 +75,7 @@ export async function GET(request: NextRequest) {
       question?: { $regex: string; $options: string };
       targetConcepts?: { $in: string[] };
       questionType?: string;
+      source?: string;
       difficulty?: string;
       isActive?: boolean;
       successRate?: { $gte?: number; $lte?: number };
@@ -94,6 +98,10 @@ export async function GET(request: NextRequest) {
 
     if (questionType) {
       query.questionType = questionType;
+    }
+
+    if (source) {
+      query.source = source;
     }
 
     if (difficulty) {
@@ -194,6 +202,7 @@ export async function GET(request: NextRequest) {
           search,
           conceptIds,
           questionType,
+          source,
           difficulty,
           isActive,
           successRateRange: { min: successRateMin, max: successRateMax },

@@ -63,14 +63,14 @@ export async function POST(request: NextRequest) {
           `Course drill selection: ${conceptIds.length} concepts from course ${courseId}`
         );
       } else {
-        // Weakness-based drilling (default)
+        // Weakness-based drilling (default) - show ALL concepts sorted by weakness
         conceptIds = await practiceEngine.getDrillConceptsByWeakness(
           userId,
-          maxConcepts
+          0 // 0 means no limit - show all concepts
         );
-        rationale = "Drilling weak concepts based on performance";
+        rationale = "Drilling all concepts sorted by weakness (weakest first)";
         console.log(
-          `Weakness drill selection: ${conceptIds.length} weak concepts`
+          `Weakness drill selection: ${conceptIds.length} concepts sorted by weakness`
         );
       }
     } else {

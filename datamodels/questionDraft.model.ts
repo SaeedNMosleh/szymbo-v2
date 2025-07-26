@@ -12,7 +12,7 @@ export interface IQuestionDraft {
   questionType: QuestionType;
   targetConcepts: string[]; // concept IDs - all internal storage uses concept IDs
   difficulty: QuestionLevel;
-  source: "generated" | "manual";
+  source: "manual" | "generated" | "momentary";
   createdDate: Date;
   status?: "draft" | "approved" | "rejected";
   reviewNotes?: string;
@@ -54,7 +54,7 @@ const QuestionDraftSchema = new Schema<IQuestionDraft>(
     },
     source: {
       type: String,
-      enum: ["generated", "manual"],
+      enum: ["manual", "generated", "momentary"],
       required: true,
     },
     createdDate: {

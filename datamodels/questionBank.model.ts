@@ -17,7 +17,7 @@ export interface IQuestionBank {
   lastUsed: Date;
   createdDate: Date;
   isActive: boolean;
-  source: "generated" | "manual";
+  source: "manual" | "generated" | "momentary";
   
   // Optional fields for different question types
   options?: string[]; // Multiple choice options OR word bank for arrangement
@@ -81,7 +81,7 @@ const QuestionBankSchema = new Schema<IQuestionBank>(
     },
     source: {
       type: String,
-      enum: ["generated", "manual"],
+      enum: ["manual", "generated", "momentary"],
       required: true,
     },
     options: {

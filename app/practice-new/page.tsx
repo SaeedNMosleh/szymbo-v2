@@ -92,37 +92,21 @@ function WeakConceptSelector({
   const fetchWeakConcepts = async () => {
     try {
       const response = await fetch(
-        "/api/practice-new/concept-due?includeDetails=true&userId=default"
+        "/api/practice-new/concepts-by-weakness?userId=default"
       );
       if (!response.ok) {
-        throw new Error("Failed to fetch weak concepts");
+        throw new Error("Failed to fetch concepts");
       }
       const result = await response.json();
 
       if (result.success && result.data && result.data.concepts) {
-        // Sort by priority (higher = weaker) and success rate (lower = weaker)
-        const sortedConcepts = result.data.concepts
-          .filter((concept: WeakConcept) => concept.progress !== null)
-          .sort((a: WeakConcept, b: WeakConcept) => {
-            const aSuccessRate = a.progress?.successRate || 0;
-            const bSuccessRate = b.progress?.successRate || 0;
-            const aPriority = a.priority || 0;
-            const bPriority = b.priority || 0;
-
-            // First sort by priority (higher = weaker), then by success rate (lower = weaker)
-            if (bPriority !== aPriority) {
-              return bPriority - aPriority;
-            }
-            return aSuccessRate - bSuccessRate;
-          })
-          .slice(0, 20); // Limit to top 20 weakest
-
-        setWeakConcepts(sortedConcepts);
+        // Concepts are already sorted by weakness from the API
+        setWeakConcepts(result.data.concepts);
       } else {
-        setError(result.error || "Failed to load weak concepts");
+        setError(result.error || "Failed to load concepts");
       }
     } catch {
-      setError("Failed to load weak concepts");
+      setError("Failed to load concepts");
     } finally {
       setLoading(false);
     }
@@ -142,7 +126,12 @@ function WeakConceptSelector({
     }
   };
 
-  const getWeaknessColor = (successRate: number, isOverdue: boolean) => {
+  const getWeaknessColor = (
+    successRate: number,
+    isOverdue: boolean,
+    hasProgress: boolean
+  ) => {
+    if (!hasProgress) return "text-purple-600 bg-purple-100";
     if (isOverdue) return "text-red-600 bg-red-100";
     if (successRate < 0.3) return "text-red-600 bg-red-100";
     if (successRate < 0.5) return "text-orange-600 bg-orange-100";
@@ -150,7 +139,12 @@ function WeakConceptSelector({
     return "text-blue-600 bg-blue-100";
   };
 
-  const getWeaknessText = (successRate: number, isOverdue: boolean) => {
+  const getWeaknessText = (
+    successRate: number,
+    isOverdue: boolean,
+    hasProgress: boolean
+  ) => {
+    if (!hasProgress) return "Never Practiced";
     if (isOverdue) return "Overdue";
     if (successRate < 0.3) return "Very Weak";
     if (successRate < 0.5) return "Weak";
@@ -195,9 +189,11 @@ function WeakConceptSelector({
             Back to Practice Modes
           </Button>
           <div className="text-center">
-            <h2 className="text-xl font-semibold">Select Weak Concepts</h2>
+            <h2 className="text-xl font-semibold">
+              Select Concepts to Practice
+            </h2>
             <p className="text-sm text-gray-600">
-              Choose concepts that need practice
+              All concepts sorted by weakness (weakest first)
             </p>
           </div>
         </div>
@@ -205,7 +201,7 @@ function WeakConceptSelector({
         {weakConcepts.length === 0 ? (
           <div className="text-center">
             <p className="mb-4 text-gray-600">
-              No weak concepts found. Great progress!
+              No concepts available for practice.
             </p>
             <Button onClick={onBack}>Back to Practice Modes</Button>
           </div>
@@ -217,6 +213,7 @@ function WeakConceptSelector({
                   conceptData.concept.id
                 );
                 const successRate = conceptData.progress?.successRate || 0;
+                const hasProgress = conceptData.progress !== null;
                 const lastPracticed =
                   conceptData.progress?.lastPracticed || new Date();
                 return (
@@ -253,13 +250,15 @@ function WeakConceptSelector({
                           )}
                           <div className="mt-2 flex flex-wrap gap-2">
                             <span
-                              className={`rounded px-2 py-1 text-xs ${getWeaknessColor(successRate, conceptData.isOverdue)}`}
+                              className={`rounded px-2 py-1 text-xs ${getWeaknessColor(successRate, conceptData.isOverdue, hasProgress)}`}
                             >
                               {getWeaknessText(
                                 successRate,
-                                conceptData.isOverdue
+                                conceptData.isOverdue,
+                                hasProgress
                               )}{" "}
-                              ({Math.round(successRate * 100)}%)
+                              {hasProgress &&
+                                `(${Math.round(successRate * 100)}%)`}
                             </span>
                             <span className="rounded bg-gray-100 px-2 py-1 text-xs text-gray-600">
                               Priority: {conceptData.priority.toFixed(1)}
@@ -296,12 +295,21 @@ function WeakConceptSelector({
                         </div>
                       </div>
                       <div className="text-right">
-                        <div className="text-xs text-gray-500">
-                          Last: {new Date(lastPracticed).toLocaleDateString()}
-                        </div>
-                        {conceptData.isOverdue && (
-                          <div className="text-xs font-medium text-red-600">
-                            {conceptData.daysSinceReview} days overdue
+                        {hasProgress ? (
+                          <>
+                            <div className="text-xs text-gray-500">
+                              Last:{" "}
+                              {new Date(lastPracticed).toLocaleDateString()}
+                            </div>
+                            {conceptData.isOverdue && (
+                              <div className="text-xs font-medium text-red-600">
+                                {conceptData.daysSinceReview} days overdue
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <div className="text-xs font-medium text-purple-600">
+                            New Concept
                           </div>
                         )}
                       </div>
@@ -438,7 +446,7 @@ function CourseSelector({
           </div>
         ) : (
           <>
-            <div className="mb-6 space-y-3">
+            <div className="mb-6 max-h-96 space-y-3 overflow-y-auto">
               {courses.map((course) => {
                 const isSelected = selectedCourses.includes(course.courseId);
                 return (

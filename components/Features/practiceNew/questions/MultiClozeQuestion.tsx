@@ -9,9 +9,17 @@ export function MultiClozeQuestion({
   question,
   userAnswer,
   onAnswerChange,
+  onSubmit,
   disabled,
 }: QuestionComponentProps) {
   const [gapAnswers, setGapAnswers] = useState<{ [key: string]: string }>({});
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !disabled && onSubmit) {
+      e.preventDefault();
+      onSubmit();
+    }
+  };
 
   // Parse the question to find all gaps and their positions
   const questionParts = useMemo(() => {
@@ -78,10 +86,15 @@ export function MultiClozeQuestion({
                 <Input
                   value={gapAnswers[part.gapId] || ""}
                   onChange={(e) => handleGapChange(part.gapId, e.target.value)}
+                  onKeyDown={handleKeyDown}
                   disabled={disabled}
                   className="inline-block h-8 w-32 text-center"
                   placeholder="..."
                   aria-label={`Fill in blank ${part.gapId.split("-")[1]}`}
+                  autoComplete="off"
+                  autoCapitalize="off"
+                  autoCorrect="off"
+                  spellCheck="false"
                 />
               </span>
             );

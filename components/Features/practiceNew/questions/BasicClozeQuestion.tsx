@@ -9,10 +9,18 @@ export function BasicClozeQuestion({
   question,
   userAnswer,
   onAnswerChange,
+  onSubmit,
   disabled,
 }: QuestionComponentProps) {
   const handleAnswerChange = (value: string) => {
     onAnswerChange(value);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !disabled && onSubmit) {
+      e.preventDefault();
+      onSubmit();
+    }
   };
 
   // Parse the question text to find cloze gaps
@@ -42,10 +50,15 @@ export function BasicClozeQuestion({
               id={gapId}
               value={typeof userAnswer === "string" ? userAnswer : ""}
               onChange={(e) => handleAnswerChange(e.target.value)}
+              onKeyDown={handleKeyDown}
               disabled={disabled}
               className="inline-block h-8 w-32 text-center"
               placeholder="..."
               aria-label="Fill in the blank"
+              autoComplete="off"
+              autoCapitalize="off"
+              autoCorrect="off"
+              spellCheck="false"
             />
           </span>
         );
