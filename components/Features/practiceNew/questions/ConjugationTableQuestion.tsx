@@ -101,10 +101,9 @@ export function ConjugationTableQuestion({
           </div>
 
           <div className="text-sm text-gray-600">
-            <p>Complete the conjugation table for the given verb.</p>
+            <p>Complete the conjugation table for the given verb in the specified tense.</p>
             <p className="mt-1">
-              Pay attention to the proper verb endings for each person and
-              number.
+              Fill in all 6 forms: ja, ty, on/ona/ono, my, wy, oni/one.
             </p>
           </div>
         </div>

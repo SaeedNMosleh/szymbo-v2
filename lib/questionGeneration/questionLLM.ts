@@ -49,9 +49,9 @@ const questionTypePrompts: Record<QuestionType, { description: string; template:
     example: "Question: 'Which are Polish cities?' Options: ['Warszawa', 'Berlin', 'Kraków', 'Paris', 'Gdańsk'] Answer: 'Warszawa,Kraków,Gdańsk'"
   },
   [QuestionType.CONJUGATION_TABLE]: {
-    description: "Verb conjugation in specific tense/person",
-    template: "Ask for specific verb conjugation form.",
-    example: "Question: 'Conjugate \"mówić\" for 3rd person singular present' Answer: 'mówi'"
+    description: "Complete verb conjugation table with all 6 standard forms",
+    template: "Ask to conjugate a verb in a specific tense (present/past/future) for all 6 persons. Return answers as comma-separated string in order: ja,ty,on/ona/ono,my,wy,oni/one",
+    example: "Question: 'Conjugate \"mówić\" in present tense' Answer: 'mówię,mówisz,mówi,mówimy,mówicie,mówią'"
   },
   [QuestionType.CASE_TRANSFORM]: {
     description: "Questions about grammatical case transformations",
@@ -237,6 +237,13 @@ REQUIREMENTS:
 5. For multiple choice questions, include plausible distractors
 6. For fill-in-the-blank, use contextual clues appropriately
 7. In targetConcepts field, use the exact concept NAMES from the list above, not IDs
+${questionType === QuestionType.CONJUGATION_TABLE ? `
+8. CONJUGATION SPECIAL REQUIREMENTS:
+   - Randomly select tense: present, past, or future
+   - Ask to conjugate for ALL 6 standard forms: ja, ty, on/ona/ono, my, wy, oni/one
+   - Return correctAnswer as comma-separated string in exact order: form1,form2,form3,form4,form5,form6
+   - Question format: "Conjugate [verb] in [tense] tense"
+   - Example: "Conjugate 'być' in present tense" → "jestem,jesteś,jest,jesteśmy,jesteście,są"` : ''}
 
 CRITICAL JSON FORMATTING REQUIREMENTS:
 - Return ONLY valid JSON - no markdown, no explanations, no code blocks

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Navigation } from "@/components/ui/navigation";
@@ -13,7 +13,7 @@ import {
   QuestionLevel,
   CourseType,
 } from "@/lib/enum";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, ChevronDown, ChevronRight } from "lucide-react";
 
 // Interface definitions matching what's expected in PracticeSession
 interface Question {
@@ -49,6 +49,17 @@ interface Course {
   extractedConcepts?: string[];
 }
 
+interface CourseWithConcepts extends Course {
+  conceptDetails?: {
+    id: string;
+    name: string;
+    description: string;
+    difficulty: string;
+    category: string;
+    questionCount: number;
+  }[];
+}
+
 interface WeakConcept {
   concept: {
     id: string;
@@ -69,6 +80,7 @@ interface WeakConcept {
   priority: number;
   isOverdue: boolean;
   daysSinceReview: number;
+  questionCount?: number;
 }
 
 function WeakConceptSelector({
@@ -85,11 +97,43 @@ function WeakConceptSelector({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetchWeakConcepts();
-  }, []);
+  const fetchQuestionCounts = async (conceptIds: string[]) => {
+    try {
+      const counts: Record<string, number> = {};
 
-  const fetchWeakConcepts = async () => {
+      // Fetch question counts for each concept (batch them if needed)
+      const batchSize = 10;
+      for (let i = 0; i < conceptIds.length; i += batchSize) {
+        const batch = conceptIds.slice(i, i + batchSize);
+        const response = await fetch(
+          `/api/questions?conceptIds=${batch.join(",")}&limit=100`
+        );
+
+        if (response.ok) {
+          const result = await response.json();
+          if (result.success && result.data.questions) {
+            // Count questions per concept
+            result.data.questions.forEach(
+              (question: { targetConcepts: string[] }) => {
+                question.targetConcepts.forEach((conceptId: string) => {
+                  if (batch.includes(conceptId)) {
+                    counts[conceptId] = (counts[conceptId] || 0) + 1;
+                  }
+                });
+              }
+            );
+          }
+        }
+      }
+
+      return counts;
+    } catch (error) {
+      console.error("Failed to fetch question counts:", error);
+      return {};
+    }
+  };
+
+  const fetchWeakConcepts = useCallback(async () => {
     try {
       const response = await fetch(
         "/api/practice-new/concepts-by-weakness?userId=default"
@@ -100,8 +144,19 @@ function WeakConceptSelector({
       const result = await response.json();
 
       if (result.success && result.data && result.data.concepts) {
-        // Concepts are already sorted by weakness from the API
-        setWeakConcepts(result.data.concepts);
+        const concepts = result.data.concepts;
+
+        // Fetch question counts for all concepts
+        const conceptIds = concepts.map((c: WeakConcept) => c.concept.id);
+        const questionCounts = await fetchQuestionCounts(conceptIds);
+
+        // Add question counts to concepts
+        const conceptsWithCounts = concepts.map((concept: WeakConcept) => ({
+          ...concept,
+          questionCount: questionCounts[concept.concept.id] || 0,
+        }));
+
+        setWeakConcepts(conceptsWithCounts);
       } else {
         setError(result.error || "Failed to load concepts");
       }
@@ -110,7 +165,11 @@ function WeakConceptSelector({
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchWeakConcepts();
+  }, [fetchWeakConcepts]);
 
   const toggleConceptSelection = (conceptId: string) => {
     setSelectedConcepts((prev) =>
@@ -271,6 +330,9 @@ function WeakConceptSelector({
                                 {conceptData.concept.category}
                               </span>
                             )}
+                            <span className="rounded bg-indigo-100 px-2 py-1 text-xs text-indigo-600">
+                              {conceptData.questionCount || 0} questions
+                            </span>
                           </div>
                           {conceptData.concept.tags &&
                             conceptData.concept.tags.length > 0 && (
@@ -348,14 +410,107 @@ function CourseSelector({
   onBack: () => void;
   isLoading: boolean;
 }) {
-  const [courses, setCourses] = useState<Course[]>([]);
+  const [courses, setCourses] = useState<CourseWithConcepts[]>([]);
   const [selectedCourses, setSelectedCourses] = useState<number[]>([]);
+  const [expandedCourses, setExpandedCourses] = useState<Set<number>>(
+    new Set()
+  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchCourses();
   }, []);
+
+  const fetchConceptsForCourse = async (courseId: number) => {
+    try {
+      // First get the concepts from the course
+      const conceptsResponse = await fetch(
+        `/api/concepts?courseId=${courseId}`
+      );
+      if (!conceptsResponse.ok) return [];
+
+      const conceptsResult = await conceptsResponse.json();
+      if (!conceptsResult.success || !conceptsResult.data) return [];
+
+      const concepts = conceptsResult.data;
+
+      // Get question counts for these concepts
+      const conceptIds = concepts.map((c: { id: string }) => c.id);
+      if (conceptIds.length === 0) return [];
+
+      const questionCounts: Record<string, number> = {};
+
+      // Fetch question counts in batches
+      const batchSize = 10;
+      for (let i = 0; i < conceptIds.length; i += batchSize) {
+        const batch = conceptIds.slice(i, i + batchSize);
+        const response = await fetch(
+          `/api/questions?conceptIds=${batch.join(",")}&limit=100`
+        );
+
+        if (response.ok) {
+          const result = await response.json();
+          if (result.success && result.data.questions) {
+            result.data.questions.forEach(
+              (question: { targetConcepts: string[] }) => {
+                question.targetConcepts.forEach((conceptId: string) => {
+                  if (batch.includes(conceptId)) {
+                    questionCounts[conceptId] =
+                      (questionCounts[conceptId] || 0) + 1;
+                  }
+                });
+              }
+            );
+          }
+        }
+      }
+
+      // Return concepts with question counts
+      return concepts.map(
+        (concept: {
+          id: string;
+          name: string;
+          description: string;
+          difficulty: string;
+          category: string;
+        }) => ({
+          id: concept.id,
+          name: concept.name,
+          description: concept.description,
+          difficulty: concept.difficulty,
+          category: concept.category,
+          questionCount: questionCounts[concept.id] || 0,
+        })
+      );
+    } catch (error) {
+      console.error("Failed to fetch concepts for course:", error);
+      return [];
+    }
+  };
+
+  const toggleCourseExpansion = async (courseId: number) => {
+    const newExpanded = new Set(expandedCourses);
+
+    if (expandedCourses.has(courseId)) {
+      // Collapse
+      newExpanded.delete(courseId);
+    } else {
+      // Expand - fetch concepts if not already loaded
+      const course = courses.find((c) => c.courseId === courseId);
+      if (course && !course.conceptDetails) {
+        const conceptDetails = await fetchConceptsForCourse(courseId);
+        setCourses((prev) =>
+          prev.map((c) =>
+            c.courseId === courseId ? { ...c, conceptDetails } : c
+          )
+        );
+      }
+      newExpanded.add(courseId);
+    }
+
+    setExpandedCourses(newExpanded);
+  };
 
   const fetchCourses = async () => {
     try {
@@ -449,63 +604,137 @@ function CourseSelector({
             <div className="mb-6 max-h-96 space-y-3 overflow-y-auto">
               {courses.map((course) => {
                 const isSelected = selectedCourses.includes(course.courseId);
+                const isExpanded = expandedCourses.has(course.courseId);
                 return (
                   <div
                     key={course.courseId}
-                    className={`cursor-pointer rounded-lg border p-4 transition-colors ${
+                    className={`rounded-lg border transition-colors ${
                       isSelected
                         ? "border-blue-500 bg-blue-50"
-                        : "border-gray-200 hover:bg-gray-50"
+                        : "border-gray-200"
                     }`}
-                    onClick={() => toggleCourseSelection(course.courseId)}
                   >
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-start gap-3">
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={() =>
-                            toggleCourseSelection(course.courseId)
-                          }
-                          className="mt-1"
-                          onClick={(e) => e.stopPropagation()}
-                        />
-                        <div>
-                          <h3 className="font-medium">
-                            {course.courseType} -{" "}
-                            {new Date(course.date).toLocaleDateString()}
-                          </h3>
-                          <p className="mt-1 text-sm text-gray-600">
-                            {course.notes.substring(0, 100)}...
-                          </p>
-                          <div className="mt-2 flex flex-wrap gap-1">
-                            {course.keywords.slice(0, 3).map((keyword, idx) => (
-                              <span
-                                key={idx}
-                                className="rounded bg-blue-100 px-2 py-1 text-xs text-blue-800"
-                              >
-                                {keyword}
-                              </span>
-                            ))}
-                            {course.keywords.length > 3 && (
-                              <span className="rounded bg-gray-100 px-2 py-1 text-xs text-gray-600">
-                                +{course.keywords.length - 3} more
-                              </span>
-                            )}
+                    <div
+                      className={`cursor-pointer p-4 ${!isSelected ? "hover:bg-gray-50" : ""}`}
+                      onClick={() => toggleCourseSelection(course.courseId)}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-start gap-3">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() =>
+                              toggleCourseSelection(course.courseId)
+                            }
+                            className="mt-1"
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                          <div className="flex-1">
+                            <h3 className="font-medium">
+                              {course.courseType} -{" "}
+                              {new Date(course.date).toLocaleDateString()}
+                            </h3>
+                            <p className="mt-1 text-sm text-gray-600">
+                              {course.notes.substring(0, 100)}...
+                            </p>
+                            <div className="mt-2 flex flex-wrap gap-1">
+                              {course.keywords
+                                .slice(0, 3)
+                                .map((keyword, idx) => (
+                                  <span
+                                    key={idx}
+                                    className="rounded bg-blue-100 px-2 py-1 text-xs text-blue-800"
+                                  >
+                                    {keyword}
+                                  </span>
+                                ))}
+                              {course.keywords.length > 3 && (
+                                <span className="rounded bg-gray-100 px-2 py-1 text-xs text-gray-600">
+                                  +{course.keywords.length - 3} more
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-sm text-gray-500">
-                          Course ID: {course.courseId}
+                        <div className="flex items-center gap-2">
+                          <div className="text-right">
+                            <div className="text-sm text-gray-500">
+                              Course ID: {course.courseId}
+                            </div>
+                            {course.extractedConcepts && (
+                              <div className="mt-1 text-xs text-green-600">
+                                {course.extractedConcepts.length} concepts
+                              </div>
+                            )}
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleCourseExpansion(course.courseId);
+                            }}
+                            className="size-8 p-0"
+                          >
+                            {isExpanded ? (
+                              <ChevronDown className="size-4" />
+                            ) : (
+                              <ChevronRight className="size-4" />
+                            )}
+                          </Button>
                         </div>
-                        {course.extractedConcepts && (
-                          <div className="mt-1 text-xs text-green-600">
-                            {course.extractedConcepts.length} concepts
+                      </div>
+                    </div>
+
+                    {/* Expanded concepts view */}
+                    {isExpanded && course.conceptDetails && (
+                      <div className="border-t bg-gray-50 p-4">
+                        <h4 className="mb-3 text-sm font-medium text-gray-700">
+                          Covered Concepts ({course.conceptDetails.length})
+                        </h4>
+                        <div className="grid gap-2 md:grid-cols-2">
+                          {course.conceptDetails.map((concept) => (
+                            <div
+                              key={concept.id}
+                              className="rounded border bg-white p-3 text-sm"
+                            >
+                              <div className="font-medium">{concept.name}</div>
+                              <div className="mt-1 text-xs text-gray-600">
+                                {concept.description.substring(0, 80)}...
+                              </div>
+                              <div className="mt-2 flex gap-1">
+                                <span className="rounded bg-purple-100 px-2 py-1 text-xs text-purple-600">
+                                  {concept.difficulty}
+                                </span>
+                                <span className="rounded bg-green-100 px-2 py-1 text-xs text-green-600">
+                                  {concept.category}
+                                </span>
+                                <span className="rounded bg-indigo-100 px-2 py-1 text-xs text-indigo-600">
+                                  {concept.questionCount} questions
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        {course.conceptDetails.length === 0 && (
+                          <div className="text-center text-sm text-gray-500">
+                            No concepts found for this course
                           </div>
                         )}
                       </div>
-                    </div>
+                    )}
+
+                    {/* Loading state for concepts */}
+                    {isExpanded && !course.conceptDetails && (
+                      <div className="border-t bg-gray-50 p-4">
+                        <div className="flex items-center justify-center">
+                          <div className="mr-2 size-4 animate-spin rounded-full border-b-2 border-blue-600"></div>
+                          <span className="text-sm text-gray-600">
+                            Loading concepts...
+                          </span>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })}

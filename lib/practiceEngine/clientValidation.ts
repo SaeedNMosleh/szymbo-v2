@@ -62,6 +62,8 @@ export function validateAnswerClientSide(
       return validateMultiSelect(userAnswer as string[], correctAnswer);
 
     case QuestionType.CONJUGATION_TABLE:
+      return validateConjugationTable(userAnswer as string[], correctAnswer);
+      
     case QuestionType.ASPECT_PAIRS:
     case QuestionType.DIMINUTIVE_FORMS:
       return validateExactMatch(userAnswer as string, correctAnswer);
@@ -128,6 +130,63 @@ function validateMultiSelect(
     isCorrect,
     feedback,
     correctAnswer: correctAnswers.join(", "),
+    confidence: 1.0,
+  };
+}
+
+/**
+ * Validate conjugation table questions (array of 6 verb forms)
+ */
+function validateConjugationTable(
+  userAnswers: string[],
+  correctAnswer: string
+): ValidationResult {
+  // Parse correct answers (comma-separated string)
+  const correctAnswers = correctAnswer.split(",").map((ans) => ans.trim());
+  
+  // Ensure we have exactly 6 forms
+  if (correctAnswers.length !== 6) {
+    throw new Error("Conjugation table must have exactly 6 forms");
+  }
+  
+  if (userAnswers.length !== 6) {
+    return {
+      isCorrect: false,
+      feedback: "Please fill in all 6 conjugation forms.",
+      correctAnswer,
+      confidence: 1.0,
+    };
+  }
+
+  // Normalize and compare each form
+  const normalizedUserAnswers = userAnswers.map((ans) => ans.trim().toLowerCase());
+  const normalizedCorrectAnswers = correctAnswers.map((ans) => ans.trim().toLowerCase());
+  
+  // Check each form
+  const incorrectForms: number[] = [];
+  for (let i = 0; i < 6; i++) {
+    if (normalizedUserAnswers[i] !== normalizedCorrectAnswers[i]) {
+      incorrectForms.push(i + 1);
+    }
+  }
+  
+  const isCorrect = incorrectForms.length === 0;
+  const formLabels = ["ja", "ty", "on/ona/ono", "my", "wy", "oni/one"];
+  
+  let feedback: string;
+  if (isCorrect) {
+    feedback = "Perfect! All conjugation forms are correct.";
+  } else if (incorrectForms.length === 1) {
+    const formIndex = incorrectForms[0] - 1;
+    feedback = `Almost there! Check the ${formLabels[formIndex]} form: ${correctAnswers[formIndex]}`;
+  } else {
+    feedback = `Check these forms: ${incorrectForms.map(i => formLabels[i-1]).join(", ")}. Correct answers: ${correctAnswers.join(", ")}`;
+  }
+
+  return {
+    isCorrect,
+    feedback,
+    correctAnswer,
     confidence: 1.0,
   };
 }
