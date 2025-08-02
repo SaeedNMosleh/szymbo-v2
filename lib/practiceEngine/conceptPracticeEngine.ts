@@ -514,7 +514,7 @@ export class ConceptPracticeEngine {
   }
 
   /**
-   * Simplified question retrieval with QuestionBank priority and generation fallback
+   * Enhanced question retrieval with strict drill mode filtering
    */
   async getQuestionsForConcepts(
     conceptIds: string[],
@@ -527,28 +527,56 @@ export class ConceptPracticeEngine {
       );
 
       if (conceptIds.length === 0) {
-        console.log("No concepts provided, using fallback strategy");
+        if (mode === PracticeMode.DRILL) {
+          console.log(
+            "❌ DRILL: No concepts provided - cannot drill without target concepts"
+          );
+          return [];
+        }
+        console.log(
+          "No concepts provided, using fallback strategy for NORMAL mode"
+        );
         return await this.getFallbackQuestions([], mode, maxQuestions);
       }
 
-      // Step 1: Try to get questions from QuestionBank first
-      const preMadeQuestions = await this.getQuestionBankQuestions(
-        conceptIds,
-        maxQuestions
-      );
+      // Step 1: Get questions with appropriate filtering based on mode
+      const preMadeQuestions =
+        mode === PracticeMode.DRILL
+          ? await this.getStrictDrillQuestions(conceptIds, maxQuestions)
+          : await this.getQuestionBankQuestions(conceptIds, maxQuestions);
 
-      // Step 2: If insufficient, generate on-the-fly to fill gap
+      // Step 2: If insufficient questions and mode allows generation
       if (preMadeQuestions.length < maxQuestions) {
         const needed = maxQuestions - preMadeQuestions.length;
-        const generated = await this.generateNewQuestions(conceptIds, needed);
-        const allQuestions = [...preMadeQuestions, ...generated];
-        console.log(
-          `✅ Retrieved ${preMadeQuestions.length} pre-made + ${generated.length} generated questions`
-        );
-        return allQuestions;
+
+        if (mode === PracticeMode.DRILL) {
+          // DRILL mode: Only generate for the EXACT same concepts
+          console.log(
+            `🎯 DRILL: Found ${preMadeQuestions.length} strict questions for concepts: ${conceptIds.join(", ")}`
+          );
+          console.log(
+            `🔄 DRILL: Generating ${needed} momentary questions for same concepts`
+          );
+          const generated = await this.generateNewQuestions(conceptIds, needed);
+          const allQuestions = [...preMadeQuestions, ...generated];
+          console.log(
+            `✅ DRILL: ${preMadeQuestions.length} existing + ${generated.length} generated = ${allQuestions.length} total questions`
+          );
+          return allQuestions;
+        } else {
+          // NORMAL mode: Allow flexible generation and fallback
+          const generated = await this.generateNewQuestions(conceptIds, needed);
+          const allQuestions = [...preMadeQuestions, ...generated];
+          console.log(
+            `✅ NORMAL: Retrieved ${preMadeQuestions.length} pre-made + ${generated.length} generated questions`
+          );
+          return allQuestions;
+        }
       }
 
-      console.log(`✅ Retrieved ${preMadeQuestions.length} pre-made questions`);
+      console.log(
+        `✅ Retrieved ${preMadeQuestions.length} questions for ${mode} mode`
+      );
       return preMadeQuestions;
     } catch (error) {
       console.error("❌ Error getting questions for concepts:", error);
@@ -574,17 +602,24 @@ export class ConceptPracticeEngine {
   }
 
   /**
-   * Fallback questions when no concepts are provided
+   * Fallback questions when no concepts are provided (NORMAL mode only)
    */
   private async getFallbackQuestions(
     conceptIds: string[],
     mode: PracticeMode,
     maxQuestions: number
   ): Promise<IQuestionBank[]> {
+    if (mode === PracticeMode.DRILL) {
+      console.log(
+        `❌ DRILL: Fallback questions not allowed in drill mode - maintaining strict concept focus`
+      );
+      return [];
+    }
+
     console.log(`🔄 Using fallback questions for mode: ${mode}`);
 
     try {
-      // Get any available questions as fallback
+      // Get any available questions as fallback for NORMAL mode only
       const questions = await QuestionBank.find({
         isActive: true,
       })
@@ -599,7 +634,7 @@ export class ConceptPracticeEngine {
   }
 
   /**
-   * Get questions from QuestionBank with proper prioritization
+   * Get questions from QuestionBank with proper prioritization (NORMAL mode)
    * Prioritizes: manual > generated > momentary
    */
   private async getQuestionBankQuestions(
@@ -646,6 +681,137 @@ export class ConceptPracticeEngine {
       return allQuestions;
     } catch (error) {
       console.error("❌ Error getting QuestionBank questions:", error);
+      return [];
+    }
+  }
+
+  /**
+   * Get questions with DRILL filtering - questions that target at least one drill concept
+   * Relevance scoring adapts based on drill scope (single concept vs multi-concept course)
+   */
+  private async getStrictDrillQuestions(
+    drillConceptIds: string[],
+    maxQuestions: number
+  ): Promise<IQuestionBank[]> {
+    try {
+      console.log(
+        `🎯 DRILL: Getting questions that target drill concepts: ${drillConceptIds.join(", ")}`
+      );
+
+      // Get questions that target at least one of the drill concepts
+      const drillQuestions = await QuestionBank.find({
+        isActive: true,
+        // Must target at least one of the drill concepts AND exclude empty arrays
+        targetConcepts: {
+          $in: drillConceptIds,
+          $ne: [],
+        },
+      })
+        .sort({
+          source: 1, // manual > generated > momentary
+          timesUsed: 1,
+          successRate: -1,
+        })
+        .limit(maxQuestions * 2); // Get more to allow filtering by relevance
+
+      // Determine drill type based on number of target concepts
+      const isMultiConceptDrill = drillConceptIds.length > 1;
+      const drillType = isMultiConceptDrill ? "COURSE" : "CONCEPT";
+
+      console.log(
+        `📊 DRILL: Detected ${drillType} drill mode (${drillConceptIds.length} target concepts)`
+      );
+
+      // Prioritize questions by drill concept relevance (different logic for course vs concept)
+      const questionsByRelevance = drillQuestions.map((question) => {
+        const drillConceptMatches = question.targetConcepts.filter(
+          (conceptId: string) => drillConceptIds.includes(conceptId)
+        ).length;
+
+        const totalConcepts = question.targetConcepts.length;
+
+        let relevanceScore: number;
+
+        if (isMultiConceptDrill) {
+          // COURSE DRILL: Higher score for questions covering MORE course concepts
+          relevanceScore = drillConceptMatches / drillConceptIds.length; // Reward breadth of course coverage
+        } else {
+          // SINGLE CONCEPT DRILL: Higher score for questions MORE FOCUSED on the target concept
+          relevanceScore = drillConceptMatches / totalConcepts; // Reward focus on target concept
+        }
+
+        return {
+          question,
+          drillConceptMatches,
+          totalConcepts,
+          relevanceScore,
+          drillType,
+        };
+      });
+
+      // Sort by relevance (different strategies for course vs concept drill)
+      questionsByRelevance.sort((a, b) => {
+        // First by relevance score (higher = better for both modes)
+        if (b.relevanceScore !== a.relevanceScore) {
+          return b.relevanceScore - a.relevanceScore;
+        }
+        // Then by number of drill concept matches (more = better for both modes)
+        if (b.drillConceptMatches !== a.drillConceptMatches) {
+          return b.drillConceptMatches - a.drillConceptMatches;
+        }
+
+        // Final tiebreaker differs by drill type
+        if (isMultiConceptDrill) {
+          // COURSE DRILL: Prefer questions with more total concepts (comprehensive)
+          return b.totalConcepts - a.totalConcepts;
+        } else {
+          // CONCEPT DRILL: Prefer questions with fewer total concepts (focused)
+          return a.totalConcepts - b.totalConcepts;
+        }
+      });
+
+      // Take the best questions up to the limit
+      const bestDrillQuestions = questionsByRelevance
+        .slice(0, maxQuestions)
+        .map((item) => item.question);
+
+      console.log(
+        `🎯 DRILL: Found ${bestDrillQuestions.length} questions for ${drillType} drill`
+      );
+
+      // Log drill-specific metrics
+      if (bestDrillQuestions.length > 0) {
+        const conceptCoverage = new Set();
+        const relevanceStats = questionsByRelevance
+          .slice(0, maxQuestions)
+          .map((item) => {
+            item.question.targetConcepts.forEach((c: string) =>
+              conceptCoverage.add(c)
+            );
+
+            if (isMultiConceptDrill) {
+              // COURSE DRILL: Show coverage of course concepts
+              return `${(item.relevanceScore * 100).toFixed(0)}% coverage (${item.drillConceptMatches}/${drillConceptIds.length} course concepts)`;
+            } else {
+              // CONCEPT DRILL: Show focus on target concept
+              return `${(item.relevanceScore * 100).toFixed(0)}% focus (${item.drillConceptMatches}/${item.totalConcepts} total concepts)`;
+            }
+          });
+
+        console.log(
+          `📊 DRILL: Questions cover ${conceptCoverage.size} total concepts (${drillConceptIds.length} targeted)`
+        );
+
+        if (isMultiConceptDrill) {
+          console.log(`📊 COURSE DRILL: ${relevanceStats.join(", ")}`);
+        } else {
+          console.log(`📊 CONCEPT DRILL: ${relevanceStats.join(", ")}`);
+        }
+      }
+
+      return bestDrillQuestions;
+    } catch (error) {
+      console.error("❌ Error getting drill questions:", error);
       return [];
     }
   }
@@ -750,8 +916,16 @@ export class ConceptPracticeEngine {
     maxConcepts: number = 10
   ): Promise<string[]> {
     try {
+      console.log(`🎯 DRILL: Looking for concepts in course ${courseId}`);
+
       const { default: CourseConcept } = await import(
         "@/datamodels/courseConcept.model"
+      );
+
+      // First check if CourseConcept table has ANY data
+      const totalCourseConcepts = await CourseConcept.countDocuments();
+      console.log(
+        `📊 DRILL: Total CourseConcept records in database: ${totalCourseConcepts}`
       );
 
       const courseConceptMappings = await CourseConcept.find({
@@ -760,6 +934,20 @@ export class ConceptPracticeEngine {
       })
         .sort({ confidence: -1 })
         .limit(maxConcepts);
+
+      console.log(
+        `📋 DRILL: Found ${courseConceptMappings.length} course-concept mappings for course ${courseId}`
+      );
+
+      if (courseConceptMappings.length > 0) {
+        console.log(
+          `✅ DRILL: Course ${courseId} concepts:`,
+          courseConceptMappings.map((cc) => ({
+            conceptId: cc.conceptId,
+            confidence: cc.confidence,
+          }))
+        );
+      }
 
       return courseConceptMappings.map((cc) => cc.conceptId);
     } catch (error) {

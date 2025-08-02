@@ -135,9 +135,9 @@ const ConceptSchema = new Schema<IConcept>(
       default: [],
       validate: {
         validator: function(examples: string[]) {
-          return examples.length <= 5;
+          return examples.length <= 30;
         },
-        message: 'Maximum 5 examples allowed'
+        message: 'Maximum 30 examples allowed'
       }
     },
     difficulty: {

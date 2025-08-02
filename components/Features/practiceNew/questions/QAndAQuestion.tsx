@@ -7,18 +7,32 @@ import { Textarea } from "@/components/ui/textarea";
 import { MessageSquare } from "lucide-react";
 
 export function QAndAQuestion({
+  question,
   userAnswer,
   onAnswerChange,
   disabled,
-}: Omit<QuestionComponentProps, "question">) {
+}: Pick<
+  QuestionComponentProps,
+  "question" | "userAnswer" | "onAnswerChange" | "disabled"
+>) {
   const handleAnswerChange = (value: string) => {
     onAnswerChange(value);
   };
 
   return (
     <div className="space-y-4">
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <MessageSquare className="size-5 text-green-600" />
+          <Label className="text-base font-medium">Question:</Label>
+        </div>
+        <div className="rounded-lg border bg-gray-50 p-4">
+          <p className="text-base leading-relaxed">{question.question}</p>
+        </div>
+      </div>
+
       <div className="flex items-center gap-2">
-        <MessageSquare className="size-5 text-green-600" />
+        <MessageSquare className="size-5 text-blue-600" />
         <Label className="text-base font-medium">Answer the question:</Label>
       </div>
 

@@ -11,7 +11,7 @@ const splitConceptSchema = z.object({
     name: z.string().min(1).max(100),
     category: z.enum([ConceptCategory.GRAMMAR, ConceptCategory.VOCABULARY]).optional(),
     description: z.string().min(1).max(500),
-    examples: z.array(z.string()).max(10).optional(),
+    examples: z.array(z.string()).max(30).optional(),
     tags: z.array(z.string()).optional(),
     difficulty: z.enum([
       QuestionLevel.A1,

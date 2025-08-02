@@ -637,6 +637,12 @@ export class ConceptMerger {
         { upsert: true }
       );
 
+      // Also update concept's createdFrom array to keep it in sync
+      await Concept.findOneAndUpdate(
+        { id: conceptId },
+        { $addToSet: { createdFrom: courseId.toString() } }
+      );
+
       this.logger.debug("Course link created/updated", { conceptId, courseId });
     } catch (error) {
       this.logger.error("Error creating course link", error as Error);
@@ -673,6 +679,12 @@ export class ConceptMerger {
             },
           },
           { upsert: true }
+        );
+
+        // Also update target concept's createdFrom array to keep it in sync
+        await Concept.findOneAndUpdate(
+          { id: targetConceptId },
+          { $addToSet: { createdFrom: link.courseId.toString() } }
         );
       }
 

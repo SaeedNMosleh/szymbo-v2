@@ -11,7 +11,7 @@ const updateConceptSchema = z.object({
     .enum([ConceptCategory.GRAMMAR, ConceptCategory.VOCABULARY])
     .optional(),
   description: z.string().min(1).max(500).optional(),
-  examples: z.array(z.string()).max(10).optional(),
+  examples: z.array(z.string()).max(30).optional(),
   difficulty: z
     .enum([
       QuestionLevel.A1,
