@@ -9,7 +9,7 @@ const createConceptSchema = z.object({
   name: z.string().min(1).max(100),
   category: z.enum([ConceptCategory.GRAMMAR, ConceptCategory.VOCABULARY]),
   description: z.string().min(1).max(500),
-  examples: z.array(z.string()).max(10),
+  examples: z.array(z.string()).max(30),
   difficulty: z.enum([
     QuestionLevel.A1,
     QuestionLevel.A2,
@@ -26,7 +26,25 @@ export async function GET(request: NextRequest) {
     await connectToDatabase();
     const { searchParams } = new URL(request.url);
 
-    // Extract query parameters with validation
+    const conceptManager = new ConceptManager();
+
+    // Check if this is a course-specific request
+    const courseId = searchParams.get("courseId");
+    if (courseId) {
+      console.log(`🔍 CONCEPTS API: Getting concepts for course ${courseId}`);
+      const concepts = await conceptManager.getConceptsForCourse(parseInt(courseId));
+      console.log(`📊 CONCEPTS API: Found ${concepts.length} concepts for course ${courseId}`);
+      
+      return NextResponse.json(
+        {
+          success: true,
+          data: concepts,
+        },
+        { status: 200 }
+      );
+    }
+
+    // Extract query parameters with validation for regular requests
     const page = Math.max(1, parseInt(searchParams.get("page") || "1"));
     const limit = Math.min(
       100,
@@ -34,8 +52,6 @@ export async function GET(request: NextRequest) {
     );
     const category = searchParams.get("category") as ConceptCategory | null;
     const isActive = searchParams.get("isActive") !== "false"; // Default to true
-
-    const conceptManager = new ConceptManager();
 
     // Use the new pagination method
     const concepts = await conceptManager.getConceptsPaginated({

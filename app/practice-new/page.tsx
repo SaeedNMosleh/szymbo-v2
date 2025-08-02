@@ -424,16 +424,36 @@ function CourseSelector({
 
   const fetchConceptsForCourse = async (courseId: number) => {
     try {
-      // First get the concepts from the course
+      console.log(`🔍 DASHBOARD: Fetching concepts for course ${courseId}`);
+      // Get concepts using the correct API endpoint
       const conceptsResponse = await fetch(
         `/api/concepts?courseId=${courseId}`
+      );
+      console.log(
+        `📡 DASHBOARD: Response status for course ${courseId}:`,
+        conceptsResponse.status
       );
       if (!conceptsResponse.ok) return [];
 
       const conceptsResult = await conceptsResponse.json();
-      if (!conceptsResult.success || !conceptsResult.data) return [];
+      console.log(`📊 DASHBOARD: Concepts result for course ${courseId}:`, {
+        success: conceptsResult.success,
+        dataLength: conceptsResult.data?.length || 0,
+        hasData: !!conceptsResult.data,
+      });
+
+      if (!conceptsResult.success || !conceptsResult.data) {
+        console.log(`❌ DASHBOARD: No concepts data for course ${courseId}`);
+        return [];
+      }
 
       const concepts = conceptsResult.data;
+      console.log(
+        `✅ DASHBOARD: Found ${concepts.length} concepts for course ${courseId}:`,
+        concepts
+          .slice(0, 3)
+          .map((c: { id: string; name?: string }) => c.name || c.id)
+      );
 
       // Get question counts for these concepts
       const conceptIds = concepts.map((c: { id: string }) => c.id);
@@ -857,13 +877,59 @@ export default function PracticeNewPage() {
     }
   };
 
-  const handleSessionComplete = () => {
+  const handleSessionComplete = async () => {
+    // Save session as completed
+    if (sessionData?.sessionId) {
+      try {
+        const response = await fetch("/api/practice-new/session-complete", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sessionId: sessionData.sessionId,
+            userId: "default",
+            completionReason: "completed",
+          }),
+        });
+
+        if (!response.ok) {
+          console.error("Failed to save completed session");
+        } else {
+          console.log("Session completed and saved");
+        }
+      } catch (error) {
+        console.error("Error saving completed session:", error);
+      }
+    }
+
     setSelectedMode(null);
     setDrillSubmode(null);
     setSessionData(null);
   };
 
-  const handleBackToModes = () => {
+  const handleBackToModes = async () => {
+    // Save progress if there's an active session
+    if (sessionData?.sessionId) {
+      try {
+        const response = await fetch("/api/practice-new/session-complete", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sessionId: sessionData.sessionId,
+            userId: "default",
+            completionReason: "abandoned",
+          }),
+        });
+
+        if (!response.ok) {
+          console.error("Failed to save session progress on early exit");
+        } else {
+          console.log("Session progress saved on early exit");
+        }
+      } catch (error) {
+        console.error("Error saving session progress:", error);
+      }
+    }
+
     setSelectedMode(null);
     setDrillSubmode(null);
     setSessionData(null);

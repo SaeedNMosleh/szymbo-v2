@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/dbConnect";
 import { ConceptPracticeEngine } from "@/lib/practiceEngine/conceptPracticeEngine";
 import { PracticeMode } from "@/lib/enum";
+import { IQuestionBank } from "@/datamodels/questionBank.model";
 import { z } from "zod";
 
 const sessionRequestSchema = z.object({
@@ -53,13 +54,40 @@ export async function POST(request: NextRequest) {
           );
         }
         
+        // Enhanced course drill validation
+        console.log(`🎯 SESSION: Starting course drill for course ${courseId}`);
         conceptIds = await practiceEngine.getDrillConceptsByCourse(
           courseId,
           maxConcepts
         );
-        rationale = `Drilling concepts from course ${courseId}`;
+        console.log(`🎯 SESSION: getDrillConceptsByCourse returned ${conceptIds.length} concepts`);
+        
+        if (conceptIds.length === 0) {
+          console.log(`❌ DRILL: No concepts found for course ${courseId} - cannot start drill`);
+          return NextResponse.json(
+            {
+              success: false,
+              error: `Course ${courseId} has no extracted concepts available for drilling`,
+              suggestions: [
+                "Use the concept extraction system to process this course content",
+                "Ensure the course has sufficient content (notes, practice text, keywords)",
+                "Check that concept extraction has been completed for this course",
+                "Try a different course that has concepts extracted"
+              ],
+              debug: {
+                mode,
+                drillType,
+                courseId,
+                conceptsFound: 0
+              }
+            },
+            { status: 400 }
+          );
+        }
+        
+        rationale = `Drilling ${conceptIds.length} concepts from course ${courseId}`;
         console.log(
-          `Course drill selection: ${conceptIds.length} concepts from course ${courseId}`
+          `🎯 DRILL: Course selection: ${conceptIds.length} concepts from course ${courseId}`
         );
       } else {
         // Weakness-based drilling (default) - show ALL concepts sorted by weakness
@@ -67,9 +95,33 @@ export async function POST(request: NextRequest) {
           userId,
           0 // 0 means no limit - show all concepts sorted by weakness
         );
-        rationale = "Drilling all concepts sorted by weakness (weakest first)";
+        
+        if (conceptIds.length === 0) {
+          console.log(`❌ DRILL: No concepts found for weakness drilling - user has no concept history`);
+          return NextResponse.json(
+            {
+              success: false,
+              error: "No concepts available for weakness-based drilling",
+              suggestions: [
+                "Practice some questions first to build performance history",
+                "Try 'Normal Practice' mode to answer questions and create drill material",
+                "Add courses and extract concepts to build your concept library",
+                "Use the concept extraction system to process course content"
+              ],
+              debug: {
+                mode,
+                drillType: "weakness",
+                userId,
+                conceptsFound: 0
+              }
+            },
+            { status: 400 }
+          );
+        }
+        
+        rationale = `Drilling ${conceptIds.length} concepts sorted by weakness (weakest first)`;
         console.log(
-          `Weakness drill selection: ${conceptIds.length} concepts sorted by weakness`
+          `🎯 DRILL: Weakness selection: ${conceptIds.length} concepts sorted by weakness`
         );
       }
     } else {
@@ -104,19 +156,20 @@ export async function POST(request: NextRequest) {
       switch (mode) {
         case PracticeMode.DRILL:
           if (drillType === "course") {
-            errorMessage = "No concepts or questions available for the selected course.";
+            errorMessage = `No questions found that strictly target concepts from course ${courseId}`;
             suggestions = [
-              "Ensure concepts have been extracted from this course",
-              "Try the concept extraction system to process course content",
-              "Add more content to the course (notes, practice text, keywords)",
-              "Switch to 'Normal Practice' mode to practice other concepts"
+              "The course may have concepts but no questions targeting them specifically",
+              "Use the Question Management Hub to create questions for these concepts",
+              "Try concept extraction first, then generate questions for the concepts",
+              "Switch to 'Normal Practice' mode which uses flexible question matching"
             ];
           } else {
-            errorMessage = "No weak concepts found for drilling.";
+            errorMessage = "No questions found that strictly target the selected weak concepts";
             suggestions = [
-              "Practice some questions first to build performance history",
-              "Try 'Normal Practice' mode to answer questions and create drill material",
-              "Add more courses with concept extraction to expand available content"
+              "The selected concepts exist but have no questions targeting them specifically",
+              "Use the Question Management Hub to create questions for weak concepts",
+              "Try 'Normal Practice' mode which uses flexible question matching",
+              "Add more courses and extract concepts to build question inventory"
             ];
           }
           break;
@@ -178,20 +231,42 @@ export async function POST(request: NextRequest) {
       `✅ Session created successfully: ${sessionId} with ${questions.length} questions`
     );
 
-    // Check if we're using fallback questions (questions without matching target concepts)
+    // Check question-concept matching for reporting
     const conceptSet = new Set(conceptIds);
-    const questionsWithMatchingConcepts = questions.filter(q => 
-      q.targetConcepts.some(tc => conceptSet.has(tc))
-    );
-    
-    if (questionsWithMatchingConcepts.length < questions.length) {
-      fallbackUsed = true;
-      console.log(`⚠️ Using ${questions.length - questionsWithMatchingConcepts.length} fallback questions`);
+    let questionsWithMatchingConcepts: IQuestionBank[] = [];
+
+    if (mode === PracticeMode.DRILL) {
+      // DRILL mode: All questions should target at least one drill concept
+      questionsWithMatchingConcepts = questions.filter(q => 
+        q.targetConcepts.some(tc => conceptSet.has(tc))
+      );
+      
+      console.log(`🎯 DRILL: ${questionsWithMatchingConcepts.length}/${questions.length} questions target drill concepts`);
+      
+      // Log drill relevance metrics
+      const drillMetrics = questions.map(q => {
+        const drillMatches = q.targetConcepts.filter(tc => conceptSet.has(tc)).length;
+        const totalConcepts = q.targetConcepts.length;
+        return { drillMatches, totalConcepts, relevance: drillMatches / totalConcepts };
+      });
+      
+      const avgRelevance = drillMetrics.reduce((sum, m) => sum + m.relevance, 0) / drillMetrics.length;
+      console.log(`📊 DRILL: Average question relevance: ${(avgRelevance * 100).toFixed(1)}%`);
+    } else {
+      // NORMAL mode: Check for matching concepts (allow fallback)
+      questionsWithMatchingConcepts = questions.filter(q => 
+        q.targetConcepts.some(tc => conceptSet.has(tc))
+      );
+      
+      if (questionsWithMatchingConcepts.length < questions.length) {
+        fallbackUsed = true;
+        console.log(`⚠️ NORMAL: Using ${questions.length - questionsWithMatchingConcepts.length} fallback questions`);
+      }
     }
 
-    // Enhanced rationale with fallback information
+    // Enhanced rationale with fallback information (NORMAL mode only)
     let enhancedRationale = rationale;
-    if (fallbackUsed) {
+    if (fallbackUsed && mode === PracticeMode.NORMAL) {
       enhancedRationale += ` (Used fallback strategy to ensure questions are available)`;
     }
 

@@ -9,6 +9,7 @@ import { ConceptManager } from "@/lib/conceptExtraction/conceptManager";
 import { duplicationDetector } from "@/lib/conceptExtraction/duplicationDetector";
 import { conceptMerger } from "@/lib/conceptExtraction/conceptMerger";
 import { ConceptCategory } from "@/lib/enum"; // Only import what we use
+import { IVocabularyData } from "@/datamodels/concept.model";
 
 import {
   createApiResponse,
@@ -161,8 +162,6 @@ export async function PATCH(
         // Create concepts from approved/edited decisions
         if (reviewProgress && reviewProgress.decisions) {
           const conceptManager = new ConceptManager();
-          let createdCount = 0;
-          let skippedCount = 0;
           let duplicateCount = 0;
           const creationResults: Array<{
             conceptName: string;
@@ -191,7 +190,6 @@ export async function PATCH(
                 console.error(
                   `Merge decision missing primaryConceptId for concept: ${decision.extractedConcept.name}`
                 );
-                skippedCount++;
                 creationResults.push({
                   conceptName: decision.extractedConcept.name,
                   status: "skipped",
@@ -208,7 +206,6 @@ export async function PATCH(
               });
 
               if (mergeResult.success) {
-                createdCount++; // Count as "processed" even though it's a merge
                 creationResults.push({
                   conceptName: decision.extractedConcept.name,
                   status: "found", // Use 'found' to indicate it was merged into existing
@@ -218,27 +215,169 @@ export async function PATCH(
                   `Merged concept "${decision.extractedConcept.name}" into existing concept "${mergeResult.mergedConcept?.name}"`
                 );
               } else {
-                skippedCount++;
+                // FALLBACK: If merge fails, create new concept instead of losing data
+                console.warn(
+                  `Merge failed for "${decision.extractedConcept.name}": ${mergeResult.message}. Creating new concept as fallback.`
+                );
+
+                try {
+                  // Convert extracted concept to create format
+                  const conceptData: {
+                    name: string;
+                    category: ConceptCategory;
+                    description: string;
+                    examples: string[];
+                    difficulty: string;
+                    tags: string[];
+                    courseId: number;
+                    vocabularyData?: IVocabularyData;
+                  } = {
+                    name: decision.extractedConcept.name,
+                    category: decision.extractedConcept.category,
+                    description: decision.extractedConcept.description,
+                    examples: decision.extractedConcept.examples,
+                    difficulty: decision.extractedConcept.suggestedDifficulty,
+                    tags:
+                      decision.extractedConcept.suggestedTags?.map(
+                        (tag) => tag.tag
+                      ) || [],
+                    courseId,
+                  };
+
+                  if (
+                    decision.extractedConcept.category ===
+                    ConceptCategory.VOCABULARY
+                  ) {
+                    conceptData.vocabularyData = {
+                      word: decision.extractedConcept.name,
+                      translation:
+                        decision.extractedConcept.description ||
+                        decision.extractedConcept.name,
+                      partOfSpeech: "noun", // Default
+                    };
+                  }
+
+                  const fallbackResult =
+                    await conceptManager.createOrFindConcept(
+                      conceptData as unknown as Partial<
+                        Record<string, unknown>
+                      >,
+                      true
+                    );
+
+                  // Handle result types and link to course
+                  const concept =
+                    "concept" in fallbackResult
+                      ? fallbackResult.concept
+                      : fallbackResult;
+
+                  await conceptManager.linkConceptToCourse(
+                    concept.id,
+                    courseId,
+                    decision.extractedConcept.confidence,
+                    decision.extractedConcept.sourceContent
+                  );
+
+                  creationResults.push({
+                    conceptName: decision.extractedConcept.name,
+                    status: "created",
+                    reason: `Created as new concept (merge failed: ${mergeResult.message})`,
+                  });
+                  console.log(
+                    `Created new concept "${decision.extractedConcept.name}" as fallback after merge failure`
+                  );
+                } catch (fallbackError) {
+                  creationResults.push({
+                    conceptName: decision.extractedConcept.name,
+                    status: "skipped",
+                    reason: `Merge failed and fallback creation failed: ${fallbackError instanceof Error ? fallbackError.message : "Unknown error"}`,
+                  });
+                  console.error(
+                    `Both merge and fallback creation failed for concept ${decision.extractedConcept.name}:`,
+                    fallbackError
+                  );
+                }
+              }
+            } catch (mergeError) {
+              // FALLBACK: If merge throws an error, try to create new concept
+              console.warn(
+                `Merge error for "${decision.extractedConcept.name}": ${mergeError instanceof Error ? mergeError.message : "Unknown error"}. Creating new concept as fallback.`
+              );
+
+              try {
+                // Convert extracted concept to create format
+                const conceptData: {
+                  name: string;
+                  category: ConceptCategory;
+                  description: string;
+                  examples: string[];
+                  difficulty: string;
+                  tags: string[];
+                  courseId: number;
+                  vocabularyData?: IVocabularyData;
+                } = {
+                  name: decision.extractedConcept.name,
+                  category: decision.extractedConcept.category,
+                  description: decision.extractedConcept.description,
+                  examples: decision.extractedConcept.examples,
+                  difficulty: decision.extractedConcept.suggestedDifficulty,
+                  tags:
+                    decision.extractedConcept.suggestedTags?.map(
+                      (tag) => tag.tag
+                    ) || [],
+                  courseId,
+                };
+
+                if (
+                  decision.extractedConcept.category ===
+                  ConceptCategory.VOCABULARY
+                ) {
+                  conceptData.vocabularyData = {
+                    word: decision.extractedConcept.name,
+                    translation:
+                      decision.extractedConcept.description ||
+                      decision.extractedConcept.name,
+                    partOfSpeech: "noun", // Default
+                  };
+                }
+
+                const fallbackResult = await conceptManager.createOrFindConcept(
+                  conceptData as unknown as Partial<Record<string, unknown>>,
+                  true
+                );
+
+                // Handle result types and link to course
+                const concept =
+                  "concept" in fallbackResult
+                    ? fallbackResult.concept
+                    : fallbackResult;
+
+                await conceptManager.linkConceptToCourse(
+                  concept.id,
+                  courseId,
+                  decision.extractedConcept.confidence,
+                  decision.extractedConcept.sourceContent
+                );
+
+                creationResults.push({
+                  conceptName: decision.extractedConcept.name,
+                  status: "created",
+                  reason: `Created as new concept (merge error: ${mergeError instanceof Error ? mergeError.message : "Unknown error"})`,
+                });
+                console.log(
+                  `Created new concept "${decision.extractedConcept.name}" as fallback after merge error`
+                );
+              } catch (fallbackError) {
                 creationResults.push({
                   conceptName: decision.extractedConcept.name,
                   status: "skipped",
-                  reason: `Merge failed: ${mergeResult.message}`,
+                  reason: `Merge error and fallback creation failed: ${fallbackError instanceof Error ? fallbackError.message : "Unknown error"}`,
                 });
                 console.error(
-                  `Failed to merge concept ${decision.extractedConcept.name}: ${mergeResult.message}`
+                  `Both merge and fallback creation failed for concept ${decision.extractedConcept.name}:`,
+                  fallbackError
                 );
               }
-            } catch (mergeError) {
-              skippedCount++;
-              creationResults.push({
-                conceptName: decision.extractedConcept.name,
-                status: "skipped",
-                reason: `Merge error: ${mergeError instanceof Error ? mergeError.message : "Unknown error"}`,
-              });
-              console.error(
-                `Error merging concept ${decision.extractedConcept.name}:`,
-                mergeError
-              );
             }
           }
 
@@ -315,7 +454,10 @@ export async function PATCH(
               // Define a type guard to check if result has wasCreated property
               function isCreateOrFindResult(
                 result: unknown
-              ): result is { concept: { name: string }; wasCreated: boolean } {
+              ): result is {
+                concept: { id: string; name: string };
+                wasCreated: boolean;
+              } {
                 return (
                   result !== null &&
                   typeof result === "object" &&
@@ -324,33 +466,75 @@ export async function PATCH(
                 );
               }
 
-              if (isCreateOrFindResult(result) && result.wasCreated) {
-                createdCount++;
-                creationResults.push({
-                  conceptName: result.concept.name,
-                  status: "created",
-                });
-                console.log(`Created new concept: ${result.concept.name}`);
-              } else if (isCreateOrFindResult(result)) {
-                skippedCount++;
-                creationResults.push({
-                  conceptName: result.concept.name,
-                  status: "found",
-                  reason: "Concept already existed",
-                });
-                console.log(`Found existing concept: ${result.concept.name}`);
+              let conceptId: string;
+              let conceptName: string;
+              let wasCreated = false;
+
+              if (isCreateOrFindResult(result)) {
+                conceptId = result.concept.id;
+                conceptName = result.concept.name;
+                wasCreated = result.wasCreated;
               } else {
                 // Handle the case where result is IConcept directly
                 const conceptResult = result as { id: string; name: string };
-                createdCount++;
+                conceptId = conceptResult.id;
+                conceptName = conceptResult.name;
+                wasCreated = true;
+              }
+
+              // CRITICAL FIX: Ensure existing concepts get courseId added to createdFrom
+              if (!wasCreated) {
+                console.log(
+                  `🔄 REVIEW: Updating existing concept ${conceptId} to include course ${courseId} in createdFrom`
+                );
+                const existingConcept =
+                  await conceptManager.getConcept(conceptId);
+                if (
+                  existingConcept &&
+                  !existingConcept.createdFrom.includes(courseId.toString())
+                ) {
+                  await conceptManager.updateConcept(conceptId, {
+                    createdFrom: [
+                      ...existingConcept.createdFrom,
+                      courseId.toString(),
+                    ],
+                    lastUpdated: new Date(),
+                  });
+                  console.log(
+                    `✅ REVIEW: Added course ${courseId} to existing concept ${conceptId} createdFrom array`
+                  );
+                }
+              }
+
+              // CRITICAL FIX: Link concept to course for ALL approve/edit decisions
+              console.log(
+                `🔗 REVIEW: Linking concept ${conceptId} to course ${courseId}`
+              );
+              await conceptManager.linkConceptToCourse(
+                conceptId,
+                courseId,
+                conceptToCreate.confidence,
+                conceptToCreate.sourceContent
+              );
+              console.log(
+                `✅ REVIEW: Successfully linked concept ${conceptId} to course ${courseId}`
+              );
+
+              if (wasCreated) {
                 creationResults.push({
-                  conceptName: conceptResult.name,
+                  conceptName,
                   status: "created",
                 });
-                console.log(`Created new concept: ${conceptResult.name}`);
+                console.log(`Created new concept: ${conceptName}`);
+              } else {
+                creationResults.push({
+                  conceptName,
+                  status: "found",
+                  reason: "Concept already existed",
+                });
+                console.log(`Found existing concept: ${conceptName}`);
               }
             } catch (conceptError) {
-              skippedCount++;
               creationResults.push({
                 conceptName: decision.extractedConcept.name,
                 status: "skipped",
@@ -364,13 +548,70 @@ export async function PATCH(
             }
           }
 
-          console.log(
-            `Concept creation completed: ${createdCount} created, ${skippedCount} existing/skipped, ${duplicateCount} duplicates blocked`
-          );
+          // Calculate summary statistics
+          const totalProcessed = creationResults.length;
+          const successfulCount = creationResults.filter(
+            (r) => r.status === "created" || r.status === "found"
+          ).length;
+          const mergedCount = creationResults.filter(
+            (r) => r.status === "found" && r.reason?.includes("Merged")
+          ).length;
+          const newlyCreatedCount = creationResults.filter(
+            (r) => r.status === "created"
+          ).length;
+          const failedCount = creationResults.filter(
+            (r) => r.status === "skipped"
+          ).length;
+          const fallbackCreationsCount = creationResults.filter(
+            (r) => r.status === "created" && r.reason?.includes("merge failed")
+          ).length;
 
-          // Log detailed results for debugging
-          if (creationResults.length > 0) {
-            console.log("Concept creation results:", creationResults);
+          // Comprehensive summary log
+          console.log(`
+═══════════════════════════════════════════════════════════════
+📊 CONCEPT REVIEW SUBMISSION SUMMARY - Course ${courseId}
+═══════════════════════════════════════════════════════════════
+📝 Total Concepts Processed: ${totalProcessed}
+✅ Successfully Processed: ${successfulCount}
+   ├── 🔗 Merged into existing: ${mergedCount}
+   ├── 🆕 Newly created: ${newlyCreatedCount}
+   └── 🔄 Created as fallback: ${fallbackCreationsCount}
+❌ Failed/Skipped: ${failedCount}
+🚫 Duplicates blocked: ${duplicateCount}
+
+📋 DETAILED BREAKDOWN:
+${creationResults
+  .map(
+    (result) =>
+      `   ${result.status === "created" ? "✅" : result.status === "found" ? "🔗" : "❌"} ${result.conceptName} (${result.status})${result.reason ? ` - ${result.reason}` : ""}`
+  )
+  .join("\n")}
+
+🎯 COURSE LINKING STATUS:
+   • All successful concepts linked to course ${courseId}
+   • Course concept relationships updated in database
+   • Practice progress initialized for new concepts
+
+${failedCount > 0 ? `⚠️  ATTENTION: ${failedCount} concept(s) failed processing. Check detailed logs above for resolution.` : "🎉 All concepts processed successfully!"}
+═══════════════════════════════════════════════════════════════
+          `);
+
+          // Also log individual results for debugging if there are failures
+          if (failedCount > 0) {
+            console.log(
+              "❌ Failed concept details:",
+              creationResults.filter((r) => r.status === "skipped")
+            );
+          }
+
+          if (fallbackCreationsCount > 0) {
+            console.log(
+              "🔄 Fallback creation details:",
+              creationResults.filter(
+                (r) =>
+                  r.status === "created" && r.reason?.includes("merge failed")
+              )
+            );
           }
         }
       } catch (error) {

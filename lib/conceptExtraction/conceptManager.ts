@@ -375,31 +375,49 @@ export class ConceptManager {
     sourceContent: string
   ): Promise<void> {
     try {
+      console.log(
+        `🔗 LINKING: Starting link process for concept ${conceptId} to course ${courseId}`
+      );
+      console.log(
+        `🔗 LINKING: Confidence: ${confidence}, Source: ${sourceContent.substring(0, 50)}...`
+      );
+
       // Validate inputs
       if (!conceptId || !courseId) {
+        console.error(
+          `❌ LINKING: Missing required fields - conceptId: ${conceptId}, courseId: ${courseId}`
+        );
         throw new ConceptValidationError(
           "Missing required fields: conceptId or courseId"
         );
       }
 
       // Verify concept exists
+      console.log(`🔍 LINKING: Checking if concept ${conceptId} exists...`);
       const concept = await this.getConcept(conceptId);
       if (!concept) {
+        console.error(`❌ LINKING: Concept ${conceptId} not found`);
         throw new ConceptValidationError(
           `Concept with ID ${conceptId} not found`
         );
       }
+      console.log(`✅ LINKING: Concept ${conceptId} found: "${concept.name}"`);
 
       // Normalize confidence score
       const normalizedConfidence = Math.max(0, Math.min(1, confidence));
+      console.log(
+        `📊 LINKING: Normalized confidence: ${normalizedConfidence} (from ${confidence})`
+      );
 
       // Check if link already exists
+      console.log(`🔍 LINKING: Checking for existing link...`);
       const existingLink = await CourseConcept.findOne({
         conceptId,
         courseId,
       });
 
       if (existingLink) {
+        console.log(`🔄 LINKING: Found existing link, updating...`);
         // Update existing link
         await CourseConcept.updateOne(
           { conceptId, courseId },
@@ -412,10 +430,18 @@ export class ConceptManager {
             },
           }
         );
+
+        // Also update concept's createdFrom array to ensure sync
+        await Concept.findOneAndUpdate(
+          { id: conceptId },
+          { $addToSet: { createdFrom: courseId.toString() } }
+        );
+
         console.log(
-          `Updated link between concept ${conceptId} and course ${courseId}`
+          `✅ LINKING: Updated link between concept ${conceptId} and course ${courseId}`
         );
       } else {
+        console.log(`🆕 LINKING: No existing link found, creating new one...`);
         // Create new link
         const courseConceptData: ICourseConcept = {
           conceptId,
@@ -425,11 +451,39 @@ export class ConceptManager {
           isActive: true,
           extractedDate: new Date(),
         };
+        console.log(
+          `💾 LINKING: Creating CourseConcept record:`,
+          courseConceptData
+        );
 
         const courseConcept = new CourseConcept(courseConceptData);
-        await courseConcept.save();
+        console.log(`💾 LINKING: Saving to database...`);
+        const savedLink = await courseConcept.save();
+        console.log(`💾 LINKING: Saved with _id:`, savedLink._id);
+
+        // Also update concept's createdFrom array to keep it in sync
+        await Concept.findOneAndUpdate(
+          { id: conceptId },
+          { $addToSet: { createdFrom: courseId.toString() } }
+        );
+
+        // Verify the save worked
+        const verifyLink = await CourseConcept.findOne({ conceptId, courseId });
         console.log(
-          `Created new link between concept ${conceptId} and course ${courseId}`
+          `🔍 LINKING: Verification - link exists after save: ${!!verifyLink}`
+        );
+        if (verifyLink) {
+          console.log(
+            `✅ LINKING: Verification successful - found link with confidence: ${verifyLink.confidence}`
+          );
+        } else {
+          console.error(
+            `❌ LINKING: Verification failed - no link found after save!`
+          );
+        }
+
+        console.log(
+          `✅ LINKING: Created new link between concept ${conceptId} and course ${courseId}`
         );
       }
     } catch (error) {
@@ -731,6 +785,9 @@ export class ConceptManager {
 
     // Handle the different return types from createOrFindConcept
     const conceptId = "concept" in concept ? concept.concept.id : concept.id;
+    console.log(
+      `🎯 EXTRACTION: About to link concept ${conceptId} to course ${courseId}`
+    );
 
     // Link to course
     await this.linkConceptToCourse(
@@ -738,6 +795,9 @@ export class ConceptManager {
       courseId,
       extractedConcept.confidence,
       extractedConcept.sourceContent
+    );
+    console.log(
+      `✅ EXTRACTION: Completed linking concept ${conceptId} to course ${courseId}`
     );
 
     return "concept" in concept ? concept.concept : concept;

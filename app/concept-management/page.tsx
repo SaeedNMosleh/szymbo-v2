@@ -54,8 +54,12 @@ import {
 import { BulkOperationsPanel } from "@/components/Features/conceptManagement/BulkOperationsPanel";
 import { ConceptImporter } from "@/components/Features/conceptManagement/ConceptImporter";
 import { MergeConceptDialog } from "@/components/Features/conceptManagement/MergeConceptDialog";
+import {
+  ConceptEditDialog,
+  ConceptEditFormData,
+} from "@/components/shared/ConceptEditDialog";
 import { MultiSelectDropdown } from "@/components/ui/MultiSelectDropdown";
-import { ConceptCategory } from "@/lib/enum";
+import { ConceptCategory, QuestionLevel } from "@/lib/enum";
 
 // Imported for the ConceptGroup interface
 // import { IConceptGroup } from "@/datamodels/conceptGroup.model";
@@ -196,6 +200,43 @@ type TabValue =
   | "bulk"
   | "import";
 
+// Data transformation helpers for ConceptEditDialog
+const conceptDataToEditFormData = (
+  concept: ConceptData
+): ConceptEditFormData => {
+  return {
+    name: concept.name,
+    category: concept.category,
+    description: concept.description,
+    examples: concept.examples || [],
+    sourceContent: "", // Not stored in ConceptData
+    confidence: concept.confidence || 0,
+    suggestedDifficulty: concept.difficulty as QuestionLevel,
+    suggestedTags: concept.tags.map((tag) => ({
+      tag,
+      source: "existing" as const,
+      confidence: 1.0,
+    })),
+  };
+};
+
+const editFormDataToConceptData = (
+  formData: ConceptEditFormData,
+  originalConcept: ConceptData
+): ConceptData => {
+  return {
+    ...originalConcept,
+    name: formData.name,
+    category: formData.category,
+    description: formData.description,
+    examples: formData.examples,
+    confidence: formData.confidence || 0,
+    difficulty: formData.suggestedDifficulty,
+    tags: formData.suggestedTags?.map((tagObj) => tagObj.tag) || [],
+    lastUpdated: new Date().toISOString(),
+  };
+};
+
 interface ConceptStats {
   total: number;
   vocabulary: number;
@@ -254,6 +295,12 @@ export default function ConceptManagementPage() {
 
   // Merge Dialog State
   const [showMergeDialog, setShowMergeDialog] = useState(false);
+
+  // Concept Edit Dialog State
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [editingConcept, setEditingConcept] = useState<ConceptData | null>(
+    null
+  );
 
   // Concept Groups Management State
   const [selectedGroup, setSelectedGroup] = useState<ConceptGroup | null>(null);
@@ -1826,22 +1873,148 @@ export default function ConceptManagementPage() {
               <div>
                 <h4 className="mb-2 font-medium">Related Concepts</h4>
                 <div className="space-y-2">
-                  {llmResults.relatedConcepts.map((concept) => (
-                    <div
-                      key={concept.id}
-                      className="flex items-center justify-between rounded bg-gray-50 p-3"
-                    >
-                      <div>
-                        <span className="font-medium">{concept.name}</span>
-                        <p className="text-sm text-gray-600">
-                          {concept.reasoning}
-                        </p>
+                  {llmResults.relatedConcepts.map((llmConcept) => {
+                    // Find the full concept data
+                    const fullConcept = concepts.find(
+                      (c) => c.id === llmConcept.id
+                    );
+                    if (!fullConcept) {
+                      // Fallback if concept not found in current data
+                      return (
+                        <div
+                          key={llmConcept.id}
+                          className="flex items-center justify-between rounded bg-gray-50 p-3"
+                        >
+                          <div>
+                            <span className="font-medium">
+                              {llmConcept.name}
+                            </span>
+                            <p className="text-sm text-gray-600">
+                              {llmConcept.reasoning}
+                            </p>
+                          </div>
+                          <Badge variant="outline">
+                            {Math.round(llmConcept.similarity * 100)}% match
+                          </Badge>
+                        </div>
+                      );
+                    }
+
+                    // Display with full concept data and edit functionality
+                    return (
+                      <div
+                        key={fullConcept.id}
+                        className="flex cursor-pointer items-center gap-3 rounded border bg-white p-3 transition-colors hover:bg-gray-50"
+                        onClick={() => setSelectedConcept(fullConcept)}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <h4 className="truncate font-medium">
+                              {fullConcept.name}
+                            </h4>
+                            <Badge
+                              variant={
+                                fullConcept.category === "grammar"
+                                  ? "default"
+                                  : "secondary"
+                              }
+                            >
+                              {fullConcept.category}
+                            </Badge>
+                            <Badge variant="outline">
+                              {fullConcept.difficulty}
+                            </Badge>
+                            <Badge variant="outline" className="text-xs">
+                              {Math.round(llmConcept.similarity * 100)}% match
+                            </Badge>
+                          </div>
+
+                          <p className="break-words text-sm text-gray-600">
+                            {fullConcept.description}
+                          </p>
+
+                          <p className="mt-1 text-xs italic text-blue-600">
+                            AI reasoning: {llmConcept.reasoning}
+                          </p>
+
+                          {fullConcept.tags.length > 0 && (
+                            <div className="mt-1 flex flex-wrap gap-1">
+                              {fullConcept.tags.slice(0, 3).map((tag, idx) => (
+                                <Badge
+                                  key={idx}
+                                  variant="outline"
+                                  className="text-xs"
+                                >
+                                  {tag}
+                                </Badge>
+                              ))}
+                              {fullConcept.tags.length > 3 && (
+                                <Badge variant="outline" className="text-xs">
+                                  +{fullConcept.tags.length - 3}
+                                </Badge>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex shrink-0 items-center gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedConcept(fullConcept);
+                            }}
+                          >
+                            <Eye className="size-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingConcept(fullConcept);
+                              setIsEditDialogOpen(true);
+                            }}
+                          >
+                            <Edit className="size-4" />
+                          </Button>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <MoreVertical className="size-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  setEditingConcept(fullConcept);
+                                  setIsEditDialogOpen(true);
+                                }}
+                              >
+                                <Edit className="mr-2 size-4" />
+                                Edit Concept
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  navigator.clipboard.writeText(
+                                    fullConcept.name
+                                  );
+                                }}
+                              >
+                                <Copy className="mr-2 size-4" />
+                                Copy Name
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
                       </div>
-                      <Badge variant="outline">
-                        {Math.round(concept.similarity * 100)}% match
-                      </Badge>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 
@@ -1876,7 +2049,17 @@ export default function ConceptManagementPage() {
                   onClick={() => setEditMode(!editMode)}
                 >
                   <Edit className="size-4" />
-                  {editMode ? "Cancel Edit" : "Edit"}
+                  {editMode ? "Cancel Edit" : "Quick Edit"}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setEditingConcept(selectedConcept);
+                    setIsEditDialogOpen(true);
+                  }}
+                >
+                  <Wand2 className="size-4" />
+                  Advanced Edit
                 </Button>
                 <Button
                   variant="outline"
@@ -2322,9 +2505,8 @@ export default function ConceptManagementPage() {
                     size="sm"
                     onClick={(e) => {
                       e.stopPropagation();
-                      setSelectedConcept(concept);
-                      setEditMode(true);
-                      setActiveTab("explorer");
+                      setEditingConcept(concept);
+                      setIsEditDialogOpen(true);
                     }}
                   >
                     <Edit className="size-4" />
@@ -2342,9 +2524,8 @@ export default function ConceptManagementPage() {
                     <DropdownMenuContent align="end">
                       <DropdownMenuItem
                         onClick={() => {
-                          setSelectedConcept(concept);
-                          setEditMode(true);
-                          setActiveTab("explorer");
+                          setEditingConcept(concept);
+                          setIsEditDialogOpen(true);
                         }}
                       >
                         <Edit className="mr-2 size-4" />
@@ -3557,6 +3738,61 @@ export default function ConceptManagementPage() {
               </div>
             </div>
           </div>
+        )}
+
+        {/* Concept Edit Dialog */}
+        {editingConcept && (
+          <ConceptEditDialog
+            isOpen={isEditDialogOpen}
+            conceptName={editingConcept.name}
+            initialData={conceptDataToEditFormData(editingConcept)}
+            availableTags={allTags}
+            mode="edit"
+            onSave={async (formData: ConceptEditFormData) => {
+              try {
+                const updatedConcept = editFormDataToConceptData(
+                  formData,
+                  editingConcept
+                );
+
+                const response = await fetch(
+                  `/api/concepts/${editingConcept.id}`,
+                  {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(updatedConcept),
+                  }
+                );
+
+                const result = await response.json();
+                if (result.success) {
+                  // Update concepts in state
+                  setConcepts((prevConcepts) =>
+                    prevConcepts.map((c) =>
+                      c.id === editingConcept.id ? { ...c, ...result.data } : c
+                    )
+                  );
+
+                  // Update selectedConcept if it matches
+                  if (selectedConcept?.id === editingConcept.id) {
+                    setSelectedConcept({ ...selectedConcept, ...result.data });
+                  }
+
+                  setIsEditDialogOpen(false);
+                  setEditingConcept(null);
+                } else {
+                  alert(`Failed to update concept: ${result.error}`);
+                }
+              } catch (error) {
+                console.error("Error updating concept:", error);
+                alert(`Error updating concept: ${error}`);
+              }
+            }}
+            onCancel={() => {
+              setIsEditDialogOpen(false);
+              setEditingConcept(null);
+            }}
+          />
         )}
       </div>
     </div>
