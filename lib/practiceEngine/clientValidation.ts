@@ -1,10 +1,27 @@
 import { QuestionType } from "@/lib/enum";
+import type { ICourse } from "@/datamodels/course.model";
 
 export interface ValidationResult {
   isCorrect: boolean;
   feedback: string;
-  correctAnswer: string;
+  correctAnswer: string; // Immutable - always the stored correct answer
   confidence: number; // 0-1
+}
+
+export interface UnifiedValidationInput {
+  questionType: QuestionType;
+  userAnswer: string | string[];
+  correctAnswer: string; // Immutable reference answer
+  question?: string; // For LLM context
+  attemptNumber?: number; // For progressive hints
+}
+
+export interface LLMValidationContext {
+  question: string;
+  userAnswer: string;
+  correctAnswer: string; // Immutable - LLM cannot modify this
+  attemptNumber: number;
+  courseContext?: ICourse;
 }
 
 /**
@@ -50,23 +67,24 @@ export function shouldUseClientValidation(questionType: QuestionType): boolean {
 export function validateAnswerClientSide(
   questionType: QuestionType,
   userAnswer: string | string[],
-  correctAnswer: string
+  correctAnswer: string,
+  attemptNumber: number = 1
 ): ValidationResult {
   switch (questionType) {
     case QuestionType.VOCAB_CHOICE:
     case QuestionType.VISUAL_VOCABULARY:
     case QuestionType.AUDIO_COMPREHENSION:
-      return validateSingleChoice(userAnswer as string, correctAnswer);
+      return validateSingleChoice(userAnswer as string, correctAnswer, attemptNumber);
 
     case QuestionType.MULTI_SELECT:
-      return validateMultiSelect(userAnswer as string[], correctAnswer);
+      return validateMultiSelect(userAnswer as string[], correctAnswer, attemptNumber);
 
     case QuestionType.CONJUGATION_TABLE:
-      return validateConjugationTable(userAnswer as string[], correctAnswer);
+      return validateConjugationTable(userAnswer as string[], correctAnswer, attemptNumber);
       
     case QuestionType.ASPECT_PAIRS:
     case QuestionType.DIMINUTIVE_FORMS:
-      return validateExactMatch(userAnswer as string, correctAnswer);
+      return validateExactMatch(userAnswer as string, correctAnswer, attemptNumber);
 
     default:
       throw new Error(
@@ -80,17 +98,25 @@ export function validateAnswerClientSide(
  */
 function validateSingleChoice(
   userAnswer: string,
-  correctAnswer: string
+  correctAnswer: string,
+  attemptNumber: number
 ): ValidationResult {
   const isCorrect =
     userAnswer.trim().toLowerCase() === correctAnswer.trim().toLowerCase();
 
+  let feedback: string;
+  if (isCorrect) {
+    feedback = "Correct! Well done.";
+  } else if (attemptNumber < 3) {
+    feedback = "That's not correct. Try again and consider all the options carefully.";
+  } else {
+    feedback = `Incorrect. The correct answer is: ${correctAnswer}`;
+  }
+
   return {
     isCorrect,
-    feedback: isCorrect
-      ? "Correct! Well done."
-      : `Incorrect. The correct answer is: ${correctAnswer}`,
-    correctAnswer,
+    feedback,
+    correctAnswer: attemptNumber >= 3 ? correctAnswer : "", // Only reveal answer on attempt 3
     confidence: 1.0, // Deterministic
   };
 }
@@ -100,7 +126,8 @@ function validateSingleChoice(
  */
 function validateMultiSelect(
   userAnswers: string[],
-  correctAnswer: string
+  correctAnswer: string,
+  attemptNumber: number
 ): ValidationResult {
   // Parse correct answers (comma-separated or array)
   const correctAnswers = Array.isArray(correctAnswer)
@@ -122,14 +149,27 @@ function validateMultiSelect(
       (ans, index) => ans === normalizedCorrectAnswers[index]
     );
 
-  const feedback = isCorrect
-    ? "Correct! You selected all the right options."
-    : `Incorrect. The correct answers are: ${correctAnswers.join(", ")}`;
+  let feedback: string;
+  if (isCorrect) {
+    feedback = "Correct! You selected all the right options.";
+  } else if (attemptNumber < 3) {
+    const correctCount = correctAnswers.length;
+    const userCount = userAnswers.length;
+    if (userCount < correctCount) {
+      feedback = `You need to select ${correctCount} options. You selected ${userCount}. Try again.`;
+    } else if (userCount > correctCount) {
+      feedback = `You selected too many options. Only ${correctCount} are correct. Try again.`;
+    } else {
+      feedback = `You selected the right number of options (${correctCount}), but some are incorrect. Try again.`;
+    }
+  } else {
+    feedback = `Incorrect. The correct answers are: ${correctAnswers.join(", ")}`;
+  }
 
   return {
     isCorrect,
     feedback,
-    correctAnswer: correctAnswers.join(", "),
+    correctAnswer: attemptNumber >= 3 ? correctAnswers.join(", ") : "", // Only reveal answer on attempt 3
     confidence: 1.0,
   };
 }
@@ -139,7 +179,8 @@ function validateMultiSelect(
  */
 function validateConjugationTable(
   userAnswers: string[],
-  correctAnswer: string
+  correctAnswer: string,
+  attemptNumber: number
 ): ValidationResult {
   // Parse correct answers (comma-separated string)
   const correctAnswers = correctAnswer.split(",").map((ans) => ans.trim());
@@ -153,7 +194,7 @@ function validateConjugationTable(
     return {
       isCorrect: false,
       feedback: "Please fill in all 6 conjugation forms.",
-      correctAnswer,
+      correctAnswer: attemptNumber >= 3 ? correctAnswer : "", // Only reveal answer on attempt 3
       confidence: 1.0,
     };
   }
@@ -176,17 +217,29 @@ function validateConjugationTable(
   let feedback: string;
   if (isCorrect) {
     feedback = "Perfect! All conjugation forms are correct.";
-  } else if (incorrectForms.length === 1) {
-    const formIndex = incorrectForms[0] - 1;
-    feedback = `Almost there! Check the ${formLabels[formIndex]} form: ${correctAnswers[formIndex]}`;
+  } else if (attemptNumber < 3) {
+    if (incorrectForms.length === 1) {
+      const formIndex = incorrectForms[0] - 1;
+      feedback = `Almost there! Check the ${formLabels[formIndex]} form.`;
+    } else if (incorrectForms.length <= 3) {
+      feedback = `Check these forms: ${incorrectForms.map(i => formLabels[i-1]).join(", ")}. Try again.`;
+    } else {
+      feedback = "Several forms need correction. Review the conjugation pattern and try again.";
+    }
   } else {
-    feedback = `Check these forms: ${incorrectForms.map(i => formLabels[i-1]).join(", ")}. Correct answers: ${correctAnswers.join(", ")}`;
+    // Attempt 3: Show correct answers
+    if (incorrectForms.length === 1) {
+      const formIndex = incorrectForms[0] - 1;
+      feedback = `Almost there! Check the ${formLabels[formIndex]} form: ${correctAnswers[formIndex]}`;
+    } else {
+      feedback = `Check these forms: ${incorrectForms.map(i => formLabels[i-1]).join(", ")}. Correct answers: ${correctAnswers.join(", ")}`;
+    }
   }
 
   return {
     isCorrect,
     feedback,
-    correctAnswer,
+    correctAnswer: attemptNumber >= 3 ? correctAnswer : "", // Only reveal answer on attempt 3
     confidence: 1.0,
   };
 }
@@ -196,7 +249,8 @@ function validateConjugationTable(
  */
 function validateExactMatch(
   userAnswer: string,
-  correctAnswer: string
+  correctAnswer: string,
+  attemptNumber: number
 ): ValidationResult {
   // Normalize whitespace and case for comparison
   const normalizedUser = userAnswer.trim().toLowerCase();
@@ -204,14 +258,53 @@ function validateExactMatch(
 
   const isCorrect = normalizedUser === normalizedCorrect;
 
+  let feedback: string;
+  if (isCorrect) {
+    feedback = "Perfect! Exact match.";
+  } else if (attemptNumber < 3) {
+    feedback = "Not quite right. Check your spelling and try again.";
+  } else {
+    feedback = `Incorrect. The correct answer is: ${correctAnswer}`;
+  }
+
   return {
     isCorrect,
-    feedback: isCorrect
-      ? "Perfect! Exact match."
-      : `Incorrect. The correct answer is: ${correctAnswer}`,
-    correctAnswer,
+    feedback,
+    correctAnswer: attemptNumber >= 3 ? correctAnswer : "", // Only reveal answer on attempt 3
     confidence: 1.0,
   };
+}
+
+/**
+ * Unified validation function that routes to appropriate validation method
+ * Ensures correctAnswer is never modified during validation
+ */
+export async function validateQuestionAnswer(
+  input: UnifiedValidationInput,
+  courseContext?: ICourse
+): Promise<ValidationResult> {
+  if (shouldUseClientValidation(input.questionType)) {
+    // Use deterministic client-side validation
+    return validateAnswerClientSide(
+      input.questionType,
+      input.userAnswer,
+      input.correctAnswer,
+      input.attemptNumber || 1
+    );
+  } else {
+    // Use LLM validation with immutable correctAnswer
+    const { validateAnswerWithLLM } = await import("@/lib/LLMPracticeValidation/validateAnswer");
+    
+    const llmContext: LLMValidationContext = {
+      question: input.question || "",
+      userAnswer: Array.isArray(input.userAnswer) ? input.userAnswer.join(", ") : input.userAnswer,
+      correctAnswer: input.correctAnswer, // Immutable reference
+      attemptNumber: input.attemptNumber || 1,
+      courseContext,
+    };
+    
+    return await validateAnswerWithLLM(llmContext);
+  }
 }
 
 /**

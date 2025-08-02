@@ -86,46 +86,8 @@ class QuestionBankService {
     return null;
   }
 
-  /**
-   * Update question with correct answer
-   */
-  static async updateQuestionAnswer(
-    questionId: string,
-    correctAnswer: string
-  ): Promise<boolean> {
-    try {
-      if (!correctAnswer.trim()) {
-        console.warn(
-          `Empty correct answer provided for question ${questionId}`
-        );
-        return false;
-      }
-
-      const result = await QuestionBank.updateOne(
-        { id: questionId },
-        {
-          $set: {
-            correctAnswer: correctAnswer.trim(),
-            lastUsed: new Date(),
-          },
-        }
-      );
-
-      if (result.modifiedCount > 0) {
-        console.log(`✅ Question ${questionId} updated with correct answer`);
-        return true;
-      } else {
-        console.warn(`⚠️ Question ${questionId} not found for answer update`);
-        return false;
-      }
-    } catch (error) {
-      console.error(
-        `❌ Failed to update question ${questionId} answer:`,
-        error
-      );
-      return false;
-    }
-  }
+  // REMOVED: updateQuestionAnswer method - correctAnswer is now immutable after creation
+  // This ensures validation consistency and prevents answer modification during practice
 
   /**
    * Update question performance metrics
@@ -297,7 +259,7 @@ const createQuestionSchema = z.object({
 
 const updateQuestionSchema = z.object({
   id: z.string().min(1, "Question ID is required"),
-  correctAnswer: z.string().optional(),
+  // REMOVED: correctAnswer - answers are immutable after creation
   timesUsed: z.number().min(0).optional(),
   successRate: z.number().min(0).max(1).optional(),
   lastUsed: z.string().optional(),
@@ -544,12 +506,12 @@ export async function PUT(request: NextRequest) {
     console.log("🔄 Updating question:", body.id);
     const {
       id,
-      correctAnswer,
+      // correctAnswer removed - immutable after creation
       timesUsed,
       successRate,
       lastUsed,
       isCorrect,
-      performanceOnly,
+      // performanceOnly removed - no longer used
     } = updateQuestionSchema.parse(body);
 
     // Check if question exists
@@ -567,15 +529,8 @@ export async function PUT(request: NextRequest) {
     let updateSuccess = false;
     const operations: string[] = [];
 
-    // Update correct answer if provided and not performance-only update
-    if (correctAnswer !== undefined && !performanceOnly) {
-      const answerUpdateSuccess =
-        await QuestionBankService.updateQuestionAnswer(id, correctAnswer);
-      if (answerUpdateSuccess) {
-        updateSuccess = true;
-        operations.push("answer");
-      }
-    }
+    // REMOVED: correctAnswer modification - answers are now immutable after creation
+    // This ensures consistent validation across all question sources
 
     // Handle performance updates
     if (isCorrect !== undefined) {

@@ -11,11 +11,9 @@ import {
   PracticeMode,
   QuestionType,
   QuestionLevel,
-  CourseType,
 } from "@/lib/enum";
-import { validateAnswer } from "@/lib/LLMPracticeValidation/validateAnswer";
+// Removed: Client should use server-side validation API only
 import { IQuestionBank } from "@/datamodels/questionBank.model";
-import { ICourse } from "@/datamodels/course.model";
 import { ArrowLeft, AlertCircle } from "lucide-react";
 
 // Helper function to safely map string questionType to enum
@@ -166,32 +164,7 @@ export function PracticeSession({
       return null;
     }
 
-    static async updateQuestionAnswer(
-      questionId: string,
-      correctAnswer: string
-    ): Promise<boolean> {
-      try {
-        const response = await fetch("/api/questions", {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            id: questionId,
-            correctAnswer,
-          }),
-        });
-
-        if (!response.ok) {
-          throw new Error(`Failed to update question: ${response.status}`);
-        }
-
-        const result = await response.json();
-        console.log(`✅ Question ${questionId} updated with correct answer`);
-        return result.success;
-      } catch (error) {
-        console.error(`❌ Failed to update question ${questionId}:`, error);
-        return false;
-      }
-    }
+    // REMOVED: updateQuestionAnswer method - correctAnswer is now immutable
 
     static async updateQuestionPerformance(
       questionId: string,
@@ -281,97 +254,55 @@ export function PracticeSession({
     setValidationError(null);
     const responseTime = Date.now() - questionStartTime;
 
+    const attempts = currentAttempts + 1;
+    setCurrentAttempts(attempts);
+
     try {
-      const mockCourse: ICourse = {
-        courseId: 0,
-        date: new Date(),
-        courseType: CourseType.NEW,
-        notes: `Concepts: ${currentQuestion.targetConcepts.join(", ")}`,
-        practice: currentQuestion.question,
-        keywords: currentQuestion.targetConcepts,
-        newWords: [],
-      };
+      // Use server-side validation API that ensures immutable correctAnswer
+      const response = await fetch("/api/practice-new/session-answer", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          sessionId: sessionData.sessionId,
+          questionId: currentQuestion.id,
+          userAnswer,
+          responseTime,
+          userId: "default",
+          attemptNumber: attempts,
+        }),
+      });
 
-      const attempts = currentAttempts + 1;
-      setCurrentAttempts(attempts);
-      const answerString = Array.isArray(userAnswer)
-        ? userAnswer.join(", ")
-        : userAnswer;
+      if (!response.ok) {
+        throw new Error(`Validation failed: ${response.statusText}`);
+      }
 
-      const result = await validateAnswer(
-        currentQuestion.question,
-        answerString,
-        mockCourse,
-        attempts
-      );
+      const result = await response.json();
 
       const newResult: ValidationResult = {
-        isCorrect: result.isCorrect || false,
-        feedback: result.feedback || "No feedback provided",
-        correctAnswer: result.correctAnswer || "",
+        isCorrect: result.data.isCorrect || false,
+        feedback: result.data.feedback || "No feedback provided",
+        correctAnswer: result.data.correctAnswer || "", // Only show correct answer if server provides it (after 3rd attempt)
         attempts,
         responseTime,
-        previousAnswer: userAnswer, // Store the user's current answer
-        showFinalAnswer: !result.isCorrect && attempts >= 3, // Show final answer after 3 failed attempts
+        previousAnswer: userAnswer,
+        showFinalAnswer: (!result.data.isCorrect && attempts >= 3) || result.data.isQuestionCompleted,
       };
 
       setQuestionResult(newResult);
 
-      // Check if question exists and update accordingly
-      const questionExists = await QuestionBankService.questionExists(
-        currentQuestion.id
-      );
-
-      if (questionExists) {
-        // Question exists in bank - update correct answer if we got one
-        if (newResult.correctAnswer && newResult.correctAnswer.trim()) {
-          const updateSuccess = await QuestionBankService.updateQuestionAnswer(
-            currentQuestion.id,
-            newResult.correctAnswer
-          );
-
-          if (updateSuccess) {
-            console.log(
-              `✅ Updated question ${currentQuestion.id} with correct answer`
-            );
-          }
-        }
-
-        // Update performance metrics
-        const perfUpdateSuccess =
-          await QuestionBankService.updateQuestionPerformance(
-            currentQuestion.id,
-            newResult.isCorrect
-          );
-
-        if (perfUpdateSuccess) {
-          console.log(
-            `✅ Updated performance for question ${currentQuestion.id}`
-          );
-        }
-      } else {
-        // Question doesn't exist - this shouldn't happen but let's handle it
-        console.warn(
-          `⚠️ Question ${currentQuestion.id} not found in bank during answer submission`
+      // Update performance metrics (performance tracking is still allowed)
+      const perfUpdateSuccess =
+        await QuestionBankService.updateQuestionPerformance(
+          currentQuestion.id,
+          newResult.isCorrect
         );
 
-        // Try to save it now
-        const questionData: Partial<IQuestionBank> = {
-          id: currentQuestion.id,
-          question: currentQuestion.question,
-          correctAnswer: newResult.correctAnswer,
-          questionType: mapQuestionType(currentQuestion.questionType),
-          targetConcepts: currentQuestion.targetConcepts,
-          difficulty: currentQuestion.difficulty as QuestionLevel,
-          source: "generated",
-        };
-
-        const saved = await QuestionBankService.saveQuestion(questionData);
-        if (saved) {
-          console.log(
-            `✅ Retroactively saved question ${currentQuestion.id} to bank`
-          );
-        }
+      if (perfUpdateSuccess) {
+        console.log(
+          `✅ Updated performance for question ${currentQuestion.id}`
+        );
       }
 
       // Update concept progress

@@ -1,19 +1,20 @@
 // app/api/practice-new/session-answer/route.ts - Handle question attempts in practice sessions
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/dbConnect";
-import { validateAnswer } from "@/lib/LLMPracticeValidation/validateAnswer";
 import { ConceptPracticeEngine } from "@/lib/practiceEngine/conceptPracticeEngine";
 import { SRSCalculator } from "@/lib/practiceEngine/srsCalculator";
 import {
   shouldUseClientValidation,
-  validateAnswerClientSide,
   getValidationMethodInfo,
+  validateQuestionAnswer,
+  type UnifiedValidationInput,
 } from "@/lib/practiceEngine/clientValidation";
 import ConceptPracticeSession, {
   IQuestionResponse,
 } from "@/datamodels/conceptPracticeSession.model";
 import QuestionBank from "@/datamodels/questionBank.model";
 import Course from "@/datamodels/course.model";
+import { PracticeMode } from "@/lib/enum";
 import { z } from "zod";
 
 const sessionAnswerSchema = z.object({
@@ -44,21 +45,33 @@ export async function POST(request: NextRequest) {
       `🎯 Session ${sessionId}: Question ${questionId} - Attempt ${attemptNumber}`
     );
 
-    // Get the practice session
-    const session = await ConceptPracticeSession.findOne({
+    // Get or create the practice session
+    let session = await ConceptPracticeSession.findOne({
       sessionId,
       userId,
       isActive: true,
     });
 
+    // If session doesn't exist, create it
     if (!session) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Practice session not found or inactive",
+      console.log(`🆕 Creating new practice session: ${sessionId}`);
+      session = new ConceptPracticeSession({
+        sessionId,
+        userId,
+        mode: PracticeMode.NORMAL, // Default mode
+        selectedConcepts: [], // Will be populated later if needed
+        questionsUsed: [],
+        questionResponses: [],
+        startedAt: new Date(),
+        completionReason: 'abandoned', // Default, will be updated on completion
+        sessionMetrics: {
+          totalQuestions: 0,
+          correctAnswers: 0,
+          newQuestionsGenerated: 0,
         },
-        { status: 404 }
-      );
+        isActive: true,
+      });
+      await session.save();
     }
 
     // Get the question from the question bank
@@ -77,48 +90,48 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Determine validation method based on question type
+    // Use unified validation that ensures correctAnswer immutability
     const validationMethod = getValidationMethodInfo(question.questionType);
-    let validationResult;
-    let llmResult = null; // Store LLM result for later reference
-
+    
     console.log(
       `🔍 Using ${validationMethod.method} validation for ${question.questionType}: ${validationMethod.reason}`
     );
 
-    if (shouldUseClientValidation(question.questionType)) {
-      // Use fast client-side validation for deterministic questions
-      validationResult = validateAnswerClientSide(
-        question.questionType,
-        userAnswer,
-        question.correctAnswer
-      );
-      console.log(`⚡ Client validation completed in <1ms`);
-    } else {
-      // Use LLM validation for open-ended questions
-      const course = await Course.findOne({ courseId: 1 }); // Default course for now
+    const validationInput: UnifiedValidationInput = {
+      questionType: question.questionType,
+      userAnswer,
+      correctAnswer: question.correctAnswer, // IMMUTABLE stored answer
+      question: question.question,
+      attemptNumber,
+    };
 
-      llmResult = await validateAnswer(
-        question.question,
-        Array.isArray(userAnswer) ? userAnswer.join(", ") : userAnswer,
-        course || {
+    // Get course context for LLM validation if needed
+    const courseContext = !shouldUseClientValidation(question.questionType) 
+      ? await Course.findOne({ courseId: 1 }) || {
           courseId: 1,
           courseName: "Default Polish Course",
           courseDescription: "Polish language learning course",
           courseType: "new",
           coursePeriod: "semester",
           isActive: true,
-        },
-        attemptNumber
-      );
+        }
+      : undefined;
 
-      validationResult = {
-        isCorrect: llmResult.isCorrect ?? false,
-        feedback: llmResult.feedback ?? "No feedback available",
-        correctAnswer: llmResult.correctAnswer ?? question.correctAnswer,
-        confidence: llmResult.analysisDetails?.confidence || 0,
+    const validationResult = await validateQuestionAnswer(validationInput, courseContext);
+    
+    console.log(`✅ ${validationMethod.method} validation completed`);
+
+    // Legacy tracking for backward compatibility
+    let llmResult = null;
+    if (!shouldUseClientValidation(question.questionType)) {
+      llmResult = {
+        analysisDetails: {
+          confidence: validationResult.confidence,
+          mistakeType: null,
+          questionLevel: question.difficulty,
+        },
+        keywords: [],
       };
-      console.log(`🤖 LLM validation completed`);
     }
 
     const isCorrect = validationResult.isCorrect;
