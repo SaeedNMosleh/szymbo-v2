@@ -1,21 +1,21 @@
-"use server"
+"use server";
 
-import { OpenAIService } from "@/lib/services/llm/openAIService"
-import { z } from "zod"
-import { connectToDatabase } from "@/lib/dbConnect"
-import Course from "@/datamodels/course.model"
-import { LLMServiceError } from "@/lib/utils/errors"
-import { logger } from "@/lib/utils/logger"
+import { OpenAIService } from "@/lib/services/llm/openAIService";
+import { z } from "zod";
+import { connectToDatabase } from "@/lib/dbConnect";
+import Course from "@/datamodels/course.model";
+import { logger } from "@/lib/utils/logger";
+import { createLLMJsonParser } from "@/lib/utils/jsonParser";
 
 const llmService = new OpenAIService({
   apiKey: process.env.OPENAI_API_KEY!,
   model: "gpt-4o",
-  temperature: 0.3,
-  maxTokens: 1500,
-  timeout: 30000,
-  maxRetries: 3,
-  retryDelay: 1000,
-})
+  temperature: 0.1, // Lower temperature for more consistent JSON output
+  maxTokens: 2000, // Increased to handle longer responses
+  timeout: 45000, // Increased timeout for better reliability
+  maxRetries: 4, // Increased retries for better reliability
+  retryDelay: 2000,
+});
 
 const courseSchema = z.object({
   courseId: z.number().int().positive(),
@@ -30,76 +30,83 @@ const courseSchema = z.object({
   notes: z.string(),
   practice: z.string(),
   homework: z.string().optional(),
-})
+});
 
-
-
-
-export async function validateAndSaveCourse(data: z.infer<typeof courseSchema>, finalSubmission = false) {
+export async function validateAndSaveCourse(
+  data: z.infer<typeof courseSchema>,
+  finalSubmission = false
+) {
   try {
     // Validate data with Zod
-    courseSchema.parse(data)
+    courseSchema.parse(data);
 
     logger.info("Starting course validation and save process", {
       operation: "validate_and_save_course",
       courseId: data.courseId,
       finalSubmission,
-    })
+    });
 
     if (!finalSubmission) {
       // LLM validation
-      const prompt = `Please review this course information and suggest any improvements or corrections in terms of typo, grammar issues or any suggestion to clarify. There is no need for explanation, you must only return the revised version in JSON format. Please keep the original content of key if there is no suggestion for that key or if the input is empty.
-      
-      The User inputs for course information: 
-      ${JSON.stringify(data, null, 2)}
-      
-      Return the improved version with the same structure, fixing any typos, grammar issues, and providing clearer language where needed.`;
+      const prompt = `Please review this course information and suggest any improvements or corrections in terms of typos, grammar issues, or any suggestions to clarify. 
 
-      const systemPrompt = "You are an AI assistant that helps validate and improve course information. Provide suggestions in a structured JSON format with the same structure as the input.";
+CRITICAL INSTRUCTIONS:
+- You MUST respond with ONLY valid JSON - no markdown, no explanations, no code blocks
+- Do NOT wrap your response in \`\`\`json or any other formatting
+- Return ONLY the JSON object starting with { and ending with }
+- Keep the original content of any field if there are no suggestions for improvement
+- If a field is empty in the input, keep it empty unless you have a specific improvement
+
+Course information to review:
+${JSON.stringify(data, null, 2)}
+
+Return the improved version with the exact same structure, fixing any typos, grammar issues, and providing clearer language where needed. Respond with raw JSON only.`;
+
+      const systemPrompt =
+        "You are an AI assistant that validates and improves course information. You must respond with ONLY valid JSON - no markdown formatting, no explanations, no code blocks. Your response must be parseable by JSON.parse() directly.";
 
       try {
         logger.info("Requesting LLM validation for course", {
           operation: "llm_course_validation",
           courseId: data.courseId,
-        })
+        });
 
         const response = await llmService.generateResponse(
           {
             prompt,
             systemPrompt,
           },
-          (rawResponse: string) => {
-            try {
-              return JSON.parse(rawResponse);
-            } catch (error) {
-              logger.warn("Failed to parse LLM response", {
-                error: error instanceof Error ? error.message : 'Unknown error',
-                response: rawResponse.substring(0, 200),
-              });
-              throw new LLMServiceError("Failed to parse LLM response as JSON");
-            }
-          }
+          createLLMJsonParser<Record<string, unknown>>(undefined, {
+            enableRepair: true,
+            logErrors: true,
+          })
         );
 
         if (!response.success) {
           logger.warn("LLM validation failed, proceeding without validation", {
             operation: "llm_course_validation",
             error: response.error,
+            courseId: data.courseId,
           });
           // Continue without validation rather than failing
         } else {
           const suggestions = response.data as Record<string, unknown>;
-          logger.info("LLM validation completed", {
+          logger.info("LLM validation completed successfully", {
             operation: "llm_course_validation",
+            courseId: data.courseId,
             suggestionsCount: Object.keys(suggestions).length,
             duration: response.metadata?.duration,
           });
 
           // Check if there are meaningful suggestions (not just echoing back the same data)
-          const hasRealSuggestions = Object.keys(suggestions).some(key => {
+          const hasRealSuggestions = Object.keys(suggestions).some((key) => {
             const original = data[key as keyof typeof data];
             const suggested = suggestions[key];
-            return original !== suggested && suggested !== null && suggested !== undefined;
+            return (
+              original !== suggested &&
+              suggested !== null &&
+              suggested !== undefined
+            );
           });
 
           if (hasRealSuggestions) {
@@ -107,38 +114,41 @@ export async function validateAndSaveCourse(data: z.infer<typeof courseSchema>, 
           }
         }
       } catch (error) {
-        logger.error("LLM validation error, proceeding without validation", error as Error);
+        logger.error(
+          "LLM validation error, proceeding without validation",
+          error as Error
+        );
         // Continue without validation rather than failing the entire operation
       }
     }
 
     // Connect to MongoDB
-    await connectToDatabase()
+    await connectToDatabase();
 
     // Save to MongoDB
-    const course = new Course(data)
-    await course.save()
+    const course = new Course(data);
+    await course.save();
 
     logger.success("Course saved successfully", {
       operation: "save_course",
       courseId: data.courseId,
-    })
+    });
 
-    return { success: true }
+    return { success: true };
   } catch (error) {
     logger.error("Error in validateAndSaveCourse", error as Error);
-    
+
     if (error instanceof z.ZodError) {
-      return { 
-        success: false, 
-        error: "Validation failed", 
-        details: error.errors 
+      return {
+        success: false,
+        error: "Validation failed",
+        details: error.errors,
       };
     }
-    
-    return { 
-      success: false, 
-      error: "Failed to validate and save course" 
+
+    return {
+      success: false,
+      error: "Failed to validate and save course",
     };
   }
 }
