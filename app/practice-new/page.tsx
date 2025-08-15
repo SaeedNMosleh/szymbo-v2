@@ -833,7 +833,7 @@ export default function PracticeNewPage() {
       const requestBody: Record<string, unknown> = {
         mode,
         userId: "default",
-        maxQuestions: 10,
+        batchSize: 10, // Changed from maxQuestions to batchSize for unlimited sessions
         maxConcepts: 5,
       };
 

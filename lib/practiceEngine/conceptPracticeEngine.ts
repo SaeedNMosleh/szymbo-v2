@@ -1442,4 +1442,114 @@ export class ConceptPracticeEngine {
       console.error(`❌ Error updating question performance:`, error);
     }
   }
+
+  /**
+   * Get random questions for unlimited practice when due queue is cleared
+   */
+  async getRandomQuestions(maxQuestions: number = 10): Promise<IQuestionBank[]> {
+    try {
+      console.log(`🎲 Getting ${maxQuestions} random questions for unlimited practice`);
+
+      const questions = await QuestionBank.aggregate([
+        { $match: { isActive: true } },
+        { $sample: { size: maxQuestions } }
+      ]);
+
+      // Convert to proper IQuestionBank objects
+      const randomQuestions = questions.map(q => ({
+        ...q,
+        id: q.id || q._id?.toString(),
+      })) as IQuestionBank[];
+
+      console.log(`✅ Found ${randomQuestions.length} random questions`);
+      return randomQuestions;
+    } catch (error) {
+      console.error("❌ Error getting random questions:", error);
+      return [];
+    }
+  }
+
+  /**
+   * Get next batch of questions for unlimited session
+   * Intelligently switches between due concepts and random questions
+   */
+  async getNextQuestionBatch(
+    sessionId: string,
+    userId: string,
+    batchSize: number = 10
+  ): Promise<{
+    questions: IQuestionBank[];
+    conceptIds: string[];
+    rationale: string;
+    isDueQueueCleared: boolean;
+    totalDueConcepts: number;
+  }> {
+    try {
+      console.log(`🔄 Getting batch for session ${sessionId}, user ${userId}`);
+
+      // Check current due status
+      const [dueProgress, overdueProgress] = await Promise.all([
+        SRSCalculator.getConceptsDueForReview(userId),
+        SRSCalculator.getOverdueConcepts(userId),
+      ]);
+
+      const totalDueConcepts = dueProgress.length + overdueProgress.length;
+      const isDueQueueCleared = totalDueConcepts === 0;
+
+      let questions: IQuestionBank[];
+      let conceptIds: string[];
+      let rationale: string;
+
+      if (isDueQueueCleared) {
+        // Switch to random questions
+        console.log("🎯 Due queue cleared - switching to random questions");
+        questions = await this.getRandomQuestions(batchSize);
+        
+        // Extract concept IDs from random questions
+        const conceptSet = new Set<string>();
+        questions.forEach(q => q.targetConcepts.forEach(tc => conceptSet.add(tc)));
+        conceptIds = Array.from(conceptSet);
+        
+        rationale = "All due concepts completed! Continuing with random practice questions";
+      } else {
+        // Continue with due concepts
+        console.log(`🎯 ${totalDueConcepts} concepts still due - continuing with SRS selection`);
+        
+        const selection = await this.selectPracticeConceptsForUser(
+          userId,
+          Math.min(5, totalDueConcepts)
+        );
+        
+        conceptIds = selection.concepts.map(c => c.id);
+        questions = await this.getQuestionsForConcepts(conceptIds, PracticeMode.NORMAL, batchSize);
+        rationale = `${totalDueConcepts} concepts still due - ${selection.rationale}`;
+      }
+
+      // Fallback if no questions found
+      if (questions.length === 0) {
+        console.log("⚠️ No questions found - using fallback random questions");
+        questions = await this.getRandomQuestions(batchSize);
+        rationale += " (using fallback questions)";
+      }
+
+      return {
+        questions,
+        conceptIds,
+        rationale,
+        isDueQueueCleared,
+        totalDueConcepts,
+      };
+    } catch (error) {
+      console.error("❌ Error getting next question batch:", error);
+      
+      // Return empty result on error
+      return {
+        questions: [],
+        conceptIds: [],
+        rationale: "Error loading next batch",
+        isDueQueueCleared: false,
+        totalDueConcepts: 0,
+      };
+    }
+  }
 }

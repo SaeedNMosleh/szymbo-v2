@@ -67,10 +67,26 @@ interface SessionData {
   questions: Question[];
   metadata: {
     mode: PracticeMode;
+    batchSize?: number;
+    isUnlimitedSession?: boolean;
+    initialBatchSize?: number;
     totalQuestions: number;
     conceptCount: number;
     rationale: string;
   };
+}
+
+// Unlimited session state
+interface UnlimitedSessionState {
+  totalAnswered: number;
+  currentBatch: number;
+  questionsBuffer: Question[];
+  isDueQueueCleared: boolean;
+  totalDueConcepts: number;
+  motivationalMilestone: number;
+  backgroundLoading: boolean;
+  showMotivationalOverlay: boolean;
+  motivationalMessage: string;
 }
 
 interface PracticeSessionProps {
@@ -99,20 +115,131 @@ export function PracticeSession({
   const [questionStartTime, setQuestionStartTime] = useState<number>(
     Date.now()
   );
-  const [isSessionComplete, setIsSessionComplete] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
 
-  const currentQuestion = sessionData.questions[currentQuestionIndex];
-  const progress =
+  // Unlimited session state
+  const [unlimitedState, setUnlimitedState] = useState<UnlimitedSessionState>({
+    totalAnswered: 0,
+    currentBatch: 1,
+    questionsBuffer: sessionData.questions,
+    isDueQueueCleared: false,
+    totalDueConcepts: 0,
+    motivationalMilestone: 10,
+    backgroundLoading: false,
+    showMotivationalOverlay: false,
+    motivationalMessage: "",
+  });
+
+  // Background loading for next batch
+  const loadNextBatch = React.useCallback(async () => {
+    if (unlimitedState.backgroundLoading) return;
+
+    console.log("🔄 Starting background batch loading...");
+    
+    setUnlimitedState(prev => ({ ...prev, backgroundLoading: true }));
+
+    try {
+      const response = await fetch("/api/practice-new/session-batch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId: sessionData.sessionId,
+          currentQuestionCount: unlimitedState.totalAnswered,
+          batchSize: sessionData.metadata.batchSize || 10,
+          userId: "default",
+        }),
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success) {
+          const newQuestions = result.data.questions;
+          console.log(`✅ Loaded ${newQuestions.length} questions in background`);
+
+          setUnlimitedState(prev => ({
+            ...prev,
+            questionsBuffer: [...prev.questionsBuffer, ...newQuestions],
+            isDueQueueCleared: result.data.metadata.isDueQueueCleared,
+            totalDueConcepts: result.data.metadata.totalDueConcepts,
+            backgroundLoading: false,
+          }));
+        }
+      }
+    } catch (error) {
+      console.error("❌ Background loading failed:", error);
+      setUnlimitedState(prev => ({ ...prev, backgroundLoading: false }));
+    }
+  }, [sessionData.sessionId, sessionData.metadata.batchSize, unlimitedState.totalAnswered, unlimitedState.backgroundLoading]);
+
+  const isUnlimitedSession = sessionData.metadata.isUnlimitedSession || false;
+  const currentQuestion = unlimitedState.questionsBuffer[currentQuestionIndex];
+  
+  // For unlimited sessions, we don't calculate progress as a percentage
+  const progress = isUnlimitedSession ? 0 : 
     ((currentQuestionIndex + (questionResult ? 1 : 0)) /
       sessionData.questions.length) *
     100;
+
+  // Fetch initial due concept count when session starts
+  useEffect(() => {
+    if (isUnlimitedSession) {
+      const fetchInitialDueCount = async () => {
+        try {
+          const response = await fetch("/api/practice-new/concept-due?userId=default&realTimeCount=true");
+          if (response.ok) {
+            const result = await response.json();
+            if (result.success) {
+              const dueData = result.data;
+              setUnlimitedState(prev => ({
+                ...prev,
+                isDueQueueCleared: dueData.isDueQueueCleared,
+                totalDueConcepts: dueData.totalDue,
+              }));
+              console.log(`📊 Initial due concepts loaded: ${dueData.totalDue} total`);
+            }
+          }
+        } catch (error) {
+          console.error("❌ Error fetching initial due count:", error);
+        }
+      };
+      
+      fetchInitialDueCount();
+    }
+  }, [isUnlimitedSession]);
 
   useEffect(() => {
     setQuestionStartTime(Date.now());
     setValidationError(null);
     setCurrentAttempts(0); // Reset attempts for new question
-  }, [currentQuestionIndex]);
+
+    // Background loading logic for unlimited sessions
+    if (isUnlimitedSession && !unlimitedState.backgroundLoading) {
+      const questionsRemaining = unlimitedState.questionsBuffer.length - currentQuestionIndex - 1;
+      
+      // Start background loading when 2 questions remain in current batch
+      if (questionsRemaining <= 2) {
+        loadNextBatch();
+      }
+    }
+  }, [currentQuestionIndex, isUnlimitedSession, unlimitedState.backgroundLoading, unlimitedState.questionsBuffer.length, loadNextBatch]);
+
+  // Get motivational messages
+  const getMotivationalMessage = (milestone: number, isDueCleared: boolean): string => {
+    const messages = [
+      "🎉 Great progress! Loading more questions...",
+      "🌟 You're doing amazing! Preparing next set...",
+      "💪 Keep up the excellent work! Getting more challenges...",
+      "🚀 Fantastic effort! Loading fresh questions...",
+      "⭐ Outstanding progress! Preparing next batch...",
+    ];
+
+    if (isDueCleared) {
+      return "🌟 All due concepts completed! Continuing with random practice...";
+    }
+
+    const randomIndex = (milestone / 10 - 1) % messages.length;
+    return messages[randomIndex];
+  };
 
   // Enhanced Question Bank Service
   class QuestionBankService {
@@ -292,6 +419,18 @@ export function PracticeSession({
 
       setQuestionResult(newResult);
 
+      // Update unlimited session state with real-time due concept data
+      if (isUnlimitedSession && result.data.dueConceptsStatus) {
+        const dueStatus = result.data.dueConceptsStatus;
+        setUnlimitedState(prev => ({
+          ...prev,
+          isDueQueueCleared: dueStatus.isDueQueueCleared,
+          totalDueConcepts: dueStatus.totalDue,
+        }));
+        
+        console.log(`📊 Updated due concepts: ${dueStatus.totalDue} total, cleared: ${dueStatus.isDueQueueCleared}`);
+      }
+
       // Update performance metrics (performance tracking is still allowed)
       const perfUpdateSuccess =
         await QuestionBankService.updateQuestionPerformance(
@@ -341,16 +480,62 @@ export function PracticeSession({
       setSessionResults([...sessionResults, questionResult]);
     }
 
-    if (currentQuestionIndex < sessionData.questions.length - 1) {
-      setCurrentQuestionIndex(currentQuestionIndex + 1);
-      setUserAnswer(Array.isArray(userAnswer) ? [] : "");
-      setQuestionResult(null);
-      setValidationError(null);
-      setQuestionStartTime(Date.now());
-      // currentAttempts will be reset by useEffect when currentQuestionIndex changes
+    const totalAnswered = unlimitedState.totalAnswered + 1;
+    
+    // Update unlimited session state
+    setUnlimitedState(prev => ({
+      ...prev,
+      totalAnswered,
+    }));
+
+    if (isUnlimitedSession) {
+      // Unlimited session logic
+      const nextQuestionIndex = currentQuestionIndex + 1;
+      
+      // Check if we're at a motivational milestone (every 10th question)
+      if (totalAnswered % 10 === 0) {
+        const message = getMotivationalMessage(totalAnswered, unlimitedState.isDueQueueCleared);
+        
+        setUnlimitedState(prev => ({
+          ...prev,
+          showMotivationalOverlay: true,
+          motivationalMessage: message,
+          motivationalMilestone: totalAnswered + 10,
+        }));
+
+        // Hide overlay after 2 seconds and continue
+        setTimeout(() => {
+          setUnlimitedState(prev => ({
+            ...prev,
+            showMotivationalOverlay: false,
+          }));
+        }, 2000);
+      }
+
+      // Check if we have more questions in buffer
+      if (nextQuestionIndex < unlimitedState.questionsBuffer.length) {
+        setCurrentQuestionIndex(nextQuestionIndex);
+        setUserAnswer(Array.isArray(userAnswer) ? [] : "");
+        setQuestionResult(null);
+        setValidationError(null);
+        setQuestionStartTime(Date.now());
+      } else {
+        // This shouldn't happen with proper background loading
+        console.warn("⚠️ Ran out of questions in unlimited session");
+        loadNextBatch(); // Emergency batch load
+      }
     } else {
-      // Session complete
-      setIsSessionComplete(true);
+      // Legacy finite session logic
+      if (currentQuestionIndex < sessionData.questions.length - 1) {
+        setCurrentQuestionIndex(currentQuestionIndex + 1);
+        setUserAnswer(Array.isArray(userAnswer) ? [] : "");
+        setQuestionResult(null);
+        setValidationError(null);
+        setQuestionStartTime(Date.now());
+      } else {
+        // Finite session complete - unlimited sessions never complete
+        console.log("Finite session complete");
+      }
     }
   };
 
@@ -365,7 +550,11 @@ export function PracticeSession({
     // Keep currentAttempts - don't reset it during retry
   };
 
-  if (isSessionComplete) {
+  // Unlimited sessions never show completion screen - they run forever
+  // Only finite sessions (legacy) would show completion
+  const shouldShowCompletion = !isUnlimitedSession && currentQuestionIndex >= sessionData.questions.length;
+  
+  if (shouldShowCompletion) {
     const finalResults = questionResult
       ? [...sessionResults, questionResult]
       : sessionResults;
@@ -457,6 +646,21 @@ export function PracticeSession({
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
+      {/* Motivational Overlay */}
+      {unlimitedState.showMotivationalOverlay && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <Card className="mx-4 max-w-md">
+            <CardContent className="pt-6 text-center">
+              <div className="mb-4 text-4xl">{unlimitedState.motivationalMessage.split(' ')[0]}</div>
+              <p className="text-lg font-semibold">{unlimitedState.motivationalMessage.substring(2)}</p>
+              <div className="mt-4">
+                <div className="mx-auto h-2 w-12 animate-pulse rounded-full bg-blue-500"></div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
@@ -464,12 +668,36 @@ export function PracticeSession({
               <ArrowLeft className="mr-2 size-4" />
               Back
             </Button>
-            <div className="text-sm text-gray-600">
-              Question {currentQuestionIndex + 1} of{" "}
-              {sessionData.questions.length}
-            </div>
+            {isUnlimitedSession ? (
+              <div className="text-right">
+                <div className="text-sm font-semibold text-gray-900">
+                  Question {unlimitedState.totalAnswered + 1}
+                </div>
+                <div className="text-xs text-gray-600">
+                  {unlimitedState.isDueQueueCleared 
+                    ? "🌟 All due completed!" 
+                    : `${unlimitedState.totalDueConcepts} concepts still due`}
+                </div>
+              </div>
+            ) : (
+              <div className="text-sm text-gray-600">
+                Question {currentQuestionIndex + 1} of{" "}
+                {sessionData.questions.length}
+              </div>
+            )}
           </div>
-          <Progress value={progress} className="w-full" />
+          {!isUnlimitedSession && <Progress value={progress} className="w-full" />}
+          {isUnlimitedSession && (
+            <div className="mt-2 flex items-center gap-2 text-xs text-gray-500">
+              <span>Unlimited Practice Session</span>
+              {unlimitedState.backgroundLoading && (
+                <span className="flex items-center gap-1">
+                  <div className="size-2 animate-pulse rounded-full bg-blue-500"></div>
+                  Loading next batch...
+                </span>
+              )}
+            </div>
+          )}
         </CardHeader>
       </Card>
 
@@ -551,8 +779,9 @@ export function PracticeSession({
             onRetry={handleRetryQuestion}
             onNext={handleNextQuestion}
             currentQuestionIndex={currentQuestionIndex}
-            totalQuestions={sessionData.questions.length}
+            totalQuestions={isUnlimitedSession ? unlimitedState.totalAnswered + 1 : sessionData.questions.length}
             validationError={validationError}
+            isUnlimitedSession={isUnlimitedSession}
           />
         </CardContent>
       </Card>

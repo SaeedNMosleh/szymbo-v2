@@ -50,6 +50,15 @@ interface QuestionTypeQuantity {
   quantity: number;
 }
 
+interface CoverageData {
+  conceptId: string;
+  conceptName: string;
+  category: string;
+  difficulty: string;
+  coverage: Record<string, number>;
+  totalQuestions: number;
+}
+
 interface QuestionGenerationPlannerProps {
   onGenerationComplete: () => void;
   onSwitchToDrafts?: () => void;
@@ -81,11 +90,13 @@ export default function QuestionGenerationPlanner({
   const [draftCount, setDraftCount] = useState(0);
   const [isCheckingDrafts, setIsCheckingDrafts] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [questionCounts, setQuestionCounts] = useState<Record<string, number>>({});
 
   useEffect(() => {
     fetchConcepts();
     fetchGroups();
     checkDraftCount();
+    fetchCoverageData();
   }, []);
 
   const fetchConcepts = async () => {
@@ -132,6 +143,25 @@ export default function QuestionGenerationPlanner({
       setGroups(groupSelections);
     } catch {
       setError("Failed to load groups");
+    }
+  };
+
+  const fetchCoverageData = async () => {
+    try {
+      const response = await fetch("/api/question-management/coverage");
+      if (response.ok) {
+        const data = await response.json();
+        const coverage = data.data?.coverage || data.coverage || [];
+        
+        // Create a map of concept ID to question count
+        const counts: Record<string, number> = {};
+        coverage.forEach((concept: CoverageData) => {
+          counts[concept.conceptId] = concept.totalQuestions;
+        });
+        setQuestionCounts(counts);
+      }
+    } catch (err) {
+      console.error("Failed to fetch coverage data:", err);
     }
   };
 
@@ -251,6 +281,12 @@ export default function QuestionGenerationPlanner({
 
   const getTotalQuestions = () => {
     return questionTypes.reduce((sum, qt) => sum + qt.quantity, 0);
+  };
+
+  const getGroupQuestionCount = (memberConcepts: string[]) => {
+    return memberConcepts.reduce((total, conceptId) => {
+      return total + (questionCounts[conceptId] || 0);
+    }, 0);
   };
 
   const handleGenerate = async () => {
@@ -424,6 +460,9 @@ export default function QuestionGenerationPlanner({
                           <Badge variant="secondary" className="text-xs">
                             {concept.difficulty}
                           </Badge>
+                          <Badge variant="secondary" className="bg-blue-50 text-xs text-blue-700">
+                            {questionCounts[concept.conceptId] || 0} questions
+                          </Badge>
                         </div>
                       </div>
                     </Label>
@@ -462,6 +501,9 @@ export default function QuestionGenerationPlanner({
                           </Badge>
                           <Badge variant="outline" className="text-xs">
                             {group.memberConcepts.length} concepts
+                          </Badge>
+                          <Badge variant="secondary" className="bg-blue-50 text-xs text-blue-700">
+                            {getGroupQuestionCount(group.memberConcepts)} questions
                           </Badge>
                         </div>
                       </div>

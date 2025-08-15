@@ -9,7 +9,7 @@ import { z } from "zod";
 const sessionRequestSchema = z.object({
   mode: z.enum([PracticeMode.NORMAL, PracticeMode.DRILL]),
   userId: z.string().optional().default("default"),
-  maxQuestions: z.number().optional().default(10),
+  batchSize: z.number().optional().default(10), // Questions per batch for unlimited sessions
   maxConcepts: z.number().optional().default(5),
   targetConceptIds: z.array(z.string()).optional(),
   courseId: z.number().optional(),
@@ -22,11 +22,11 @@ export async function POST(request: NextRequest) {
     await connectToDatabase();
     const body = await request.json();
 
-    const { mode, userId, maxQuestions, maxConcepts, targetConceptIds, courseId, drillType } =
+    const { mode, userId, batchSize, maxConcepts, targetConceptIds, courseId, drillType } =
       sessionRequestSchema.parse(body);
 
     console.log(
-      `🎯 Starting practice session: mode=${mode}, userId=${userId}, maxQuestions=${maxQuestions}, maxConcepts=${maxConcepts}`
+      `🎯 Starting unlimited practice session: mode=${mode}, userId=${userId}, batchSize=${batchSize}, maxConcepts=${maxConcepts}`
     );
 
     const practiceEngine = new ConceptPracticeEngine();
@@ -137,12 +137,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get questions for selected concepts with enhanced fallback
-    console.log(`🔍 Attempting to get questions for ${conceptIds.length} concepts`);
+    // Get initial batch of questions for unlimited session
+    console.log(`🔍 Attempting to get initial batch of ${batchSize} questions for ${conceptIds.length} concepts`);
     const questions = await practiceEngine.getQuestionsForConcepts(
       conceptIds,
       mode,
-      maxQuestions
+      batchSize
     );
 
     // Enhanced error handling with specific messages - PREVENT ZERO QUESTION SESSIONS
@@ -289,7 +289,9 @@ export async function POST(request: NextRequest) {
           })),
           metadata: {
             mode,
-            totalQuestions: questions.length,
+            batchSize,
+            isUnlimitedSession: true,
+            initialBatchSize: questions.length,
             conceptCount: conceptIds.length,
             rationale: enhancedRationale,
             fallbackUsed,

@@ -7,6 +7,12 @@ import type { ICourse } from "@/datamodels/course.model";
 import type { IQuestionAnswer } from "@/datamodels/questionAnswer.model";
 import { QuestionType, MistakeType, QuestionLevel } from "@/lib/enum";
 import type { ValidationResult, LLMValidationContext } from "@/lib/practiceEngine/clientValidation";
+import {
+  LLM_ANSWER_VALIDATION_PROMPT,
+  LEGACY_ANSWER_VALIDATION_PROMPT,
+  LLM_VALIDATION_SYSTEM_PROMPT,
+  LEGACY_VALIDATION_SYSTEM_PROMPT
+} from "@/prompts/validation";
 
 const llmService = new OpenAIService({
   apiKey: process.env.OPENAI_API_KEY!,
@@ -25,38 +31,14 @@ export async function validateAnswerWithLLM(
   context: LLMValidationContext
 ): Promise<ValidationResult> {
   try {
-    const prompt = `Validate the user's answer against the CORRECT ANSWER provided. You MUST NOT modify or suggest a different correct answer.
+    const prompt = LLM_ANSWER_VALIDATION_PROMPT
+      .replace('{question}', context.question)
+      .replace('{userAnswer}', context.userAnswer)
+      .replace('{correctAnswer}', context.correctAnswer)
+      .replace(/\{correctAnswer\}/g, context.correctAnswer)
+      .replace('{attemptNumber}', context.attemptNumber.toString());
 
-QUESTION: ${context.question}
-USER'S ANSWER: ${context.userAnswer}
-CORRECT ANSWER (IMMUTABLE): ${context.correctAnswer}
-ATTEMPT NUMBER: ${context.attemptNumber}
-
-IMPORTANT: 
-- The correct answer "${context.correctAnswer}" is IMMUTABLE and CANNOT be changed
-- You must evaluate if the user's answer is semantically equivalent to the correct answer
-- Provide helpful feedback without revealing the correct answer until attempt 3
-
-FEEDBACK GUIDELINES:
-- Attempt 1-2: Provide smart, indirect hints to help the user improve (DO NOT reveal the correct answer)
-- Attempt 3: You may reference the correct answer in your feedback
-- Use simple A1 level Polish language for feedback
-- For typos or similar forms: Give hints that they're almost correct
-- Be helpful and encouraging
-
-RESPONSE FORMAT - Return ONLY valid JSON:
-{
-  "isCorrect": boolean (true if semantically equivalent to correct answer),
-  "feedback": "string (hint for attempts 1-2, can reference correct answer for attempt 3)",
-  "confidenceLevel": number (0-1, how confident you are in the correctness evaluation),
-  "errorType": "one of: ${Object.values(MistakeType).join(", ")} or null",
-  "keywords": ["array", "of", "2-3", "keywords"],
-  "questionLevel": "one of: ${Object.values(QuestionLevel).join(", ")}",
-  "responseTime": number (estimated seconds)
-}`;
-
-    const systemPrompt = `You are an AI assistant that validates answers for language learning. 
-CRITICAL: You MUST NOT modify the provided correct answer. Your job is to determine if the user's answer is equivalent to the stored correct answer and provide appropriate feedback. Always respond with valid JSON only.`;
+    const systemPrompt = LLM_VALIDATION_SYSTEM_PROMPT;
 
     logger.info("Validating user answer with LLM", {
       operation: "validate_answer_llm",
@@ -156,36 +138,13 @@ export async function validateAnswer(
       question: question.substring(0, 50),
     });
 
-    const prompt = `Validate the user's answer to the following question in the context of this course:
-    
-    Course: ${JSON.stringify(course, null, 2)}
-    Question: ${question}
-    User's Answer: ${userAnswer}
-    Attempt Number: ${attemptNumber}
-    
-    FEEDBACK GUIDELINES:
-    - Attempt 1-2: Provide smart, indirect, and creative feedback to help the user improve
-    - Attempt 3: Provide the correct answer
-    - Use simple A1 level Polish language for feedback
-    - For typos or similar forms: Give hints that they're almost correct and need to correct typo/form
-    - Don't be strict, be helpful and encouraging
-    
-    RESPONSE FORMAT:
-    Return a JSON object with these required fields:
-    {
-      "isCorrect": boolean,
-      "feedback": "string (hint for attempts 1-2, correct answer for attempt 3)",
-      "correctAnswer": "string",
-      "questionType": "one of: ${Object.values(QuestionType).join(", ")}",
-      "confidenceLevel": number (0-1),
-      "errorType": "one of: ${Object.values(MistakeType).join(", ")} or null",
-      "keywords": ["array", "of", "2-3", "keywords"],
-      "category": "string (vocabulary, grammar, listening comprehension, etc.)",
-      "questionLevel": "one of: ${Object.values(QuestionLevel).join(", ")}",
-      "responseTime": number (estimated seconds)
-    }`;
+    const prompt = LEGACY_ANSWER_VALIDATION_PROMPT
+      .replace('{course}', JSON.stringify(course, null, 2))
+      .replace('{question}', question)
+      .replace('{userAnswer}', userAnswer)
+      .replace('{attemptNumber}', attemptNumber.toString());
 
-    const systemPrompt = "You are an AI assistant that validates answers for language learning practice sessions. Always respond with valid JSON.";
+    const systemPrompt = LEGACY_VALIDATION_SYSTEM_PROMPT;
 
     logger.info("Validating user answer", {
       operation: "validate_answer",

@@ -2,6 +2,7 @@
 
 import Groq from "groq-sdk";
 import { polishDay, polishMonth } from "@/data/polishDayMonth";
+import { DATE_VALIDATION_PROMPT } from "@/prompts/dateValidation";
 import dotenv from "dotenv";
 
 dotenv.config(); // Load environment variables from .env file
@@ -22,24 +23,14 @@ export async function validateDate(
   const correctMonth = polishMonth[parseInt(month) - 1];
   const correctYear = yearQuestion
 
-  const prompt = `
-    Validate if the given answer in Polish correctly represents the date ${date}.
-    The user's answer is:
-    Day: "${userDay}"
-    Month: "${userMonth}"
-    Year: "${userYear}"
-    
-    The correct forms are:
-    Day: "${correctDay}"
-    Month: "${correctMonth}"
-    Year: "${correctYear}"
-
-    Respond in the following format:
-    Day correct: [true/false]
-    Month correct: [true/false]
-    Year correct: [true/false]
-    Comment: [provide a brief comment about each part of the answer, mentioning any typos or grammatical issues]
-  `;
+  const prompt = DATE_VALIDATION_PROMPT
+    .replace('{date}', date)
+    .replace('{userDay}', userDay)
+    .replace('{userMonth}', userMonth)
+    .replace('{userYear}', userYear)
+    .replace('{correctDay}', correctDay)
+    .replace('{correctMonth}', correctMonth)
+    .replace('{correctYear}', correctYear);
 
   const chatCompletion = await groq.chat.completions.create({
     messages: [

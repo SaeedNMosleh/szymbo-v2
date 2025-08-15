@@ -6,6 +6,10 @@ import { connectToDatabase } from "@/lib/dbConnect";
 import Course from "@/datamodels/course.model";
 import { logger } from "@/lib/utils/logger";
 import { createLLMJsonParser } from "@/lib/utils/jsonParser";
+import {
+  COURSE_VALIDATION_PROMPT,
+  COURSE_VALIDATION_SYSTEM_PROMPT
+} from "@/prompts/courseValidation";
 
 const llmService = new OpenAIService({
   apiKey: process.env.OPENAI_API_KEY!,
@@ -48,22 +52,10 @@ export async function validateAndSaveCourse(
 
     if (!finalSubmission) {
       // LLM validation
-      const prompt = `Please review this course information and suggest any improvements or corrections in terms of typos, grammar issues, or any suggestions to clarify. 
+      const prompt = COURSE_VALIDATION_PROMPT
+        .replace('{courseData}', JSON.stringify(data, null, 2));
 
-CRITICAL INSTRUCTIONS:
-- You MUST respond with ONLY valid JSON - no markdown, no explanations, no code blocks
-- Do NOT wrap your response in \`\`\`json or any other formatting
-- Return ONLY the JSON object starting with { and ending with }
-- Keep the original content of any field if there are no suggestions for improvement
-- If a field is empty in the input, keep it empty unless you have a specific improvement
-
-Course information to review:
-${JSON.stringify(data, null, 2)}
-
-Return the improved version with the exact same structure, fixing any typos, grammar issues, and providing clearer language where needed. Respond with raw JSON only.`;
-
-      const systemPrompt =
-        "You are an AI assistant that validates and improves course information. You must respond with ONLY valid JSON - no markdown formatting, no explanations, no code blocks. Your response must be parseable by JSON.parse() directly.";
+      const systemPrompt = COURSE_VALIDATION_SYSTEM_PROMPT;
 
       try {
         logger.info("Requesting LLM validation for course", {

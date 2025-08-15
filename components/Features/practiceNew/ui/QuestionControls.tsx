@@ -16,6 +16,7 @@ interface QuestionControlsProps {
   currentQuestionIndex: number;
   totalQuestions: number;
   validationError?: string | null;
+  isUnlimitedSession?: boolean;
 }
 
 export function QuestionControls({
@@ -28,6 +29,7 @@ export function QuestionControls({
   currentQuestionIndex,
   totalQuestions,
   validationError,
+  isUnlimitedSession = false,
 }: QuestionControlsProps) {
   if (validationError) {
     return (
@@ -115,9 +117,11 @@ export function QuestionControls({
                 : "flex-1"
             }
           >
-            {currentQuestionIndex < totalQuestions - 1
+            {isUnlimitedSession 
               ? "Next Question"
-              : "Complete Session"}
+              : (currentQuestionIndex < totalQuestions - 1 
+                ? "Next Question" 
+                : "Complete Session")}
           </Button>
         </div>
       </div>

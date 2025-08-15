@@ -4,13 +4,14 @@ import { connectToDatabase } from "@/lib/dbConnect";
 import { SRSCalculator } from "@/lib/practiceEngine/srsCalculator";
 import Concept from "@/datamodels/concept.model";
 
-// GET /api/practice-new/concepts-due - Get concepts due for practice
+// GET /api/practice-new/concept-due - Get concepts due for practice (Note: endpoint uses singular 'concept-due')
 export async function GET(request: NextRequest) {
   try {
     await connectToDatabase();
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get("userId") || "default";
     const includeDetails = searchParams.get("includeDetails") === "true";
+    const realTimeCount = searchParams.get("realTimeCount") === "true";
 
     // Get concepts due for review
     const [dueProgress, overdueProgress] = await Promise.all([
@@ -20,6 +21,20 @@ export async function GET(request: NextRequest) {
 
     const allDueProgress = [...overdueProgress, ...dueProgress];
 
+    // For real-time count requests (used during unlimited practice)
+    if (realTimeCount) {
+      return NextResponse.json({
+        success: true,
+        data: {
+          totalDue: allDueProgress.length,
+          dueConcepts: dueProgress.length,
+          overdueConcepts: overdueProgress.length,
+          isDueQueueCleared: allDueProgress.length === 0,
+          timestamp: new Date().toISOString()
+        }
+      }, { status: 200 });
+    }
+
     if (!includeDetails) {
       // Return just concept IDs for lightweight requests
       return NextResponse.json({
@@ -28,7 +43,8 @@ export async function GET(request: NextRequest) {
           conceptIds: allDueProgress.map(p => p.conceptId),
           dueConcepts: dueProgress.length,
           overdueConcepts: overdueProgress.length,
-          totalDue: allDueProgress.length
+          totalDue: allDueProgress.length,
+          isDueQueueCleared: allDueProgress.length === 0
         }
       }, { status: 200 });
     }
@@ -81,9 +97,11 @@ export async function GET(request: NextRequest) {
           totalDue: allDueProgress.length,
           dueConcepts: dueProgress.length,
           overdueConcepts: overdueProgress.length,
+          isDueQueueCleared: allDueProgress.length === 0,
           averagePriority: conceptsWithProgress.length > 0 
             ? conceptsWithProgress.reduce((sum, c) => sum + c.priority, 0) / conceptsWithProgress.length 
-            : 0
+            : 0,
+          timestamp: new Date().toISOString()
         }
       }
     }, { status: 200 });

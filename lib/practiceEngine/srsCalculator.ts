@@ -102,7 +102,12 @@ export class SRSCalculator {
 
     // Calculate next review date
     const nextReview = new Date();
-    nextReview.setDate(nextReview.getDate() + newIntervalDays);
+    if (params.isCorrect) {
+      nextReview.setDate(nextReview.getDate() + newIntervalDays);
+    } else {
+      // Wrong answers stay due today for immediate re-practice
+      nextReview.setHours(0, 0, 0, 0); // Set to start of today
+    }
 
     return {
       nextReview,

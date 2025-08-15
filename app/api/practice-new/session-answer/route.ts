@@ -199,6 +199,27 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Get real-time due concept count for unlimited sessions
+    let dueConcepts = 0;
+    let totalDueConcepts = 0;
+    let isDueQueueCleared = false;
+    
+    try {
+      const [dueProgress, overdueProgress] = await Promise.all([
+        SRSCalculator.getConceptsDueForReview(userId),
+        SRSCalculator.getOverdueConcepts(userId),
+      ]);
+      
+      dueConcepts = dueProgress.length;
+      const overdueConcepts = overdueProgress.length;
+      totalDueConcepts = dueConcepts + overdueConcepts;
+      isDueQueueCleared = totalDueConcepts === 0;
+      
+      console.log(`📊 Due concepts after answer: ${totalDueConcepts} total (${dueConcepts} due, ${overdueConcepts} overdue)`);
+    } catch (error) {
+      console.error("❌ Error fetching due concept count:", error);
+    }
+
     // Save session updates
     await session.save();
 
@@ -219,6 +240,14 @@ export async function POST(request: NextRequest) {
           questionsCompleted: session.questionResponses.filter(
             (resp: IQuestionResponse) => resp.isCorrect || resp.attempts >= 3
           ).length,
+        },
+        // Real-time due concept tracking for unlimited sessions
+        dueConceptsStatus: {
+          totalDue: totalDueConcepts,
+          dueConcepts,
+          overdueConcepts: totalDueConcepts - dueConcepts,
+          isDueQueueCleared,
+          timestamp: new Date().toISOString(),
         },
         validationDetails: {
           method: validationMethod.method,
