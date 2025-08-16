@@ -2,106 +2,134 @@ import { QuestionType, QuestionLevel } from "@/lib/enum";
 
 // Difficulty level guidelines for question generation
 export const DIFFICULTY_GUIDELINES = {
-  [QuestionLevel.A1]: "Use basic vocabulary, simple present tense, common everyday topics",
-  [QuestionLevel.A2]: "Include past/future tenses, more vocabulary, basic cases",
-  [QuestionLevel.B1]: "Complex sentences, all cases, conditional mood, broader topics",
+  [QuestionLevel.A1]:
+    "Use basic vocabulary, simple present tense, common everyday topics",
+  [QuestionLevel.A2]:
+    "Include past/future tenses, more vocabulary, basic cases",
+  [QuestionLevel.B1]:
+    "Complex sentences, all cases, conditional mood, broader topics",
   [QuestionLevel.B2]: "Advanced grammar, nuanced vocabulary, cultural contexts",
-  [QuestionLevel.C1]: "Sophisticated language, idiomatic expressions, complex concepts",
-  [QuestionLevel.C2]: "Native-level complexity, literary language, abstract concepts"
+  [QuestionLevel.C1]:
+    "Sophisticated language, idiomatic expressions, complex concepts",
+  [QuestionLevel.C2]:
+    "Native-level complexity, literary language, abstract concepts",
 } as const;
 
 // Question type prompts with descriptions, templates, and examples
-export const QUESTION_TYPE_PROMPTS: Record<QuestionType, { description: string; template: string; example: string }> = {
+export const QUESTION_TYPE_PROMPTS: Record<
+  QuestionType,
+  { description: string; template: string; example: string }
+> = {
   [QuestionType.BASIC_CLOZE]: {
     description: "Fill-in-the-blank questions with single word answers",
-    template: "Create a sentence with a missing word (use _____ for the blank). The missing word should test the concept.",
-    example: "Question: 'Ja _____ do sklepu.' Answer: 'idę'"
+    template:
+      "Create a sentence with a missing word (use _____ for the blank). The missing word should test the concept.",
+    example: "Question: 'Ja _____ do sklepu.' Answer: 'idę'",
   },
   [QuestionType.MULTI_CLOZE]: {
     description: "Fill-in-the-blank questions with multiple missing words",
-    template: "Create a sentence with 2-3 missing words (use _____ for each blank). Each blank tests related concepts.",
-    example: "Question: 'Moja _____ _____ do pracy autobusem.' Answer: 'siostra jedzie'"
+    template:
+      "Create a sentence with 2-3 missing words (use _____ for each blank). Each blank tests related concepts.",
+    example:
+      "Question: 'Moja _____ _____ do pracy autobusem.' Answer: 'siostra jedzie'",
   },
   [QuestionType.VOCAB_CHOICE]: {
     description: "Multiple choice vocabulary questions",
-    template: "Create a multiple choice question with 4 options. Only one option should be correct.",
-    example: "Question: 'What does \"książka\" mean?' Options: ['book', 'table', 'chair', 'window'] Answer: 'book'"
+    template:
+      "Create a multiple choice question with 4 options. Only one option should be correct.",
+    example:
+      "Question: 'What does \"książka\" mean?' Options: ['book', 'table', 'chair', 'window'] Answer: 'book'",
   },
   [QuestionType.MULTI_SELECT]: {
     description: "Multiple choice questions with multiple correct answers",
-    template: "Create a question where multiple options are correct. Provide 4-6 options with 2-3 correct answers.",
-    example: "Question: 'Which are Polish cities?' Options: ['Warszawa', 'Berlin', 'Kraków', 'Paris', 'Gdańsk'] Answer: 'Warszawa,Kraków,Gdańsk'"
+    template:
+      "Create a question where multiple options are correct. Provide 4-6 options with 2-3 correct answers.",
+    example:
+      "Question: 'Which are Polish cities?' Options: ['Warszawa', 'Berlin', 'Kraków', 'Paris', 'Gdańsk'] Answer: 'Warszawa,Kraków,Gdańsk'",
   },
   [QuestionType.CONJUGATION_TABLE]: {
     description: "Complete verb conjugation table with all 6 standard forms",
-    template: "Ask to conjugate a verb in a specific tense (present/past/future) for all 6 persons. Return answers as comma-separated string in order: ja,ty,on/ona/ono,my,wy,oni/one",
-    example: "Question: 'Conjugate \"mówić\" in present tense' Answer: 'mówię,mówisz,mówi,mówimy,mówicie,mówią'"
+    template:
+      "Ask to conjugate a verb in a specific tense (present/past/future) for all 6 persons. Return answers as comma-separated string in order: ja,ty,on/ona/ono,my,wy,oni/one",
+    example:
+      "Question: 'Conjugate \"mówić\" in present tense' Answer: 'mówię,mówisz,mówi,mówimy,mówicie,mówią'",
   },
   [QuestionType.CASE_TRANSFORM]: {
     description: "Questions about grammatical case transformations",
-    template: "Give a word and ask for its transformation into a specific grammatical case.",
-    example: "Question: 'Transform \"kot\" to accusative case' Answer: 'kota'"
+    template:
+      "Give a word and ask for its transformation into a specific grammatical case.",
+    example: "Question: 'Transform \"kot\" to accusative case' Answer: 'kota'",
   },
   [QuestionType.SENTENCE_TRANSFORM]: {
     description: "Transform sentences between different grammatical forms",
-    template: "Ask to transform sentences (e.g., affirmative to negative, present to past).",
-    example: "Question: 'Transform to past tense: Ja czytam książkę' Answer: 'Ja czytałem książkę'"
+    template:
+      "Ask to transform sentences (e.g., affirmative to negative, present to past).",
+    example:
+      "Question: 'Transform to past tense: Ja czytam książkę' Answer: 'Ja czytałem książkę'",
   },
   [QuestionType.WORD_ARRANGEMENT]: {
     description: "Arrange words to form correct sentence",
-    template: "Provide scrambled words that need to be arranged into correct Polish sentence order.",
-    example: "Question: 'Arrange: [\"książkę\", \"czytam\", \"ciekawą\"]' Answer: 'Czytam ciekawą książkę'"
+    template:
+      "Provide a question where the words to arrange are given in the options array. The question text should be a generic instruction (e.g., 'Arrange these words to form a correct sentence:'). Place the scrambled words ONLY in the options array in random order, not in the question text. Return the correct sentence as the correctAnswer. The order of options should not matched with correct order to challenge the learner to find the order",
+    example:
+      "Question: 'Arrange these words to form a correct sentence:' Options: ['książkę', 'czytam', 'ciekawą'] Answer: 'Czytam ciekawą książkę'",
   },
   [QuestionType.TRANSLATION_PL]: {
     description: "Translate from English to Polish",
     template: "Provide an English phrase and ask for Polish translation.",
-    example: "Question: 'Translate: I am reading a book' Answer: 'Czytam książkę'"
+    example:
+      "Question: 'Translate: I am reading a book' Answer: 'Czytam książkę'",
   },
   [QuestionType.TRANSLATION_EN]: {
     description: "Translate from Polish to English",
     template: "Provide a Polish phrase and ask for English translation.",
-    example: "Question: 'Translate: Lubię kawę' Answer: 'I like coffee'"
+    example: "Question: 'Translate: Lubię kawę' Answer: 'I like coffee'",
   },
   [QuestionType.AUDIO_COMPREHENSION]: {
     description: "Audio-based comprehension questions",
     template: "Create questions about audio content (provide audio URL).",
-    example: "Question: 'What did the speaker say?' Answer: 'Dzień dobry'"
+    example: "Question: 'What did the speaker say?' Answer: 'Dzień dobry'",
   },
   [QuestionType.VISUAL_VOCABULARY]: {
     description: "Image-based vocabulary questions",
     template: "Create questions about images (provide image URL).",
-    example: "Question: 'What is shown in the image?' Answer: 'dom'"
+    example: "Question: 'What is shown in the image?' Answer: 'dom'",
   },
   [QuestionType.DIALOGUE_COMPLETE]: {
     description: "Complete dialogue conversations",
     template: "Provide partial dialogue and ask to complete it.",
-    example: "Question: 'A: Jak się masz? B: _____' Answer: 'Dobrze, dziękuję'"
+    example: "Question: 'A: Jak się masz? B: _____' Answer: 'Dobrze, dziękuję'",
   },
   [QuestionType.ASPECT_PAIRS]: {
     description: "Perfective and imperfective verb aspects",
     template: "Ask about verb aspect pairs in Polish.",
-    example: "Question: 'Give the perfective form of \"czytać\"' Answer: 'przeczytać'"
+    example:
+      "Question: 'Give the perfective form of \"czytać\"' Answer: 'przeczytać'",
   },
   [QuestionType.DIMINUTIVE_FORMS]: {
     description: "Polish diminutive word forms",
     template: "Ask for diminutive forms of nouns.",
-    example: "Question: 'Give the diminutive form of \"kot\"' Answer: 'kotek'"
+    example: "Question: 'Give the diminutive form of \"kot\"' Answer: 'kotek'",
   },
   [QuestionType.SCENARIO_RESPONSE]: {
     description: "Respond to specific scenarios",
     template: "Provide a scenario and ask for appropriate response.",
-    example: "Question: 'You enter a shop. What do you say?' Answer: 'Dzień dobry'"
+    example:
+      "Question: 'You enter a shop. What do you say?' Answer: 'Dzień dobry'",
   },
   [QuestionType.CULTURAL_CONTEXT]: {
     description: "Polish culture and context questions",
     template: "Ask about Polish customs, culture, or context.",
-    example: "Question: 'When do Poles celebrate name days?' Answer: 'Throughout the year'"
+    example:
+      "Question: 'When do Poles celebrate name days?' Answer: 'Throughout the year'",
   },
   [QuestionType.Q_A]: {
     description: "Question and answer format",
-    template: "Create a question that requires a specific answer related to the concept.",
-    example: "Question: 'Co robisz wieczorem?' Answer: 'Czytam książki' (or similar appropriate answer)"
-  }
+    template:
+      "Create a question that requires a specific answer related to the concept.",
+    example:
+      "Question: 'Co robisz wieczorem?' Answer: 'Czytam książki' (or similar appropriate answer)",
+  },
 } as const;
 
 // Main question generation prompt template
@@ -214,4 +242,5 @@ RESPONSE FORMAT (STRICT JSON):
 Return ONLY the JSON object above with no additional text.`;
 
 // System prompts for question generation
-export const QUESTION_GENERATION_SYSTEM_PROMPT = "You are an expert Polish language teacher creating high-quality learning questions for students.";
+export const QUESTION_GENERATION_SYSTEM_PROMPT =
+  "You are an expert Polish language teacher creating high-quality learning questions for students.";

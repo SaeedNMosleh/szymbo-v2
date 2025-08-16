@@ -24,6 +24,7 @@ import {
   Save,
   X,
   AlertTriangle,
+  Eye,
 } from "lucide-react";
 import {
   Tooltip,
@@ -41,6 +42,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
+import { QuestionPreview } from "./QuestionPreview";
+import { transformBankItemToQuestionData } from "@/utils/questionDataTransform";
 
 interface QuestionBankItem {
   id: string;
@@ -125,6 +128,7 @@ export default function QuestionBankManager() {
     id: string;
     permanent: boolean;
   } | null>(null);
+  const [previewQuestion, setPreviewQuestion] = useState<QuestionBankItem | null>(null);
 
   // Fetch concepts for potential future use but don't store them in state
   const fetchConcepts = useCallback(async () => {
@@ -376,6 +380,20 @@ export default function QuestionBankManager() {
                 </>
               ) : (
                 <>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setPreviewQuestion(question)}
+                      >
+                        <Eye className="size-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Preview question</p>
+                    </TooltipContent>
+                  </Tooltip>
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button
@@ -806,6 +824,15 @@ export default function QuestionBankManager() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* Question Preview Modal */}
+        {previewQuestion && (
+          <QuestionPreview
+            isOpen={!!previewQuestion}
+            onClose={() => setPreviewQuestion(null)}
+            questionData={transformBankItemToQuestionData(previewQuestion)}
+          />
+        )}
       </div>
     </TooltipProvider>
   );

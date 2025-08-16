@@ -1,6 +1,7 @@
 import { QuestionType, QuestionLevel } from "@/lib/enum";
 import { IConcept } from "@/datamodels/concept.model";
 import { LLMServiceFactory } from "@/lib/services/llm/llmServiceFactory";
+import { OpenAIService } from "@/lib/services/llm/openAIService";
 import { 
   sanitizeAndParseJSON, 
   validateQuestionResponse, 
@@ -37,10 +38,42 @@ export interface GeneratedQuestion {
 
 export class QuestionLLMService {
   private llmService;
+  private openAIService: OpenAIService;
 
   constructor() {
     this.llmService = LLMServiceFactory.getOpenAIService();
+    this.openAIService = new OpenAIService({
+      apiKey: process.env.OPENAI_API_KEY!,
+      temperature: 0.7,
+      maxTokens: 1000,
+    });
   }
+
+  /**
+   * Generate audio for AUDIO_COMPREHENSION questions
+   */
+  private async generateAudioForQuestion(correctAnswer: string): Promise<string> {
+    // Simple approach: use the correct answer (Polish text) directly for TTS
+    const audioBuffer = await this.openAIService.generateAudio(correctAnswer, 'alloy');
+    
+    // Convert buffer to base64 data URL for immediate use
+    const audioBase64 = audioBuffer.toString('base64');
+    return `data:audio/mp3;base64,${audioBase64}`;
+  }
+
+  /**
+   * Generate image for VISUAL_VOCABULARY questions
+   */
+  private async generateImageForQuestion(correctAnswer: string): Promise<string> {
+    // Simple approach: create basic illustration prompt from the answer
+    const prompt = `Simple cartoon-style flashcard of ${correctAnswer}. Clean background, bright colors, educational illustration suitable for language learning.`;
+
+    // Call OpenAI service directly with supported size for gpt-image-0721-mini-alpha
+    const imageUrl = await this.openAIService.generateImage(prompt, '1024x1024');
+    
+    return imageUrl;
+  }
+
 
   async generateQuestions(request: QuestionGenerationRequest): Promise<GeneratedQuestion[]> {
     const { concepts, questionType, difficulty, quantity, specialInstructions } = request;
@@ -91,7 +124,7 @@ export class QuestionLLMService {
         const partialData = extractPartialJSON(rawResponse);
         if (partialData && typeof partialData === 'object' && 'questions' in partialData && Array.isArray(partialData.questions)) {
           console.warn('Using partial JSON extraction as fallback');
-          return this.validateAndFormatQuestions(partialData.questions, request);
+          return await this.validateAndFormatQuestions(partialData.questions, request);
         }
         
         throw new Error(`Failed to parse LLM response: ${parseResult.error}`);
@@ -104,7 +137,7 @@ export class QuestionLLMService {
       }
 
       const questionData = parseResult.data as { questions?: unknown[] };
-      return this.validateAndFormatQuestions(questionData.questions || [], request);
+      return await this.validateAndFormatQuestions(questionData.questions || [], request);
       
     } catch (error) {
       console.error("Error generating questions:", error);
@@ -146,10 +179,10 @@ export class QuestionLLMService {
     return DIFFICULTY_GUIDELINES[difficulty] || DIFFICULTY_GUIDELINES[QuestionLevel.A1];
   }
 
-  private validateAndFormatQuestions(
+  private async validateAndFormatQuestions(
     questions: unknown[], 
     request: QuestionGenerationRequest
-  ): GeneratedQuestion[] {
+  ): Promise<GeneratedQuestion[]> {
     const validQuestions: GeneratedQuestion[] = [];
     const conceptIds = request.concepts.map(c => c.id);
     
@@ -192,11 +225,43 @@ export class QuestionLLMService {
 
       // Validate question type specific requirements
       if (this.isValidQuestionForType(formattedQuestion, request.questionType)) {
+        // Generate media for specific question types
+        await this.generateMediaForQuestion(formattedQuestion);
         validQuestions.push(formattedQuestion);
       }
     }
 
     return validQuestions;
+  }
+
+  /**
+   * Generate appropriate media for questions that require it
+   * FAILS if media generation fails - no fallbacks for incomplete questions
+   */
+  private async generateMediaForQuestion(question: GeneratedQuestion): Promise<void> {
+    switch (question.questionType) {
+      case QuestionType.AUDIO_COMPREHENSION: {
+        console.log('Generating audio for AUDIO_COMPREHENSION question');
+        // MUST succeed - audio is required for this question type
+        const audioUrl = await this.generateAudioForQuestion(question.correctAnswer);
+        question.audioUrl = audioUrl;
+        console.log('Audio generated successfully');
+        break;
+      }
+
+      case QuestionType.VISUAL_VOCABULARY: {
+        console.log('Generating image for VISUAL_VOCABULARY question');
+        // MUST succeed - image is required for this question type
+        const imageUrl = await this.generateImageForQuestion(question.correctAnswer);
+        question.imageUrl = imageUrl;
+        console.log('Image generated successfully');
+        break;
+      }
+
+      default:
+        // No media generation needed for other question types
+        break;
+    }
   }
 
   private isValidQuestionForType(question: GeneratedQuestion, type: QuestionType): boolean {
@@ -248,7 +313,7 @@ export class QuestionLLMService {
       // Extract the question from the response
       const responseData = parseResult.data as { question?: unknown };
       const questionData = responseData.question || parseResult.data;
-      const questions = this.validateAndFormatQuestions([questionData], {
+      const questions = await this.validateAndFormatQuestions([questionData], {
         concepts,
         questionType: originalQuestion.questionType,
         difficulty: originalQuestion.difficulty,

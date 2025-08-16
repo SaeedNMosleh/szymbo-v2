@@ -21,7 +21,9 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { QuestionType, QuestionLevel } from "@/lib/enum";
-import { Check, X, RefreshCw, Edit3, Plus } from "lucide-react";
+import { Check, X, RefreshCw, Edit3, Plus, Eye } from "lucide-react";
+import { QuestionPreview } from "./QuestionPreview";
+import { transformDraftToQuestionData } from "@/utils/questionDataTransform";
 
 interface QuestionDraft {
   id: string;
@@ -56,6 +58,7 @@ export default function QuestionDraftReview({
   const [success, setSuccess] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [conceptMap, setConceptMap] = useState<Map<string, string>>(new Map());
+  const [previewQuestion, setPreviewQuestion] = useState<QuestionDraft | null>(null);
 
   useEffect(() => {
     fetchDrafts();
@@ -312,6 +315,13 @@ export default function QuestionDraftReview({
             <div className="flex space-x-2">
               {!isEditing && (
                 <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPreviewQuestion(draft)}
+                  >
+                    <Eye className="size-4" />
+                  </Button>
                   <Button
                     variant="outline"
                     size="sm"
@@ -652,6 +662,15 @@ export default function QuestionDraftReview({
           ))
         )}
       </div>
+
+      {/* Question Preview Modal */}
+      {previewQuestion && (
+        <QuestionPreview
+          isOpen={!!previewQuestion}
+          onClose={() => setPreviewQuestion(null)}
+          questionData={transformDraftToQuestionData(previewQuestion)}
+        />
+      )}
     </div>
   );
 }
