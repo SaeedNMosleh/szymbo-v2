@@ -1,78 +1,155 @@
-// Concept extraction from course content prompt
+// Enhanced concept extraction from course content prompt with rich linguistic analysis
 export const CONCEPT_EXTRACTION_BASE_PROMPT = `
-You are tasked with extracting language learning concepts from Polish language course materials and suggesting tags for discovery.
+You are a Polish language expert specializing in comprehensive concept extraction from course materials. Your goal is to extract ALL valuable learning concepts with linguistic precision and rich metadata.
 
-## COURSE CONTENT:
+## COURSE METADATA:
+- Course Type: {courseType} (new/review/mixed)
+- Main Subjects: {mainSubjects}
+- New Subjects: {newSubjects}
+- Review Subjects: {reviewSubjects}
+- Student Strengths: {strengths}
+- Student Weaknesses: {weaknesses}
+
+## COMPREHENSIVE COURSE CONTENT:
 - Keywords: {keywords}
 - New Vocabulary Words: {newWords}
 - Notes: {notes}
 - Practice Content: {practice}
 {homework}
 
-## EXISTING TAGS IN SYSTEM:
-{existingTags}
+## EXISTING SYSTEM KNOWLEDGE:
+- Existing Tags: {existingTags}
+- Course Context: Course #{courseId} from {date}
 
-## TASK:
-Extract clearly defined language concepts from the above content, following these guidelines:
+## COMPREHENSIVE EXTRACTION TASK:
 
-1. Categorize each concept as either GRAMMAR or VOCABULARY.
-   - GRAMMAR: Sentence structures, verb conjugation patterns, case usage, etc.
-   - VOCABULARY: Word groups, expressions, idioms, colloquialisms, etc.
+### PRIMARY MISSION: EXHAUSTIVE CONCEPT IDENTIFICATION
+Extract EVERY distinct learning concept present in the content. Do not limit yourself - identify all grammar patterns, vocabulary groups, expressions, cultural insights, and linguistic phenomena present.
 
-2. For each concept:
-   - Provide a clear, descriptive name
-   - Write a concise but comprehensive description
-   - Include 2-4 examples from the content
-   - Note where in the content you found this concept
-   - Assign a confidence score (0.0-1.0) indicating how clearly this concept is present
-   - Suggest a difficulty level (A1, A2, B1, B2, C1, or C2)
-   - Suggest 3-5 tags for discovery purposes
+### CATEGORY CLASSIFICATION:
+**GRAMMAR CONCEPTS:**
+- Morphological patterns (case endings, verb conjugations, aspect pairs)  
+- Syntactic structures (word order, clause types, sentence patterns)
+- Functional grammar (expressing time, location, manner, purpose)
+- Phonological patterns (stress, pronunciation rules, sound changes)
 
-3. For suggested tags:
-   - Use existing tags when appropriate for consistency
-   - Create new tags when needed for better discovery
-   - Focus on searchable keywords that help find concepts
-   - Include grammatical features, semantic categories, difficulty markers
-   - Each tag should have a confidence score (0.0-1.0)
+**VOCABULARY CONCEPTS:**
+- Semantic word groups (family, food, travel, emotions, etc.)
+- Collocations and fixed expressions
+- Idiomatic expressions and phrasal constructions
+- Cultural and contextual vocabulary
+- Morphological word families (root + prefixes/suffixes)
+
+### RICH LINGUISTIC METADATA EXTRACTION:
+
+For **EVERY VOCABULARY CONCEPT**, extract:
+- **Primary word/expression**: The main lexical item
+- **English translation**: Precise semantic equivalent
+- **Part of speech**: noun, verb, adjective, adverb, preposition, etc.
+- **Gender** (for nouns): masculine, feminine, neuter
+- **Plural form** (if applicable and present in content)
+- **Pronunciation guidance** (if provided or can be inferred)
+
+For **EVERY GRAMMAR CONCEPT**, extract:
+- **Grammatical function**: What linguistic purpose does this serve?
+- **Morphological details**: Case usage, verb aspects, agreement patterns
+- **Syntactic context**: When and how is this pattern used?
+- **Semantic implications**: What meaning does this grammatical choice convey?
+
+### COMPREHENSIVE CONCEPT STRUCTURE:
+{
+  "name": "Precise, descriptive concept name",
+  "category": "grammar|vocabulary", 
+  "description": "Comprehensive explanation including linguistic context and usage patterns",
+  "examples": ["Multiple examples from content showing variation and context"],
+  "sourceContent": "Specific location and context where this concept appears",
+  "confidence": 0.0-1.0, // How clearly is this concept present and well-defined?
+  "suggestedDifficulty": "A1|A2|B1|B2|C1|C2", // Based on linguistic complexity
+  "suggestedTags": [
+    {"tag": "searchable-keyword", "source": "existing|new", "confidence": 0.0-1.0}
+  ],
+  "vocabularyData": { // ONLY for vocabulary concepts
+    "word": "primary Polish word/expression",
+    "translation": "precise English equivalent",
+    "partOfSpeech": "grammatical category",
+    "gender": "masculine|feminine|neuter", // for nouns only
+    "pluralForm": "plural form if present",
+    "pronunciation": "phonetic guidance if available"
+  }
+}
+
+### ADVANCED TAGGING STRATEGY:
+Create tags that capture:
+- **Grammatical features**: case-system, verb-aspects, conditional-mood
+- **Semantic domains**: family-vocabulary, time-expressions, daily-activities  
+- **Difficulty progression**: A1-basics, B2-advanced, idiomatic-expressions
+- **Learning contexts**: conversation-starters, formal-register, colloquial-speech
+- **Morphological patterns**: diminutives, perfective-verbs, compound-words
+- **Cultural aspects**: polish-culture, social-customs, regional-variations
+
+### QUALITY ASSURANCE REQUIREMENTS:
+1. **Completeness**: Don't miss any identifiable concept, no matter how small
+2. **Precision**: Each concept should be clearly bounded and well-defined  
+3. **Linguistic accuracy**: Use proper grammatical terminology and analysis
+4. **Practical relevance**: Focus on concepts students will actually use
+5. **Progressive difficulty**: Consider how concepts build upon each other
+
+### CONTENT-DRIVEN EXTRACTION LOGIC:
+- **Course Type Analysis**: 
+  - NEW courses: Focus on introducing foundational concepts
+  - REVIEW courses: Emphasize reinforcement and advanced applications  
+  - MIXED courses: Balance introduction and consolidation
+- **Student-Specific Adaptation**:
+  - Strengths areas: Extract advanced nuances and applications
+  - Weakness areas: Break down into smaller, more manageable concepts
+- **Contextual Integration**: Connect extracted concepts to course objectives and learning progression
 
 ## EXAMPLES:
 
-Good GRAMMAR concept:
+**COMPREHENSIVE GRAMMAR CONCEPT:**
 {
-  "name": "Locative Case with Time Expressions",
+  "name": "Instrumental Case for Means of Transport",
   "category": "grammar",
-  "description": "Using the locative case with preposition 'po' to express time in informal format",
-  "examples": ["kwadrans po ósmej", "dwadzieścia po dziesiątej"],
-  "sourceContent": "Found in practice section discussing time expressions",
-  "confidence": 0.95,
+  "description": "Using instrumental case with transport vehicles to express 'by means of' - covers both prepositions (z/ze) and standalone instrumental forms, including colloquial variants",
+  "examples": ["jadę autobusem", "lecę samolotem", "idę z przyjaciółką", "podróżuję pociągiem"],
+  "sourceContent": "Practice section on travel vocabulary and transportation methods",
+  "confidence": 0.92,
   "suggestedDifficulty": "A2",
   "suggestedTags": [
-    {"tag": "locative-case", "source": "new", "confidence": 0.9},
-    {"tag": "time-expressions", "source": "existing", "confidence": 0.95},
-    {"tag": "prepositions", "source": "existing", "confidence": 0.8},
-    {"tag": "A2-level", "source": "new", "confidence": 0.9}
+    {"tag": "instrumental-case", "source": "existing", "confidence": 0.95},
+    {"tag": "transport-grammar", "source": "new", "confidence": 0.88},
+    {"tag": "means-of-action", "source": "new", "confidence": 0.85},
+    {"tag": "A2-grammar", "source": "existing", "confidence": 0.90}
   ]
 }
 
-Good VOCABULARY concept:
+**ENRICHED VOCABULARY CONCEPT:**
 {
-  "name": "Time-Related Vocabulary",
-  "category": "vocabulary",
-  "description": "Essential vocabulary for telling time in Polish",
-  "examples": ["kwadrans", "wpół do", "za pięć"],
-  "sourceContent": "From notes section on telling time",
-  "confidence": 0.9,
-  "suggestedDifficulty": "A1",
+  "name": "Family Relationship Terms - Extended Family",
+  "category": "vocabulary", 
+  "description": "Extended family vocabulary including in-laws and step-relations, with proper gender agreement and cultural usage patterns in Polish family contexts",
+  "examples": ["teściowa", "szwagier", "siostrzeniec", "bratowa", "pasierbica"],
+  "sourceContent": "Notes section discussing family relationships and social contexts",
+  "confidence": 0.87,
+  "suggestedDifficulty": "B1",
   "suggestedTags": [
-    {"tag": "time-vocabulary", "source": "new", "confidence": 0.95},
-    {"tag": "daily-life", "source": "existing", "confidence": 0.8},
-    {"tag": "A1-level", "source": "new", "confidence": 0.9},
-    {"tag": "numbers", "source": "existing", "confidence": 0.7}
-  ]
+    {"tag": "family-vocabulary", "source": "existing", "confidence": 0.95},
+    {"tag": "social-relationships", "source": "new", "confidence": 0.82},
+    {"tag": "cultural-context", "source": "existing", "confidence": 0.79},
+    {"tag": "B1-vocabulary", "source": "existing", "confidence": 0.88}
+  ],
+  "vocabularyData": {
+    "word": "extended family terms",
+    "translation": "in-laws, step-relations, extended family",
+    "partOfSpeech": "noun",
+    "gender": "varies by specific term",
+    "pluralForm": "context-dependent plural forms",
+    "pronunciation": "stress patterns vary by word length"
+  }
 }
 
 ## RESPONSE FORMAT:
-Respond strictly with a JSON object containing an array of concepts:
+Return a comprehensive JSON object with ALL extracted concepts (no artificial limits):
 
 {
   "concepts": [
@@ -80,23 +157,44 @@ Respond strictly with a JSON object containing an array of concepts:
       "name": "string",
       "category": "grammar|vocabulary",
       "description": "string",
-      "examples": ["string", "string"],
+      "examples": ["string", "string", "string"],
       "sourceContent": "string",
       "confidence": number, // 0.0-1.0
       "suggestedDifficulty": "A1|A2|B1|B2|C1|C2",
       "suggestedTags": [
         {
           "tag": "string",
-          "source": "existing|new",
+          "source": "existing|new", 
           "confidence": number // 0.0-1.0
         }
-      ]
-    },
-    // Additional concepts...
-  ]
+      ],
+      "vocabularyData": { // REQUIRED for all vocabulary concepts, omit for grammar
+        "word": "string",
+        "translation": "string", 
+        "partOfSpeech": "string",
+        "gender": "string", // optional, for nouns only
+        "pluralForm": "string", // optional
+        "pronunciation": "string" // optional
+      }
+    }
+  ],
+  "extractionMetadata": {
+    "totalConceptsFound": number,
+    "grammarConceptsCount": number,
+    "vocabularyConceptsCount": number,
+    "averageConfidence": number,
+    "contentComplexity": "low|medium|high",
+    "recommendedReviewPriority": ["concept_name_1", "concept_name_2"]
+  }
 }
 
-Extract at least 3 concepts but no more than 10 concepts, focusing on the most important and clearly defined ones.
+### CRITICAL INSTRUCTIONS:
+- Extract EVERY identifiable concept - there is NO LIMIT on the number of concepts
+- For vocabulary concepts, vocabularyData is MANDATORY
+- Focus on concepts that will help students progress in their Polish learning
+- Prioritize concepts that appear multiple times or in different contexts
+- Include cultural and contextual information where relevant
+- Ensure each concept is actionable for question generation and practice
 `;
 
 // Tag suggestion prompt for a specific concept

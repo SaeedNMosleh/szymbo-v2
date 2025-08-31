@@ -1,0 +1,196 @@
+import { NextRequest, NextResponse } from "next/server";
+import { GridFSBucket, MongoClient, ObjectId } from "mongodb";
+import dbConnect from "@/lib/dbConnect";
+import { MediaStorageService } from "@/lib/services/mediaStorageService";
+
+/**
+ * Serve media files from permanent storage with proper caching headers
+ * Supports GridFS, local storage, and future cloud storage implementations
+ */
+
+export async function GET(
+  request: NextRequest,
+  { params }: { params: { mediaId: string } }
+): Promise<NextResponse> {
+  try {
+    const { mediaId } = params;
+
+    if (!mediaId) {
+      return new NextResponse("Media ID is required", { status: 400 });
+    }
+
+    console.log(`📥 Serving media: ${mediaId}`);
+
+    // Get media metadata to determine storage method
+    const mediaStorage = new MediaStorageService();
+    const metadata = await mediaStorage.getMediaMetadata(mediaId);
+
+    if (!metadata) {
+      console.error(`❌ Media not found: ${mediaId}`);
+      return new NextResponse("Media not found", { status: 404 });
+    }
+
+    // Serve based on storage method
+    let mediaBuffer: Buffer;
+    let contentType = metadata.mimeType;
+
+    switch (metadata.storageMethod) {
+      case "gridfs":
+        mediaBuffer = await serveFromGridFS(mediaId);
+        break;
+      case "local":
+        mediaBuffer = await serveFromLocal(metadata.fileName);
+        break;
+      case "cloud":
+        return await serveFromCloud(mediaId, metadata);
+      default:
+        return new NextResponse("Unsupported storage method", { status: 500 });
+    }
+
+    // Set appropriate caching headers for media
+    const headers = new Headers();
+    headers.set("Content-Type", contentType);
+    headers.set("Content-Length", mediaBuffer.length.toString());
+    headers.set("Cache-Control", "public, max-age=31536000, immutable"); // Cache for 1 year
+    headers.set("ETag", `"${mediaId}"`);
+    
+    // Set Content-Disposition for better browser handling
+    const isImage = contentType.startsWith("image/");
+    if (isImage) {
+      headers.set("Content-Disposition", `inline; filename="${metadata.fileName}"`);
+    } else {
+      headers.set("Content-Disposition", `attachment; filename="${metadata.fileName}"`);
+    }
+
+    // Check if client has cached version
+    const ifNoneMatch = request.headers.get("if-none-match");
+    if (ifNoneMatch === `"${mediaId}"`) {
+      return new NextResponse(null, { status: 304, headers });
+    }
+
+    console.log(`✅ Serving ${metadata.mediaType}: ${metadata.fileName} (${mediaBuffer.length} bytes)`);
+
+    return new NextResponse(mediaBuffer, {
+      status: 200,
+      headers,
+    });
+
+  } catch (error) {
+    console.error("❌ Error serving media:", error);
+    return new NextResponse("Internal server error", { status: 500 });
+  }
+}
+
+/**
+ * Serve media from MongoDB GridFS
+ */
+async function serveFromGridFS(mediaId: string): Promise<Buffer> {
+  try {
+    await dbConnect();
+    
+    const client = (global as any).mongoose.connection.client as MongoClient;
+    const db = client.db();
+    const gridFS = new GridFSBucket(db, { bucketName: "media" });
+
+    // Convert string ID to ObjectId if needed
+    let objectId: ObjectId;
+    try {
+      objectId = new ObjectId(mediaId);
+    } catch {
+      throw new Error("Invalid media ID format");
+    }
+
+    // Stream file from GridFS
+    const downloadStream = gridFS.openDownloadStream(objectId);
+    const chunks: Buffer[] = [];
+
+    return new Promise((resolve, reject) => {
+      downloadStream.on("data", (chunk) => {
+        chunks.push(chunk);
+      });
+
+      downloadStream.on("end", () => {
+        const buffer = Buffer.concat(chunks);
+        resolve(buffer);
+      });
+
+      downloadStream.on("error", (error) => {
+        console.error("GridFS download error:", error);
+        reject(new Error("Failed to retrieve media from GridFS"));
+      });
+    });
+
+  } catch (error) {
+    console.error("GridFS service error:", error);
+    throw error;
+  }
+}
+
+/**
+ * Serve media from local filesystem
+ */
+async function serveFromLocal(fileName: string): Promise<Buffer> {
+  try {
+    const fs = await import("fs/promises");
+    const path = await import("path");
+    
+    const localPath = "./public/media";
+    const filePath = path.join(localPath, fileName);
+    
+    const mediaBuffer = await fs.readFile(filePath);
+    return mediaBuffer;
+
+  } catch (error) {
+    console.error("Local file system error:", error);
+    throw new Error("Failed to retrieve media from local storage");
+  }
+}
+
+/**
+ * Serve media from cloud storage (placeholder for future implementation)
+ */
+async function serveFromCloud(mediaId: string, metadata: any): Promise<NextResponse> {
+  // This would redirect to cloud storage URL or proxy the request
+  // For now, return not implemented
+  return new NextResponse("Cloud storage not yet implemented", { status: 501 });
+}
+
+/**
+ * HEAD request for metadata without content (useful for caching checks)
+ */
+export async function HEAD(
+  request: NextRequest,
+  { params }: { params: { mediaId: string } }
+): Promise<NextResponse> {
+  try {
+    const { mediaId } = params;
+
+    if (!mediaId) {
+      return new NextResponse(null, { status: 400 });
+    }
+
+    // Get media metadata
+    const mediaStorage = new MediaStorageService();
+    const metadata = await mediaStorage.getMediaMetadata(mediaId);
+
+    if (!metadata) {
+      return new NextResponse(null, { status: 404 });
+    }
+
+    // Return headers without body
+    const headers = new Headers();
+    headers.set("Content-Type", metadata.mimeType);
+    headers.set("Content-Length", metadata.fileSize.toString());
+    headers.set("Cache-Control", "public, max-age=31536000, immutable");
+    headers.set("ETag", `"${mediaId}"`);
+
+    return new NextResponse(null, {
+      status: 200,
+      headers,
+    });
+
+  } catch (error) {
+    console.error("❌ Error in HEAD request:", error);
+    return new NextResponse(null, { status: 500 });
+  }
+}

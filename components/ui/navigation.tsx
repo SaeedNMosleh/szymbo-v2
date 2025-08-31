@@ -43,7 +43,7 @@ export const Navigation = () => {
             </Link>
             <Link href="/practice-new">
               <Button
-                className="bg-blue-600 text-white hover:bg-blue-700"
+                className="bg-purple-600 text-white hover:bg-purple-700"
                 size="sm"
               >
                 Practice

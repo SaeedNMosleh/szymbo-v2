@@ -5,6 +5,7 @@ import QuestionDraft from "@/datamodels/questionDraft.model";
 import QuestionBank from "@/datamodels/questionBank.model";
 import Concept from "@/datamodels/concept.model";
 import { createApiResponse, createErrorResponse } from "@/lib/utils/apiResponse";
+import { MediaStorageService } from "@/lib/services/mediaStorageService";
 
 export async function POST(request: NextRequest) {
   try {
@@ -26,6 +27,9 @@ export async function POST(request: NextRequest) {
 
     const savedQuestions = [];
     const errors = [];
+
+    // Initialize media storage service
+    const mediaStorage = new MediaStorageService();
 
     // Convert concept names to IDs for consistency
     const allConceptNames = [...new Set(drafts.flatMap(draft => draft.targetConcepts))];
@@ -73,6 +77,14 @@ export async function POST(request: NextRequest) {
         // STRICT VALIDATION: All target concepts must be valid concept IDs
         console.log(`Draft ${draft.id} validated with concept IDs:`, targetConceptIds);
 
+        // Process media URLs - convert temporary URLs to permanent storage
+        console.log(`Processing media for question ${draft.id}...`);
+        const processedMedia = await mediaStorage.processQuestionMedia({
+          id: draft.id,
+          imageUrl: draft.imageUrl,
+          audioUrl: draft.audioUrl,
+        });
+
         const questionBankData = {
           id: uuidv4(),
           question: draft.question,
@@ -86,11 +98,15 @@ export async function POST(request: NextRequest) {
           isActive: true,
           source: draft.source,
           options: draft.options || [],
-          audioUrl: draft.audioUrl,
-          imageUrl: draft.imageUrl,
+          audioUrl: processedMedia.audioUrl, // Permanent URL or original if no processing needed
+          imageUrl: processedMedia.imageUrl, // Permanent URL or original if no processing needed
         };
 
-        console.log(`Saving question ${draft.id} with concept IDs:`, targetConceptIds); // Debug log
+        console.log(`Saving question ${draft.id} with concept IDs:`, targetConceptIds);
+        if (processedMedia.mediaMetadata) {
+          console.log(`📄 Media processed:`, processedMedia.mediaMetadata.map(m => `${m.mediaType}: ${m.fileSize} bytes`));
+        }
+        
         await QuestionBank.create(questionBankData);
         savedQuestions.push(draft.id);
       } catch (error) {

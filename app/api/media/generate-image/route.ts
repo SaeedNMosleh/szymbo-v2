@@ -7,6 +7,101 @@ import {
 import { OpenAIService } from "@/lib/services/llm/openAIService";
 import { LLMServiceError } from "@/lib/utils/errors";
 
+/**
+ * Creates sophisticated educational image prompts that test comprehension without revealing answers
+ */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function createEducationalImagePrompt(basePrompt: string, polishWord: string, _questionId?: string): string {
+  // Generate semantic context without revealing the target word
+  const semanticCategories = {
+    // Household items
+    household: ["kitchen scene", "living room setting", "bedroom environment", "bathroom context"],
+    // Animals  
+    animals: ["natural habitat", "farm setting", "forest scene", "domestic environment"],
+    // Food items
+    food: ["dining table setup", "kitchen preparation area", "market stall", "restaurant scene"],
+    // Clothing
+    clothing: ["wardrobe setting", "shopping scene", "seasonal context", "formal/casual situation"],
+    // Vehicles
+    transport: ["street scene", "travel context", "urban environment", "transportation hub"],
+    // Actions/verbs
+    actions: ["daily activity scene", "workplace setting", "recreational context", "social situation"],
+    // Body parts
+    body: ["healthcare setting", "exercise context", "daily routine scene", "medical illustration"],
+    // Colors
+    colors: ["art studio", "nature scene", "decorative context", "rainbow/spectrum setting"],
+    // Numbers
+    numbers: ["counting context", "mathematical setting", "clock/time scene", "quantity illustration"],
+    // Weather
+    weather: ["seasonal landscape", "outdoor activity", "climate visualization", "atmospheric scene"]
+  };
+
+  // Analyze the Polish word to determine category and create contextual scene
+  const wordLower = polishWord.toLowerCase();
+  let sceneContext = "everyday life scene";
+  let visualNarrative = "";
+
+  // Sophisticated category detection and scene creation
+  if (wordLower.match(/(dom|mieszkanie|pokój|kuchnia|łazienka|stół|krzesło|łóżko)/)) {
+    sceneContext = getRandomElement(semanticCategories.household);
+    visualNarrative = "Show a detailed interior scene where this item would naturally be found and used";
+  } else if (wordLower.match(/(kot|pies|ptak|koń|krowa|ryba)/)) {
+    sceneContext = getRandomElement(semanticCategories.animals);  
+    visualNarrative = "Illustrate the natural environment where this creature lives and thrives";
+  } else if (wordLower.match(/(chleb|mięso|owoc|warzywo|mleko|ser|jajko|ryż)/)) {
+    sceneContext = getRandomElement(semanticCategories.food);
+    visualNarrative = "Depict a culinary context showing how this ingredient is used or prepared";
+  } else if (wordLower.match(/(ubranie|spodnie|koszula|buty|czapka|płaszcz)/)) {
+    sceneContext = getRandomElement(semanticCategories.clothing);
+    visualNarrative = "Show a fashion or dressing context where this item would be worn";
+  } else if (wordLower.match(/(samochód|autobus|pociąg|samolot|rower)/)) {
+    sceneContext = getRandomElement(semanticCategories.transport);
+    visualNarrative = "Create a transportation scene showing this vehicle in action";
+  } else if (wordLower.match(/(biegać|czytać|pisać|gotować|spać|jeść)/)) {
+    sceneContext = getRandomElement(semanticCategories.actions);
+    visualNarrative = "Illustrate someone performing this activity in an appropriate setting";
+  } else {
+    // Default: create contextual scene based on base prompt
+    visualNarrative = `Create an educational illustration that shows the concept of "${basePrompt}" without text`;
+    sceneContext = "contextually appropriate educational setting";
+  }
+
+  // Build comprehensive educational prompt
+  return `Educational illustration for Polish language learning:
+
+SCENE: ${sceneContext}
+VISUAL NARRATIVE: ${visualNarrative}
+
+STYLE REQUIREMENTS:
+- Clear, cartoon-style illustration with bright, engaging colors
+- Clean, uncluttered composition suitable for language learning
+- High contrast and clear visual elements
+- Professional educational artwork quality
+- NO TEXT, words, letters, or written language visible anywhere in the image
+- NO labels or captions of any kind
+
+EDUCATIONAL FOCUS:
+- Visual should help learners understand the concept through context and setting
+- Include relevant environmental details that provide cultural context
+- Show realistic usage or natural context
+- Make the visual relationship clear and meaningful for Polish language learners
+
+TECHNICAL SPECS:
+- Bright, appealing color palette suitable for educational materials  
+- Clean background that doesn't distract from the main subject
+- Professional illustration quality with clear details
+- Appropriate for all ages and cultural backgrounds
+
+Remember: This image will be used to test comprehension - learners should understand what it represents through visual context alone, without any text clues.`;
+}
+
+/**
+ * Helper function to get random element from array
+ */
+function getRandomElement<T>(array: T[]): T {
+  return array[Math.floor(Math.random() * array.length)];
+}
+
 const GenerateImageSchema = z.object({
   prompt: z
     .string()
@@ -37,8 +132,8 @@ export async function POST(request: NextRequest) {
 
     const { prompt, polishWord, size, questionId } = validationResult.data;
 
-    // Enhance prompt for educational vocabulary learning
-    const enhancedPrompt = `Educational vocabulary illustration: ${prompt}. Simple, clear, and suitable for language learning flashcard showing "${polishWord}". Clean background, bright colors, cartoon style.`;
+    // Create sophisticated educational prompt that hides the answer while maintaining learning value
+    const enhancedPrompt = createEducationalImagePrompt(prompt, polishWord, questionId);
 
     // Initialize OpenAI service
     const openAIService = new OpenAIService({

@@ -1,0 +1,336 @@
+import { IConcept } from "@/datamodels/concept.model";
+import { QuestionType, QuestionLevel } from "@/lib/enum";
+import {
+  PERFORMANCE_ANALYTICS_CONTEXT,
+  ANALYTICS_GUIDANCE_TEMPLATE,
+  CONCEPT_ANALYTICS_INTEGRATION,
+  QUESTION_ANALYTICS_INTEGRATION
+} from "@/prompts/shared";
+
+/**
+ * Analytics data for performance-informed prompt generation
+ */
+export interface PromptAnalyticsData {
+  conceptSuccessRates: Map<string, number>;
+  questionTypePerformance: Map<QuestionType, number>;
+  commonMistakePatterns: Map<string, string[]>;
+  learnerProficiencyData: {
+    estimatedLevel: QuestionLevel;
+    strengths: string[];
+    weaknesses: string[];
+    progressTrend: "improving" | "stable" | "declining";
+  };
+}
+
+/**
+ * Concept-specific analytics for targeted content generation
+ */
+export interface ConceptAnalytics {
+  successRate: number;
+  commonErrors: string[];
+  estimatedPracticeRounds: number;
+  relatedConcepts: string[];
+  preferredQuestionTypes: QuestionType[];
+  difficultyAssessment: "too_easy" | "appropriate" | "too_difficult";
+}
+
+/**
+ * Question-level analytics for optimization
+ */
+export interface QuestionAnalytics {
+  predictedSuccessRate: number;
+  anticipatedMistakes: string[];
+  estimatedCompletionTime: number;
+  cognitiveLoadLevel: "low" | "medium" | "high";
+  predictedEngagement: "low" | "medium" | "high";
+  difficultyRecommendation: "easier" | "maintain" | "harder";
+  optimalFormat: string;
+  contextualImprovements: string[];
+}
+
+/**
+ * Comprehensive analytics integration service for prompt enhancement
+ */
+export class PromptAnalyticsIntegrator {
+  
+  /**
+   * Integrates performance analytics into concept extraction prompts
+   */
+  static enhanceConceptExtractionPrompt(
+    basePrompt: string,
+    analyticsData: PromptAnalyticsData,
+    courseContext?: {
+      courseType?: string;
+      mainSubjects?: string[];
+      newSubjects?: string[];
+      reviewSubjects?: string[];
+      courseId?: number;
+      date?: Date;
+    }
+  ): string {
+    const performanceContext = this.buildPerformanceContext(analyticsData);
+    const analyticsGuidance = this.buildAnalyticsGuidance(analyticsData);
+    
+    return basePrompt
+      .replace('{performanceContext}', performanceContext)
+      .replace('{analyticsGuidance}', analyticsGuidance)
+      .replace('{courseType}', courseContext?.courseType || 'general')
+      .replace('{mainSubjects}', JSON.stringify(courseContext?.mainSubjects || []))
+      .replace('{newSubjects}', JSON.stringify(courseContext?.newSubjects || []))
+      .replace('{reviewSubjects}', JSON.stringify(courseContext?.reviewSubjects || []))
+      .replace('{strengths}', JSON.stringify(analyticsData.learnerProficiencyData.strengths))
+      .replace('{weaknesses}', JSON.stringify(analyticsData.learnerProficiencyData.weaknesses))
+      .replace('{courseId}', courseContext?.courseId?.toString() || 'unknown')
+      .replace('{date}', courseContext?.date?.toDateString() || 'recent');
+  }
+
+  /**
+   * Enhances question generation prompts with performance analytics
+   */
+  static enhanceQuestionGenerationPrompt(
+    basePrompt: string,
+    concepts: IConcept[],
+    analyticsData: PromptAnalyticsData,
+    questionType: QuestionType,
+    difficulty: QuestionLevel
+  ): string {
+    const conceptMetadata = this.buildConceptMetadata(concepts, analyticsData);
+    const performanceContext = this.buildPerformanceContext(analyticsData);
+    const analyticsGuidance = this.buildAnalyticsGuidance(analyticsData);
+    const questionAnalytics = this.buildQuestionAnalytics(questionType, difficulty, analyticsData);
+    
+    return basePrompt
+      .replace('{conceptMetadata}', conceptMetadata)
+      .replace('{performanceContext}', performanceContext)
+      .replace('{analyticsGuidance}', analyticsGuidance)
+      .replace('{questionAnalytics}', questionAnalytics);
+  }
+
+  /**
+   * Enhances validation prompts with learner-specific analytics
+   */
+  static enhanceValidationPrompt(
+    basePrompt: string,
+    targetConcepts: string[],
+    conceptDescriptions: string,
+    analyticsData: PromptAnalyticsData,
+    questionType: QuestionType,
+    questionLevel: QuestionLevel
+  ): string {
+    const performanceContext = this.buildPerformanceContext(analyticsData);
+    const commonMistakes = this.getCommonMistakesForConcepts(targetConcepts, analyticsData);
+    
+    return basePrompt
+      .replace('{targetConcepts}', targetConcepts.join(', '))
+      .replace('{conceptDescriptions}', conceptDescriptions)
+      .replace('{performanceContext}', performanceContext)
+      .replace('{commonMistakes}', commonMistakes)
+      .replace('{questionType}', questionType)
+      .replace('{questionLevel}', questionLevel);
+  }
+
+  /**
+   * Builds comprehensive performance context for prompts
+   */
+  private static buildPerformanceContext(analyticsData: PromptAnalyticsData): string {
+    const conceptRates = Array.from(analyticsData.conceptSuccessRates.entries())
+      .map(([concept, rate]) => `${concept}: ${(rate * 100).toFixed(1)}%`)
+      .join(', ');
+
+    const questionTypePerf = Array.from(analyticsData.questionTypePerformance.entries())
+      .map(([type, rate]) => `${type}: ${(rate * 100).toFixed(1)}%`)
+      .join(', ');
+
+    const mistakes = Array.from(analyticsData.commonMistakePatterns.entries())
+      .map(([concept, errors]) => `${concept}: ${errors.join(', ')}`)
+      .join('; ');
+
+    return PERFORMANCE_ANALYTICS_CONTEXT
+      .replace('{conceptSuccessRates}', conceptRates)
+      .replace('{questionTypePerformance}', questionTypePerf)
+      .replace('{learnerProficiencyData}', JSON.stringify(analyticsData.learnerProficiencyData))
+      .replace('{commonMistakePatterns}', mistakes);
+  }
+
+  /**
+   * Builds analytics-informed guidance for content generation
+   */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  private static buildAnalyticsGuidance(_analyticsData: PromptAnalyticsData): string {
+    return ANALYTICS_GUIDANCE_TEMPLATE; // Template is already comprehensive
+  }
+
+  /**
+   * Builds concept-specific metadata integration
+   */
+  private static buildConceptMetadata(concepts: IConcept[], analyticsData: PromptAnalyticsData): string {
+    return concepts.map(concept => {
+      const successRate = analyticsData.conceptSuccessRates.get(concept.id) || 0.5;
+      const commonErrors = analyticsData.commonMistakePatterns.get(concept.id) || [];
+      
+      const analytics: ConceptAnalytics = {
+        successRate: successRate * 100,
+        commonErrors,
+        estimatedPracticeRounds: this.estimatePracticeRounds(successRate),
+        relatedConcepts: this.findRelatedConcepts(concept, concepts),
+        preferredQuestionTypes: this.getPreferredQuestionTypes(concept, analyticsData),
+        difficultyAssessment: this.assessDifficulty(successRate)
+      };
+
+      return CONCEPT_ANALYTICS_INTEGRATION
+        .replace('{conceptSuccessRate}', analytics.successRate.toFixed(1))
+        .replace('{difficultyAssessment}', analytics.difficultyAssessment)
+        .replace('{commonErrors}', analytics.commonErrors.join(', '))
+        .replace('{estimatedPracticeRounds}', analytics.estimatedPracticeRounds.toString())
+        .replace('{relatedConcepts}', analytics.relatedConcepts.join(', '))
+        .replace('{preferredQuestionTypes}', analytics.preferredQuestionTypes.join(', '));
+    }).join('\n\n');
+  }
+
+  /**
+   * Builds question-level analytics integration
+   */
+  private static buildQuestionAnalytics(
+    questionType: QuestionType,
+    difficulty: QuestionLevel,
+    analyticsData: PromptAnalyticsData
+  ): string {
+    const typePerformance = analyticsData.questionTypePerformance.get(questionType) || 0.5;
+    
+    const analytics: QuestionAnalytics = {
+      predictedSuccessRate: typePerformance * 100,
+      anticipatedMistakes: this.getAnticipatedMistakes(questionType, analyticsData),
+      estimatedCompletionTime: this.estimateCompletionTime(questionType, difficulty),
+      cognitiveLoadLevel: this.assessCognitiveLoad(questionType, difficulty),
+      predictedEngagement: this.predictEngagement(questionType, analyticsData),
+      difficultyRecommendation: this.recommendDifficulty(typePerformance),
+      optimalFormat: this.suggestOptimalFormat(questionType, analyticsData),
+      contextualImprovements: this.suggestContextualImprovements(questionType)
+    };
+
+    return QUESTION_ANALYTICS_INTEGRATION
+      .replace('{predictedSuccessRate}', analytics.predictedSuccessRate.toFixed(1))
+      .replace('{anticipatedMistakes}', analytics.anticipatedMistakes.join(', '))
+      .replace('{estimatedCompletionTime}', analytics.estimatedCompletionTime.toString())
+      .replace('{cognitiveLoadLevel}', analytics.cognitiveLoadLevel)
+      .replace('{predictedEngagement}', analytics.predictedEngagement)
+      .replace('{difficultyRecommendation}', analytics.difficultyRecommendation)
+      .replace('{optimalFormat}', analytics.optimalFormat)
+      .replace('{contextualImprovements}', analytics.contextualImprovements.join(', '));
+  }
+
+  /**
+   * Gets common mistakes for specific concepts
+   */
+  private static getCommonMistakesForConcepts(concepts: string[], analyticsData: PromptAnalyticsData): string {
+    return concepts
+      .map(concept => {
+        const mistakes = analyticsData.commonMistakePatterns.get(concept) || [];
+        return mistakes.length > 0 ? `${concept}: ${mistakes.join(', ')}` : null;
+      })
+      .filter(Boolean)
+      .join('; ') || 'No specific patterns identified';
+  }
+
+  // Helper methods for analytics calculations
+  private static estimatePracticeRounds(successRate: number): number {
+    if (successRate > 0.8) return 2;
+    if (successRate > 0.6) return 3;
+    if (successRate > 0.4) return 4;
+    return 5;
+  }
+
+  private static findRelatedConcepts(concept: IConcept, allConcepts: IConcept[]): string[] {
+    return allConcepts
+      .filter(c => c.id !== concept.id && 
+        (c.category === concept.category || 
+         c.tags.some(tag => concept.tags.includes(tag))))
+      .slice(0, 3)
+      .map(c => c.name);
+  }
+
+  private static getPreferredQuestionTypes(_concept: IConcept, analyticsData: PromptAnalyticsData): QuestionType[] {
+    // Return top 3 question types based on performance
+    return Array.from(analyticsData.questionTypePerformance.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([type]) => type);
+  }
+
+  private static assessDifficulty(successRate: number): "too_easy" | "appropriate" | "too_difficult" {
+    if (successRate > 0.85) return "too_easy";
+    if (successRate < 0.4) return "too_difficult";
+    return "appropriate";
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  private static getAnticipatedMistakes(questionType: QuestionType, _analyticsData: PromptAnalyticsData): string[] {
+    // Map question types to common mistake patterns
+    const mistakeMap: Partial<Record<QuestionType, string[]>> = {
+      [QuestionType.BASIC_CLOZE]: ["case endings", "verb forms"],
+      [QuestionType.VOCAB_CHOICE]: ["word confusion", "false friends"],
+      [QuestionType.TRANSLATION_PL]: ["word order", "idiomatic expressions"],
+      // Add more mappings as needed
+    };
+
+    return mistakeMap[questionType] || ["grammatical errors", "vocabulary confusion"];
+  }
+
+  private static estimateCompletionTime(questionType: QuestionType, difficulty: QuestionLevel): number {
+    const baseTime: Partial<Record<QuestionType, number>> = {
+      [QuestionType.BASIC_CLOZE]: 15,
+      [QuestionType.VOCAB_CHOICE]: 12,
+      [QuestionType.TRANSLATION_PL]: 25,
+      [QuestionType.CONJUGATION_TABLE]: 30,
+    };
+
+    const difficultyMultiplier = {
+      [QuestionLevel.A1]: 0.8,
+      [QuestionLevel.A2]: 1.0,
+      [QuestionLevel.B1]: 1.2,
+      [QuestionLevel.B2]: 1.4,
+      [QuestionLevel.C1]: 1.6,
+      [QuestionLevel.C2]: 1.8,
+    };
+
+    return Math.round((baseTime[questionType] || 20) * difficultyMultiplier[difficulty]);
+  }
+
+  private static assessCognitiveLoad(questionType: QuestionType, difficulty: QuestionLevel): "low" | "medium" | "high" {
+    const complexTypes = [QuestionType.CONJUGATION_TABLE, QuestionType.SENTENCE_TRANSFORM, QuestionType.TRANSLATION_PL];
+    const advancedLevels = [QuestionLevel.B2, QuestionLevel.C1, QuestionLevel.C2];
+    
+    if (complexTypes.includes(questionType) && advancedLevels.includes(difficulty)) return "high";
+    if (complexTypes.includes(questionType) || advancedLevels.includes(difficulty)) return "medium";
+    return "low";
+  }
+
+  private static predictEngagement(questionType: QuestionType, analyticsData: PromptAnalyticsData): "low" | "medium" | "high" {
+    const performance = analyticsData.questionTypePerformance.get(questionType) || 0.5;
+    if (performance > 0.7) return "high";
+    if (performance > 0.4) return "medium";
+    return "low";
+  }
+
+  private static recommendDifficulty(performance: number): "easier" | "maintain" | "harder" {
+    if (performance > 0.8) return "harder";
+    if (performance < 0.4) return "easier";
+    return "maintain";
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  private static suggestOptimalFormat(questionType: QuestionType, _analyticsData: PromptAnalyticsData): string {
+    // Return the best performing similar format
+    return `Enhanced ${questionType} with contextual scaffolding`;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  private static suggestContextualImprovements(_questionType: QuestionType): string[] {
+    return [
+      "Add cultural context",
+      "Include usage examples", 
+      "Provide pronunciation guides",
+      "Connect to daily life scenarios"
+    ];
+  }
+}
