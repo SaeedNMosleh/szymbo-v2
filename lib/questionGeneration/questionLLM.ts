@@ -411,38 +411,48 @@ Remember: Students will see this image and need to identify what Polish word it 
       .map((c) => `${c.name}: ${c.description}`)
       .join("\n");
 
-    return QUESTION_GENERATION_BASE_PROMPT.replace(
-      "{questionType}",
-      questionType
-    )
-      .replace("{quantity}", quantity.toString())
-      .replace("{typeDescription}", typeInfo.description)
-      .replace("{typeTemplate}", typeInfo.template)
-      .replace("{typeExample}", typeInfo.example)
-      .replace("{conceptNames}", conceptNames)
-      .replace("{conceptDescriptions}", conceptDescriptions)
-      .replace("{difficulty}", difficulty)
+    // Build concept metadata from available concept information
+    const conceptMetadata = concepts.length > 0
+      ? concepts.map(c => `${c.name}: difficulty=${c.difficulty || difficulty}, tags=[${c.tags?.join(", ") || "none"}]`).join("\n")
+      : "No additional metadata available";
+
+    return QUESTION_GENERATION_BASE_PROMPT.replace(/\{questionType\}/g, questionType)
+      .replace(/\{quantity\}/g, quantity.toString())
+      .replace(/\{typeDescription\}/g, typeInfo.description)
+      .replace(/\{typeTemplate\}/g, typeInfo.template)
+      .replace(/\{typeExample\}/g, typeInfo.example)
+      .replace(/\{conceptNames\}/g, conceptNames)
+      .replace(/\{conceptDescriptions\}/g, conceptDescriptions)
+      .replace(/\{conceptMetadata\}/g, conceptMetadata)
+      .replace(/\{difficulty\}/g, difficulty)
       .replace(
-        "{difficultyGuidelines}",
+        /\{difficultyGuidelines\}/g,
         this.getDifficultyGuidelines(difficulty)
       )
       .replace(
-        "{specialInstructions}",
+        /\{performanceContext\}/g,
+        "Performance data not available for this session"
+      )
+      .replace(
+        /\{analyticsGuidance\}/g,
+        "Focus on creating high-quality questions that test practical understanding of the target concepts"
+      )
+      .replace(
+        /\{specialInstructions\}/g,
         specialInstructions
           ? `SPECIAL INSTRUCTIONS: ${specialInstructions}`
           : ""
       )
       .replace(
-        "{conjugationSpecialRequirements}",
+        /\{conjugationSpecialRequirements\}/g,
         questionType === QuestionType.CONJUGATION_TABLE
           ? CONJUGATION_SPECIAL_REQUIREMENTS
           : ""
       )
       .replace(
-        "{exampleConceptName}",
+        /\{exampleConceptName\}/g,
         conceptNames.split(", ")[0] || "verb conjugation"
-      )
-      .replace(/\{quantity\}/g, quantity.toString());
+      );
   }
 
   private getDifficultyGuidelines(difficulty: QuestionLevel): string {
