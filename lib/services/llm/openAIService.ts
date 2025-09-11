@@ -7,6 +7,7 @@ import { BaseLLMService } from "./baseLLMService";
 import { LLMServiceError } from "@/lib/utils/errors";
 import { logger } from "@/lib/utils/logger";
 import type { LLMRequest, LLMServiceConfig, LLMProvider } from "./types";
+import { validateImagePrompt } from "@/lib/utils/promptUtils";
 
 export class OpenAIService extends BaseLLMService {
   private client: OpenAI;
@@ -232,9 +233,20 @@ export class OpenAIService extends BaseLLMService {
     size: string = "1024x1024"
   ): Promise<string> {
     try {
+      // Validate and potentially truncate the prompt to meet OpenAI limits
+      const validation = validateImagePrompt(prompt);
+
+      if (validation.warnings.length > 0) {
+        logger.warn("Image prompt validation warnings", {
+          warnings: validation.warnings,
+          originalLength: prompt.length,
+          finalLength: validation.prompt.length,
+        });
+      }
+
       const response = await this.client.images.generate({
         model: "dall-e-3",
-        prompt,
+        prompt: validation.prompt,
         size: size as
           | "1024x1024"
           | "256x256"
@@ -251,7 +263,9 @@ export class OpenAIService extends BaseLLMService {
       }
 
       logger.info("Image generated successfully", {
-        promptLength: prompt.length,
+        promptLength: validation.prompt.length,
+        originalPromptLength: prompt.length,
+        wasTruncated: validation.prompt !== prompt,
         size,
         imageUrl: imageUrl.substring(0, 100) + "...",
       });

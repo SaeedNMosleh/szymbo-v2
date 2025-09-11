@@ -84,4 +84,14 @@ export enum ConceptExtractionStatus {
   IN_REVIEW = "in-review",
   REVIEWED = "reviewed",
 }
+
+/**
+ * OpenAI API prompt length limits
+ */
+export const OPENAI_LIMITS = {
+  DALLE_2_PROMPT_MAX_LENGTH: 1000,
+  DALLE_3_PROMPT_MAX_LENGTH: 4000,
+  GPT_CONTEXT_MAX_TOKENS: 128000, // for gpt-4o-mini
+} as const;
+
 /* eslint-enable no-unused-vars */

@@ -6,34 +6,88 @@ import {
 } from "@/lib/utils/apiResponse";
 import { OpenAIService } from "@/lib/services/llm/openAIService";
 import { LLMServiceError } from "@/lib/utils/errors";
+import { validateImagePrompt } from "@/lib/utils/promptUtils";
+import { OPENAI_LIMITS } from "@/lib/enum";
 
 /**
  * Creates sophisticated educational image prompts that test comprehension without revealing answers
  */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function createEducationalImagePrompt(basePrompt: string, polishWord: string, _questionId?: string): string {
+function createEducationalImagePrompt(
+  basePrompt: string,
+  polishWord: string
+): string {
   // Generate semantic context without revealing the target word
   const semanticCategories = {
     // Household items
-    household: ["kitchen scene", "living room setting", "bedroom environment", "bathroom context"],
-    // Animals  
-    animals: ["natural habitat", "farm setting", "forest scene", "domestic environment"],
+    household: [
+      "kitchen scene",
+      "living room setting",
+      "bedroom environment",
+      "bathroom context",
+    ],
+    // Animals
+    animals: [
+      "natural habitat",
+      "farm setting",
+      "forest scene",
+      "domestic environment",
+    ],
     // Food items
-    food: ["dining table setup", "kitchen preparation area", "market stall", "restaurant scene"],
+    food: [
+      "dining table setup",
+      "kitchen preparation area",
+      "market stall",
+      "restaurant scene",
+    ],
     // Clothing
-    clothing: ["wardrobe setting", "shopping scene", "seasonal context", "formal/casual situation"],
+    clothing: [
+      "wardrobe setting",
+      "shopping scene",
+      "seasonal context",
+      "formal/casual situation",
+    ],
     // Vehicles
-    transport: ["street scene", "travel context", "urban environment", "transportation hub"],
+    transport: [
+      "street scene",
+      "travel context",
+      "urban environment",
+      "transportation hub",
+    ],
     // Actions/verbs
-    actions: ["daily activity scene", "workplace setting", "recreational context", "social situation"],
+    actions: [
+      "daily activity scene",
+      "workplace setting",
+      "recreational context",
+      "social situation",
+    ],
     // Body parts
-    body: ["healthcare setting", "exercise context", "daily routine scene", "medical illustration"],
+    body: [
+      "healthcare setting",
+      "exercise context",
+      "daily routine scene",
+      "medical illustration",
+    ],
     // Colors
-    colors: ["art studio", "nature scene", "decorative context", "rainbow/spectrum setting"],
+    colors: [
+      "art studio",
+      "nature scene",
+      "decorative context",
+      "rainbow/spectrum setting",
+    ],
     // Numbers
-    numbers: ["counting context", "mathematical setting", "clock/time scene", "quantity illustration"],
+    numbers: [
+      "counting context",
+      "mathematical setting",
+      "clock/time scene",
+      "quantity illustration",
+    ],
     // Weather
-    weather: ["seasonal landscape", "outdoor activity", "climate visualization", "atmospheric scene"]
+    weather: [
+      "seasonal landscape",
+      "outdoor activity",
+      "climate visualization",
+      "atmospheric scene",
+    ],
   };
 
   // Analyze the Polish word to determine category and create contextual scene
@@ -42,24 +96,36 @@ function createEducationalImagePrompt(basePrompt: string, polishWord: string, _q
   let visualNarrative = "";
 
   // Sophisticated category detection and scene creation
-  if (wordLower.match(/(dom|mieszkanie|pokój|kuchnia|łazienka|stół|krzesło|łóżko)/)) {
+  if (
+    wordLower.match(
+      /(dom|mieszkanie|pokój|kuchnia|łazienka|stół|krzesło|łóżko)/
+    )
+  ) {
     sceneContext = getRandomElement(semanticCategories.household);
-    visualNarrative = "Show a detailed interior scene where this item would naturally be found and used";
+    visualNarrative =
+      "Show a detailed interior scene where this item would naturally be found and used";
   } else if (wordLower.match(/(kot|pies|ptak|koń|krowa|ryba)/)) {
-    sceneContext = getRandomElement(semanticCategories.animals);  
-    visualNarrative = "Illustrate the natural environment where this creature lives and thrives";
-  } else if (wordLower.match(/(chleb|mięso|owoc|warzywo|mleko|ser|jajko|ryż)/)) {
+    sceneContext = getRandomElement(semanticCategories.animals);
+    visualNarrative =
+      "Illustrate the natural environment where this creature lives and thrives";
+  } else if (
+    wordLower.match(/(chleb|mięso|owoc|warzywo|mleko|ser|jajko|ryż)/)
+  ) {
     sceneContext = getRandomElement(semanticCategories.food);
-    visualNarrative = "Depict a culinary context showing how this ingredient is used or prepared";
+    visualNarrative =
+      "Depict a culinary context showing how this ingredient is used or prepared";
   } else if (wordLower.match(/(ubranie|spodnie|koszula|buty|czapka|płaszcz)/)) {
     sceneContext = getRandomElement(semanticCategories.clothing);
-    visualNarrative = "Show a fashion or dressing context where this item would be worn";
+    visualNarrative =
+      "Show a fashion or dressing context where this item would be worn";
   } else if (wordLower.match(/(samochód|autobus|pociąg|samolot|rower)/)) {
     sceneContext = getRandomElement(semanticCategories.transport);
-    visualNarrative = "Create a transportation scene showing this vehicle in action";
+    visualNarrative =
+      "Create a transportation scene showing this vehicle in action";
   } else if (wordLower.match(/(biegać|czytać|pisać|gotować|spać|jeść)/)) {
     sceneContext = getRandomElement(semanticCategories.actions);
-    visualNarrative = "Illustrate someone performing this activity in an appropriate setting";
+    visualNarrative =
+      "Illustrate someone performing this activity in an appropriate setting";
   } else {
     // Default: create contextual scene based on base prompt
     visualNarrative = `Create an educational illustration that shows the concept of "${basePrompt}" without text`;
@@ -106,7 +172,10 @@ const GenerateImageSchema = z.object({
   prompt: z
     .string()
     .min(1, "Prompt is required")
-    .max(1000, "Prompt too long (max 1000 characters)"),
+    .max(
+      OPENAI_LIMITS.DALLE_3_PROMPT_MAX_LENGTH,
+      `Prompt too long (max ${OPENAI_LIMITS.DALLE_3_PROMPT_MAX_LENGTH} characters)`
+    ),
   polishWord: z
     .string()
     .min(1, "Polish word is required")
@@ -133,7 +202,17 @@ export async function POST(request: NextRequest) {
     const { prompt, polishWord, size, questionId } = validationResult.data;
 
     // Create sophisticated educational prompt that hides the answer while maintaining learning value
-    const enhancedPrompt = createEducationalImagePrompt(prompt, polishWord, questionId);
+    const enhancedPrompt = createEducationalImagePrompt(
+      prompt,
+      polishWord
+    );
+
+    // Validate the enhanced prompt for length constraints
+    const validation = validateImagePrompt(enhancedPrompt);
+
+    if (validation.warnings.length > 0) {
+      console.warn("Image prompt validation warnings:", validation.warnings);
+    }
 
     // Initialize OpenAI service
     const openAIService = new OpenAIService({
@@ -142,8 +221,8 @@ export async function POST(request: NextRequest) {
       maxTokens: 1000,
     });
 
-    // Generate image using gpt-image-0721-mini-alpha model
-    const imageUrl = await openAIService.generateImage(enhancedPrompt, size);
+    // Generate image using validated prompt
+    const imageUrl = await openAIService.generateImage(validation.prompt, size);
 
     return createSuccessResponse({
       imageUrl,

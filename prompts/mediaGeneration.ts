@@ -150,7 +150,7 @@ Based on the semantic analysis, select the most appropriate scenario:
 - Natural, conversational Polish appropriate for {difficulty} level
 - Context clues that lead to the target concept identification
 - Cultural authenticity in language use and references
-- Appropriate length for comprehension (20-40 seconds)
+- Make it brief and consice 
 - Clear pronunciation for language learners
 - Engaging narrative that maintains listener attention
 
@@ -164,26 +164,36 @@ The content should be ready for text-to-speech generation and provide adequate c
 /**
  * System prompts for media generation services
  */
-export const MEDIA_GENERATION_SYSTEM_PROMPT = "You are an expert Polish language and culture specialist creating educational media content for language learners. Your focus is on creating contextual, culturally authentic content that enhances comprehension without revealing answers directly.";
+export const MEDIA_GENERATION_SYSTEM_PROMPT =
+  "You are an expert Polish language and culture specialist creating educational media content for language learners. Your focus is on creating contextual, culturally authentic content that enhances comprehension without revealing answers directly.";
 
-export const CONTENT_ANALYSIS_SYSTEM_PROMPT = "You are a Polish language expert specializing in semantic analysis and educational content design. Provide precise, structured analysis for educational media generation.";
+export const CONTENT_ANALYSIS_SYSTEM_PROMPT =
+  "You are a Polish language expert specializing in semantic analysis and educational content design. Provide precise, structured analysis for educational media generation.";
 
 /**
  * Fallback scenarios for edge cases where dynamic analysis might not provide sufficient context
  */
 export const FALLBACK_SCENARIOS = {
   visual: {
-    abstract: "Person in thoughtful pose with symbolic representations of the concept in thought bubbles or environmental elements",
-    action: "Person performing or demonstrating the concept in a natural, everyday setting",
-    object: "Everyday scene where the object would naturally appear in use or context",
-    emotion: "Person expressing or experiencing the emotional state in a relatable social situation"
+    abstract:
+      "Person in thoughtful pose with symbolic representations of the concept in thought bubbles or environmental elements",
+    action:
+      "Person performing or demonstrating the concept in a natural, everyday setting",
+    object:
+      "Everyday scene where the object would naturally appear in use or context",
+    emotion:
+      "Person expressing or experiencing the emotional state in a relatable social situation",
   },
   audio: {
-    abstract: "Osoba myśli o tym pojęciu. Jest to bardzo ważne w codziennym życiu. Co to może być?",
-    action: "Widzę kogoś, kto robi coś ciekawego. Ta czynność jest bardzo przydatna. Co robi ta osoba?",
-    object: "Potrzebuję czegoś do wykonania zadania. Ten przedmiot jest bardzo pomocny. Czego szukam?",
-    emotion: "Osoba czuje się w określony sposób. Ten stan emocjonalny jest naturalny w tej sytuacji. Jak się czuje?"
-  }
+    abstract:
+      "Osoba myśli o tym pojęciu. Jest to bardzo ważne w codziennym życiu. Co to może być?",
+    action:
+      "Widzę kogoś, kto robi coś ciekawego. Ta czynność jest bardzo przydatna. Co robi ta osoba?",
+    object:
+      "Potrzebuję czegoś do wykonania zadania. Ten przedmiot jest bardzo pomocny. Czego szukam?",
+    emotion:
+      "Osoba czuje się w określony sposób. Ten stan emocjonalny jest naturalny w tej sytuacji. Jak się czuje?",
+  },
 };
 
 /**
@@ -226,23 +236,49 @@ export class MediaPromptBuilder {
     analysis: ContentAnalysis,
     conceptContext?: string
   ): string {
-    const primarySetting = analysis.visualContext.naturalSettings[0] || "everyday environment";
-    const sceneElements = analysis.visualContext.keyVisualElements.join(", ");
-    const culturalElements = analysis.visualContext.culturalVisualCues.join(", ");
-    const contextualCues = analysis.audioContext.comprehensionCues.join(", ");
+    const primarySetting =
+      analysis.visualContext.naturalSettings[0] || "everyday environment";
+    const sceneElements = analysis.visualContext.keyVisualElements
+      .slice(0, 3)
+      .join(", "); // Limit to 3 elements
+    const culturalElements = analysis.visualContext.culturalVisualCues
+      .slice(0, 2)
+      .join(", "); // Limit to 2 elements
+    const contextualCues = analysis.audioContext.comprehensionCues
+      .slice(0, 3)
+      .join(", "); // Limit to 3 elements
 
-    return IMAGE_GENERATION_PROMPT
-      .replace("{targetWord}", targetWord)
+    // Truncate conceptContext if it's too long
+    const truncatedConceptContext =
+      conceptContext && conceptContext.length > 200
+        ? conceptContext.substring(0, 200) + "..."
+        : conceptContext || "";
+
+    return IMAGE_GENERATION_PROMPT.replace("{targetWord}", targetWord)
       .replace("{primaryCategory}", analysis.semanticAnalysis.primaryCategory)
-      .replace("{naturalSettings}", analysis.visualContext.naturalSettings.join(", "))
+      .replace(
+        "{naturalSettings}",
+        analysis.visualContext.naturalSettings.slice(0, 2).join(", ")
+      ) // Limit settings
       .replace("{keyVisualElements}", sceneElements)
-      .replace("{culturalContext}", analysis.semanticAnalysis.culturalSignificance)
-      .replace("{conceptContext}", conceptContext || "")
+      .replace(
+        "{culturalContext}",
+        analysis.semanticAnalysis.culturalSignificance.length > 150
+          ? analysis.semanticAnalysis.culturalSignificance.substring(0, 150) +
+              "..."
+          : analysis.semanticAnalysis.culturalSignificance
+      )
+      .replace("{conceptContext}", truncatedConceptContext)
       .replace("{primarySetting}", primarySetting)
       .replace("{sceneElements}", sceneElements)
       .replace("{culturalElements}", culturalElements)
       .replace("{contextualCues}", contextualCues)
-      .replace("{additionalContextualElements}", conceptContext ? `Additional Context: ${conceptContext}` : "");
+      .replace(
+        "{additionalContextualElements}",
+        truncatedConceptContext
+          ? `Additional Context: ${truncatedConceptContext}`
+          : ""
+      );
   }
 
   static buildAudioPrompt(
@@ -251,22 +287,38 @@ export class MediaPromptBuilder {
     difficulty: QuestionLevel,
     conceptContext?: string
   ): string {
-    const dailyLifeContext = analysis.audioContext.naturalScenarios[0] || "everyday situation";
-    const socialContext = analysis.audioContext.naturalScenarios[1] || "social interaction";
+    const dailyLifeContext =
+      analysis.audioContext.naturalScenarios[0] || "everyday situation";
+    const socialContext =
+      analysis.audioContext.naturalScenarios[1] || "social interaction";
     const culturalContext = analysis.semanticAnalysis.culturalSignificance;
-    const educationalContext = analysis.educationalMetadata.learningObjectives.join(", ");
+    const educationalContext =
+      analysis.educationalMetadata.learningObjectives.join(", ");
+    const truncatedConceptContext =
+      conceptContext && conceptContext.length > 100
+        ? conceptContext.substring(0, 100) + "..."
+        : conceptContext || "";
 
-    return AUDIO_GENERATION_PROMPT
-      .replace("{targetWord}", targetWord)
+    return AUDIO_GENERATION_PROMPT.replace("{targetWord}", targetWord)
       .replace("{primaryCategory}", analysis.semanticAnalysis.primaryCategory)
-      .replace("{naturalScenarios}", analysis.audioContext.naturalScenarios.join(", "))
-      .replace("{contextualDialogues}", analysis.audioContext.contextualDialogues.join(", "))
-      .replace("{culturalReferences}", analysis.audioContext.culturalReferences.join(", "))
+      .replace(
+        "{naturalScenarios}",
+        analysis.audioContext.naturalScenarios.join(", ")
+      )
+      .replace(
+        "{contextualDialogues}",
+        analysis.audioContext.contextualDialogues.join(", ")
+      )
+      .replace(
+        "{culturalReferences}",
+        analysis.audioContext.culturalReferences.join(", ")
+      )
       .replace("{difficulty}", difficulty)
       .replace("{dailyLifeContext}", dailyLifeContext)
       .replace("{socialContext}", socialContext)
       .replace("{culturalContext}", culturalContext)
-      .replace("{educationalContext}", educationalContext);
+      .replace("{educationalContext}", educationalContext)
+      .replace("{conceptContext}", truncatedConceptContext);
   }
 
   static buildContentAnalysisPrompt(
@@ -274,9 +326,11 @@ export class MediaPromptBuilder {
     difficulty: QuestionLevel,
     conceptContext?: string
   ): string {
-    return CONTENT_ANALYSIS_PROMPT
-      .replace("{targetWord}", targetWord)
-      .replace("{conceptContext}", conceptContext || "No additional context provided")
+    return CONTENT_ANALYSIS_PROMPT.replace("{targetWord}", targetWord)
+      .replace(
+        "{conceptContext}",
+        conceptContext || "No additional context provided"
+      )
       .replace("{difficulty}", difficulty);
   }
 }

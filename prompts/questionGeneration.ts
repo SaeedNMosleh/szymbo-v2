@@ -21,15 +21,20 @@ export const QUESTION_TYPE_PROMPTS: Record<
   { description: string; template: string; example: string }
 > = {
   [QuestionType.BASIC_CLOZE]: {
-    description: "Fill-in-the-blank questions with single word answers",
+    description:
+      "Create a fill-in-the-blank question with one missing word, using clear grammatical and contextual cues (e.g., case, tense, agreement) to ensure exactly one correct single-word answer.",
     template:
-      "Create a sentence with a missing word (use _____ for the blank). The missing word should test the concept.",
-    example: "Question: 'Ja _____ do sklepu.' Answer: 'idę'",
+      "Generate a Polish question with one blank ('_____') in a main sentence, testing the target concept. Use natural, idiomatic Polish and precise context (e.g., gender, case, tense, fixed collocations) to guarantee one unique single-word answer, avoiding synonyms or alternative inflections. Optionally, add a short second sentence for context if needed to ensure clarity. Avoid cloze of function words (e.g., prepositions, conjunctions) or open-ended verbs (e.g., 'myślę', 'sądzę'). Keep sentences concise and engaging, varying topics for interest.",
+    example:
+      "A1 Question: 'Ja _____ do szkoły.' Answer: 'idę'\nB1 Question: 'Kupiłem _____ dla mamy. To był prezent.' Answer: 'kwiaty'",
   },
   [QuestionType.MULTI_CLOZE]: {
-    description: "Multiple fill-in-the-blank questions",
-    template: "Polish sentence with 2-3 blanks. Provide clear context.",
-    example: "Question: 'Rano _____ się o 7:00, _____ śniadanie i _____ do pracy.' Answer: 'budzę, jem, idę'",
+    description:
+      "Create a fill-in-the-blank question with 2–3 missing words, each with exactly one correct single-word answer, supported by clear grammatical and contextual cues in 1–2 sentences.",
+    template:
+      "Generate a Polish question using 1–2 sentences with 2–3 blanks ('_____'), each for a single-word answer testing the target concepts. Use natural, idiomatic Polish and precise context (e.g., specific case, tense, agreement, fixed collocations) to ensure each blank has exactly one correct answer, with no synonyms or alternative inflections possible. Avoid cloze of function words (e.g., prepositions, conjunctions) or open-ended verbs (e.g., opinion verbs like 'myślę', 'sądzę'). Vary topics and scenarios (e.g., daily life, travel, culture) for engagement. For A1–A2, keep total length ≤ 110 characters; for higher levels, keep concise but vivid.",
+    example:
+      "A1 Question: 'Codziennie _____ kawę. Potem _____ gazetę.' Answer: 'piję, czytam'\nB1 Question: 'Kasia kupiła książkę. Potrzebuje _____ torby na _____ książkę.' Answer: 'małej, nową'\nB2 Question: 'Tomek pisze list. _____ go i _____ w skrzynce.' Answer: 'skończył, zostawił'",
   },
   [QuestionType.VOCAB_CHOICE]: {
     description: "Multiple choice vocabulary questions",
@@ -85,13 +90,17 @@ export const QUESTION_TYPE_PROMPTS: Record<
   },
   [QuestionType.AUDIO_COMPREHENSION]: {
     description: "Audio comprehension questions",
-    template: "Describe a brief conversation context, ask what was said. Keep description short.",
-    example: "Question: 'W sklepie klient mówi do sprzedawcy coś grzecznego na powitanie. Co powiedział?' Answer: 'Dzień dobry'",
+    template:
+      "Describe a brief conversation context, ask what was said. Keep description short.",
+    example:
+      "Question: 'W sklepie klient mówi do sprzedawcy coś grzecznego na powitanie. Co powiedział?' Answer: 'Dzień dobry'",
   },
   [QuestionType.VISUAL_VOCABULARY]: {
     description: "Visual vocabulary questions",
-    template: "Describe a scene briefly, ask for the Polish word. Keep description minimal but clear.",
-    example: "Question: 'W parku widać duże drzewo z zielonymi liśćmi. Co to jest?' Answer: 'dąb'",
+    template:
+      "Describe a scene briefly, ask for the Polish word. Keep description minimal but clear.",
+    example:
+      "Question: 'W parku widać duże drzewo z zielonymi liśćmi. Co to jest?' Answer: 'dąb'",
   },
   [QuestionType.DIALOGUE_COMPLETE]: {
     description: "Complete dialogue conversations",
@@ -112,12 +121,15 @@ export const QUESTION_TYPE_PROMPTS: Record<
   [QuestionType.SCENARIO_RESPONSE]: {
     description: "Social situation response questions",
     template: "Brief social scenario, ask for appropriate Polish response.",
-    example: "Question: 'Wchodzisz do sklepu. Co mówisz?' Answer: 'Dzień dobry'",
+    example:
+      "Question: 'Wchodzisz do sklepu. Co mówisz?' Answer: 'Dzień dobry'",
   },
   [QuestionType.CULTURAL_CONTEXT]: {
     description: "Polish culture questions",
-    template: "Ask about Polish customs or traditions. Provide context if needed.",
-    example: "Question: 'Jak się nazywa polskie święto, kiedy ludzie świętują swoje imię?' Answer: 'Imieniny'",
+    template:
+      "Ask about Polish customs or traditions. Provide context if needed.",
+    example:
+      "Question: 'Jak się nazywa polskie święto, kiedy ludzie świętują swoje imię?' Answer: 'Imieniny'",
   },
   [QuestionType.Q_A]: {
     description: "Question and answer format",
@@ -133,7 +145,9 @@ export const QUESTION_GENERATION_BASE_PROMPT = `Generate {quantity} Polish {ques
 
 ## CORE RULES:
 - Questions in Polish only - NO English translations or explanations in parentheses
-- Brief and precise by default - add context only if needed for comprehension
+- Ensure each question is self-contained, sensible, and has clear, unambiguous correct answers.
+- User does not have access to concept descriptions - They are guideline for you to generate question.
+- Add as much context as needed to ensure clarity and uniqueness of answers.
 - Self-contained - no external URLs, images, or audio file references
 - Return valid JSON only
 
@@ -147,7 +161,7 @@ Example: {typeExample}
 {conceptDescriptions}
 
 ## DIFFICULTY LEVEL: {difficulty}
-{difficultyGuidelines}
+
 
 {specialInstructions}
 

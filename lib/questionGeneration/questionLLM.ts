@@ -17,6 +17,7 @@ import {
 } from "@/prompts/questionGeneration";
 import { ContentAnalysisService } from "@/lib/services/contentAnalysisService";
 import { MediaPromptBuilder } from "@/prompts/mediaGeneration";
+import { logPromptAnalytics } from "@/lib/utils/promptAnalytics";
 
 export interface QuestionGenerationRequest {
   concepts: IConcept[];
@@ -202,6 +203,12 @@ export class QuestionLLMService {
         conceptContext
       );
 
+      // Log prompt analytics in development for debugging
+      logPromptAnalytics(
+        enhancedPrompt,
+        `Image generation for: ${correctAnswer}`
+      );
+
       // Call OpenAI service with enhanced prompt
       const imageUrl = await this.openAIService.generateImage(
         enhancedPrompt,
@@ -217,6 +224,13 @@ export class QuestionLLMService {
         correctAnswer,
         conceptContext
       );
+
+      // Log fallback prompt analytics
+      logPromptAnalytics(
+        fallbackPrompt,
+        `Fallback image generation for: ${correctAnswer}`
+      );
+
       const imageUrl = await this.openAIService.generateImage(
         fallbackPrompt,
         "1024x1024"
@@ -412,11 +426,20 @@ Remember: Students will see this image and need to identify what Polish word it 
       .join("\n");
 
     // Build concept metadata from available concept information
-    const conceptMetadata = concepts.length > 0
-      ? concepts.map(c => `${c.name}: difficulty=${c.difficulty || difficulty}, tags=[${c.tags?.join(", ") || "none"}]`).join("\n")
-      : "No additional metadata available";
+    const conceptMetadata =
+      concepts.length > 0
+        ? concepts
+            .map(
+              (c) =>
+                `${c.name}: difficulty=${c.difficulty || difficulty}, tags=[${c.tags?.join(", ") || "none"}]`
+            )
+            .join("\n")
+        : "No additional metadata available";
 
-    return QUESTION_GENERATION_BASE_PROMPT.replace(/\{questionType\}/g, questionType)
+    return QUESTION_GENERATION_BASE_PROMPT.replace(
+      /\{questionType\}/g,
+      questionType
+    )
       .replace(/\{quantity\}/g, quantity.toString())
       .replace(/\{typeDescription\}/g, typeInfo.description)
       .replace(/\{typeTemplate\}/g, typeInfo.template)
