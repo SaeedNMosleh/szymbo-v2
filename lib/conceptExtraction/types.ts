@@ -16,6 +16,14 @@ export interface ExtractedConcept {
     source: 'existing' | 'new';
     confidence: number;
   }>;
+  vocabularyData?: {
+    word: string;
+    translation: string;
+    partOfSpeech: string;
+    gender?: string;
+    pluralForm?: string;
+    pronunciation?: string;
+  };
 }
 
 /**

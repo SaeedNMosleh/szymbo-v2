@@ -52,12 +52,24 @@ export class OpenAIService extends BaseLLMService {
         content: request.prompt,
       });
 
-      const completion = await this.client.chat.completions.create({
+      // Determine which token parameter to use based on model and availability
+      const tokenConfig: OpenAI.Chat.ChatCompletionCreateParamsNonStreaming = {
         model: request.model || this.getDefaultModel(),
         messages,
         temperature: request.temperature ?? this.config.temperature,
-        max_tokens: request.maxTokens ?? this.config.maxTokens,
-      });
+      };
+
+      // Use max_completion_tokens for newer models, fallback to max_tokens for compatibility
+      const maxCompletionTokens = request.max_completion_tokens ?? this.config.max_completion_tokens;
+      const maxTokens = request.maxTokens ?? this.config.maxTokens;
+
+      if (maxCompletionTokens) {
+        tokenConfig.max_completion_tokens = maxCompletionTokens;
+      } else if (maxTokens) {
+        tokenConfig.max_tokens = maxTokens;
+      }
+
+      const completion = await this.client.chat.completions.create(tokenConfig);
 
       const response = completion.choices[0]?.message?.content;
 
@@ -160,13 +172,25 @@ export class OpenAIService extends BaseLLMService {
         content: request.prompt,
       });
 
-      const stream = await this.client.chat.completions.create({
+      // Determine which token parameter to use for streaming
+      const streamConfig: OpenAI.Chat.ChatCompletionCreateParamsStreaming = {
         model: request.model || this.getDefaultModel(),
         messages,
         temperature: request.temperature ?? this.config.temperature,
-        max_tokens: request.maxTokens ?? this.config.maxTokens,
         stream: true,
-      });
+      };
+
+      // Use max_completion_tokens for newer models, fallback to max_tokens for compatibility
+      const maxCompletionTokens = request.max_completion_tokens ?? this.config.max_completion_tokens;
+      const maxTokens = request.maxTokens ?? this.config.maxTokens;
+
+      if (maxCompletionTokens) {
+        streamConfig.max_completion_tokens = maxCompletionTokens;
+      } else if (maxTokens) {
+        streamConfig.max_tokens = maxTokens;
+      }
+
+      const stream = await this.client.chat.completions.create(streamConfig);
 
       for await (const chunk of stream) {
         const content = chunk.choices[0]?.delta?.content;

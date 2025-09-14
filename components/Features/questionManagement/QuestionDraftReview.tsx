@@ -67,7 +67,7 @@ export default function QuestionDraftReview({
 
   const fetchConceptMap = async () => {
     try {
-      const response = await fetch("/api/concepts");
+      const response = await fetch("/api/concepts?limit=100");
       if (!response.ok) return;
 
       const data = await response.json();

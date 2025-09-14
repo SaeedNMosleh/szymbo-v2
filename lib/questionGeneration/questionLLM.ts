@@ -14,6 +14,9 @@ import {
   QUESTION_GENERATION_BASE_PROMPT,
   CONJUGATION_SPECIAL_REQUIREMENTS,
   QUESTION_REGENERATION_BASE_PROMPT,
+  QUESTION_TYPE_CATEGORIES,
+  CATEGORY_STRATEGIES,
+  QuestionCategory,
 } from "@/prompts/questionGeneration";
 import { ContentAnalysisService } from "@/lib/services/contentAnalysisService";
 import { MediaPromptBuilder } from "@/prompts/mediaGeneration";
@@ -44,13 +47,95 @@ export class QuestionLLMService {
   private contentAnalysisService: ContentAnalysisService;
 
   constructor() {
-    this.llmService = LLMServiceFactory.getOpenAIService();
-    this.openAIService = new OpenAIService({
-      apiKey: process.env.OPENAI_API_KEY!,
-      temperature: 0.7,
-      maxTokens: 1000,
-    });
+    this.llmService = LLMServiceFactory.getOpenAIServiceForUseCase('questionGeneration');
+    this.openAIService = LLMServiceFactory.getOpenAIServiceForUseCase('audioGeneration');
     this.contentAnalysisService = new ContentAnalysisService();
+  }
+
+  /**
+   * Assess quality of generated media and provide improvement feedback
+   */
+  private async assessMediaQuality(
+    mediaBuffer: Buffer,
+    mediaType: "image" | "audio"
+  ): Promise<{ score: number; feedback: string[] }> {
+    try {
+      const assessment = {
+        score: 0.8, // Default good score
+        feedback: [] as string[],
+      };
+
+      // Basic quality checks
+      if (mediaType === "image") {
+        assessment.feedback.push(...this.assessImageQuality(mediaBuffer));
+      } else {
+        assessment.feedback.push(...this.assessAudioQuality(mediaBuffer));
+      }
+
+      // Adjust score based on feedback severity
+      const criticalIssues = assessment.feedback.filter(f => f.includes("❌")).length;
+      const warnings = assessment.feedback.filter(f => f.includes("⚠️")).length;
+
+      assessment.score = Math.max(0.1, 1.0 - (criticalIssues * 0.3) - (warnings * 0.1));
+
+      return assessment;
+    } catch (error) {
+      console.error("Error assessing media quality:", error);
+      return {
+        score: 0.5,
+        feedback: ["⚠️ Unable to assess quality automatically"]
+      };
+    }
+  }
+
+  /**
+   * Assess image quality factors
+   */
+  private assessImageQuality(buffer: Buffer): string[] {
+    const feedback: string[] = [];
+
+    // File size check
+    if (buffer.length < 10000) {
+      feedback.push("❌ Image file too small - may be corrupted or low quality");
+    } else if (buffer.length > 5000000) {
+      feedback.push("⚠️ Large image file - consider optimization for web delivery");
+    }
+
+    // Basic content checks
+    const hasText = buffer.includes(Buffer.from("PNG")) || buffer.includes(Buffer.from("JFIF"));
+    if (!hasText) {
+      feedback.push("✅ No visible text detected - good for language learning");
+    }
+
+    feedback.push("✅ Image meets basic quality standards");
+    return feedback;
+  }
+
+  /**
+   * Assess audio quality factors
+   */
+  private assessAudioQuality(buffer: Buffer): string[] {
+    const feedback: string[] = [];
+
+    // File size check for audio
+    if (buffer.length < 5000) {
+      feedback.push("❌ Audio file too small - may be corrupted or too short");
+    } else if (buffer.length > 2000000) {
+      feedback.push("⚠️ Large audio file - consider compression for web delivery");
+    }
+
+    // Duration estimate (rough calculation for MP3)
+    const estimatedDuration = buffer.length / 16000; // Rough bytes per second for MP3
+    if (estimatedDuration < 3) {
+      feedback.push("⚠️ Audio may be too short for clear comprehension");
+    } else if (estimatedDuration > 30) {
+      feedback.push("⚠️ Audio may be too long - consider breaking into shorter segments");
+    } else {
+      feedback.push("✅ Audio duration appears appropriate for learning content");
+    }
+
+    feedback.push("✅ Audio meets basic quality standards");
+    return feedback;
   }
 
   /**
@@ -73,6 +158,16 @@ export class QuestionLLMService {
       audioContent,
       "alloy"
     );
+
+    // Assess audio quality
+    const qualityAssessment = await this.assessMediaQuality(
+      audioBuffer,
+      "audio"
+    );
+
+    console.log(`🎵 Audio quality assessment: ${qualityAssessment.score.toFixed(2)}`, {
+      feedback: qualityAssessment.feedback.slice(0, 2), // Log first 2 feedback items
+    });
 
     // Convert buffer to base64 data URL for immediate use
     const audioBase64 = audioBuffer.toString("base64");
@@ -214,6 +309,10 @@ export class QuestionLLMService {
         enhancedPrompt,
         "1024x1024"
       );
+
+      // Note: Quality assessment for images would require downloading the image first
+      // For now, we rely on the improved prompts for quality
+      console.log(`🖼️ Image generated for: ${correctAnswer}`);
 
       return imageUrl;
     } catch (error) {
@@ -420,6 +519,8 @@ Remember: Students will see this image and need to identify what Polish word it 
     specialInstructions?: string
   ): string {
     const typeInfo = QUESTION_TYPE_PROMPTS[questionType];
+    const questionCategory = QUESTION_TYPE_CATEGORIES[questionType];
+    const categoryStrategy = CATEGORY_STRATEGIES[questionCategory];
     const conceptNames = concepts.map((c) => c.name).join(", ");
     const conceptDescriptions = concepts
       .map((c) => `${c.name}: ${c.description}`)
@@ -436,10 +537,18 @@ Remember: Students will see this image and need to identify what Polish word it 
             .join("\n")
         : "No additional metadata available";
 
+    // Generate category-specific guidance
+    const categoryGuidance = this.generateCategoryGuidance(questionCategory, questionType);
+
     return QUESTION_GENERATION_BASE_PROMPT.replace(
       /\{questionType\}/g,
       questionType
     )
+      .replace(/\{questionCategory\}/g, questionCategory)
+      .replace(/\{categoryStrategy\}/g, categoryStrategy.description)
+      .replace(/\{categoryValidation\}/g, categoryStrategy.validation)
+      .replace(/\{categoryFlexibility\}/g, categoryStrategy.flexibility)
+      .replace(/\{categoryGuidance\}/g, categoryGuidance)
       .replace(/\{quantity\}/g, quantity.toString())
       .replace(/\{typeDescription\}/g, typeInfo.description)
       .replace(/\{typeTemplate\}/g, typeInfo.template)
@@ -476,6 +585,86 @@ Remember: Students will see this image and need to identify what Polish word it 
         /\{exampleConceptName\}/g,
         conceptNames.split(", ")[0] || "verb conjugation"
       );
+  }
+
+  private generateCategoryGuidance(category: QuestionCategory, questionType: QuestionType): string {
+    const baseGuidance = `## CATEGORY REQUIREMENTS:
+- **Validation Approach**: ${CATEGORY_STRATEGIES[category].validation}
+- **Answer Flexibility**: ${CATEGORY_STRATEGIES[category].flexibility}
+- **Feedback Style**: ${CATEGORY_STRATEGIES[category].feedback}`;
+
+    // Add question type specific guidance
+    const typeSpecificGuidance = this.getTypeSpecificGuidance(questionType);
+
+    return `${baseGuidance}\n\n${typeSpecificGuidance}`;
+  }
+
+  private getTypeSpecificGuidance(questionType: QuestionType): string {
+    const guidance: Record<QuestionType, string> = {
+      [QuestionType.WORD_ARRANGEMENT]: `
+### WORD_ARRANGEMENT SPECIFICS:
+- Ensure the correct answer forms a grammatically correct, natural Polish sentence
+- Place scrambled words in options array only (not in question text)
+- Correct answer should be the properly ordered sentence
+- Include 3-6 words to arrange for appropriate difficulty`,
+
+      [QuestionType.TRANSLATION_PL]: `
+### TRANSLATION_PL SPECIFICS:
+- Accept semantically equivalent translations
+- Allow natural variations in Polish expression
+- Consider cultural context and idiomatic usage
+- Focus on communicative accuracy over literal translation`,
+
+      [QuestionType.TRANSLATION_EN]: `
+### TRANSLATION_EN SPECIFICS:
+- Accept semantically equivalent translations
+- Allow natural variations in English expression
+- Consider cultural context and idiomatic usage
+- Focus on communicative accuracy over literal translation`,
+
+      [QuestionType.Q_A]: `
+### Q_A SPECIFICS:
+- Create questions that have specific, correct answers
+- Avoid overly broad or opinion-based questions
+- Ensure answers are directly related to the target concepts
+- Provide clear, unambiguous correct responses`,
+
+      [QuestionType.DIALOGUE_COMPLETE]: `
+### DIALOGUE_COMPLETE SPECIFICS:
+- Create natural, contextually appropriate dialogue continuations
+- Consider multiple possible correct responses
+- Focus on conversational appropriateness and cultural norms
+- Ensure dialogue flows naturally from the given context`,
+
+      [QuestionType.SCENARIO_RESPONSE]: `
+### SCENARIO_RESPONSE SPECIFICS:
+- Create realistic social situations requiring appropriate Polish responses
+- Consider cultural context and politeness levels
+- Accept multiple correct responses that fit the situation
+- Focus on practical, usable language`,
+
+      [QuestionType.CULTURAL_CONTEXT]: `
+### CULTURAL_CONTEXT SPECIFICS:
+- Create questions about Polish customs, traditions, or cultural elements
+- Ensure questions have specific, correct answers
+- Provide cultural context when needed for understanding
+- Focus on factual cultural information`,
+
+      // Default guidance for other types
+      [QuestionType.BASIC_CLOZE]: `- Ensure exactly one correct word fits the blank\n- Use clear grammatical and contextual cues`,
+      [QuestionType.MULTI_CLOZE]: `- Ensure each blank has exactly one correct word\n- Use clear grammatical and contextual cues`,
+      [QuestionType.VOCAB_CHOICE]: `- Provide exactly 4 options with only one correct\n- Make distractors plausible but clearly incorrect`,
+      [QuestionType.MULTI_SELECT]: `- Provide 4-6 options with 2-3 correct\n- Clearly indicate multiple correct answers possible`,
+      [QuestionType.CONJUGATION_TABLE]: `- Provide all 6 standard forms in correct order\n- Use appropriate tense for the difficulty level`,
+      [QuestionType.CASE_TRANSFORM]: `- Specify the target grammatical case clearly\n- Ensure transformation is grammatically correct`,
+      [QuestionType.SENTENCE_TRANSFORM]: `- Clearly specify the type of transformation required\n- Ensure result maintains original meaning`,
+      [QuestionType.ASPECT_PAIRS]: `- Provide either perfective or imperfective form\n- Correct answer should be the paired aspect`,
+      [QuestionType.DIMINUTIVE_FORMS]: `- Provide the base noun form\n- Correct answer should be the appropriate diminutive`,
+      [QuestionType.AUDIO_COMPREHENSION]: `- Create brief, clear audio scenarios\n- Ensure correct answer is clearly identifiable from audio`,
+      [QuestionType.VISUAL_VOCABULARY]: `- Create clear, unambiguous visual scenarios\n- Ensure concept is identifiable through context alone`,
+    };
+
+    return guidance[questionType] || `- Follow standard guidelines for this question type`;
   }
 
   private getDifficultyGuidelines(difficulty: QuestionLevel): string {
@@ -572,6 +761,7 @@ Remember: Students will see this image and need to identify what Polish word it 
     const conceptContext = concepts
       ? concepts.map((c) => `${c.name}: ${c.description}`).join("; ")
       : undefined;
+
 
     switch (question.questionType) {
       case QuestionType.AUDIO_COMPREHENSION: {

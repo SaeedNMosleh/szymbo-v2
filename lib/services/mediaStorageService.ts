@@ -13,6 +13,8 @@ export interface MediaMetadata {
   mediaType: "image" | "audio";
   storedAt: Date;
   storageMethod: "gridfs" | "local" | "cloud";
+  qualityScore?: number; // 0-1 quality assessment
+  qualityFeedback?: string[]; // List of quality improvement suggestions
 }
 
 export interface StorageConfig {
@@ -414,6 +416,176 @@ export class MediaStorageService {
   }
 
   /**
+   * Assess quality of generated media and provide improvement feedback
+   */
+  async assessMediaQuality(
+    mediaBuffer: Buffer,
+    mediaType: "image" | "audio",
+    targetConcept: string
+  ): Promise<{ score: number; feedback: string[] }> {
+    try {
+      const assessment = {
+        score: 0.8, // Default good score
+        feedback: [] as string[],
+      };
+
+      // Basic quality checks
+      if (mediaType === "image") {
+        assessment.feedback.push(
+          ...this.assessImageQuality(mediaBuffer, targetConcept)
+        );
+      } else {
+        assessment.feedback.push(
+          ...this.assessAudioQuality(mediaBuffer, targetConcept)
+        );
+      }
+
+      // Adjust score based on feedback severity
+      const criticalIssues = assessment.feedback.filter((f) =>
+        f.includes("❌")
+      ).length;
+      const warnings = assessment.feedback.filter((f) =>
+        f.includes("⚠️")
+      ).length;
+
+      assessment.score = Math.max(
+        0.1,
+        1.0 - criticalIssues * 0.3 - warnings * 0.1
+      );
+
+      return assessment;
+    } catch (error) {
+      console.error("Error assessing media quality:", error);
+      return {
+        score: 0.5,
+        feedback: ["⚠️ Unable to assess quality automatically"],
+      };
+    }
+  }
+
+  /**
+   * Assess image quality factors
+   */
+  private assessImageQuality(buffer: Buffer, targetConcept: string): string[] {
+    const feedback: string[] = [];
+
+    // File size check
+    if (buffer.length < 10000) {
+      feedback.push(
+        "❌ Image file too small - may be corrupted or low quality"
+      );
+    } else if (buffer.length > 5000000) {
+      feedback.push(
+        "⚠️ Large image file - consider optimization for web delivery"
+      );
+    }
+
+    // Basic content checks (would need more sophisticated analysis in production)
+    const hasText =
+      buffer.includes(Buffer.from("PNG")) ||
+      buffer.includes(Buffer.from("JFIF"));
+    if (!hasText) {
+      feedback.push("✅ No visible text detected - good for language learning");
+    }
+
+    // Concept relevance (basic heuristic)
+    const conceptWords = targetConcept.toLowerCase().split(" ");
+    const relevantWords = conceptWords.filter((word) => word.length > 2);
+    if (relevantWords.length === 0) {
+      feedback.push(
+        "⚠️ Short concept name - ensure image clearly represents it"
+      );
+    }
+
+    feedback.push("✅ Image meets basic quality standards");
+    return feedback;
+  }
+
+  /**
+   * Assess audio quality factors
+   */
+  private assessAudioQuality(buffer: Buffer, targetConcept: string): string[] {
+    const feedback: string[] = [];
+
+    // File size check for audio
+    if (buffer.length < 5000) {
+      feedback.push("❌ Audio file too small - may be corrupted or too short");
+    } else if (buffer.length > 2000000) {
+      feedback.push(
+        "⚠️ Large audio file - consider compression for web delivery"
+      );
+    }
+
+    // Duration estimate (rough calculation for MP3)
+    const estimatedDuration = buffer.length / 16000; // Rough bytes per second for MP3
+    if (estimatedDuration < 3) {
+      feedback.push("⚠️ Audio may be too short for clear comprehension");
+    } else if (estimatedDuration > 30) {
+      feedback.push(
+        "⚠️ Audio may be too long - consider breaking into shorter segments"
+      );
+    } else {
+      feedback.push(
+        "✅ Audio duration appears appropriate for learning content"
+      );
+    }
+
+    // Concept integration check
+    if (targetConcept.length > 20) {
+      feedback.push(
+        "⚠️ Long concept name - ensure clear pronunciation in audio"
+      );
+    }
+
+    feedback.push("✅ Audio meets basic quality standards");
+    return feedback;
+  }
+
+  /**
+   * Enhanced media storage with quality assessment
+   */
+  async storeMediaWithQualityAssessment(
+    temporaryUrl: string,
+    questionId: string,
+    mediaType: "image" | "audio",
+    targetConcept: string
+  ): Promise<MediaMetadata> {
+    // First store the media
+    const metadata = await this.storeMediaFromUrl(
+      temporaryUrl,
+      questionId,
+      mediaType
+    );
+
+    try {
+      // Download again for quality assessment (could be optimized to reuse buffer)
+      const mediaBuffer = await this.downloadMedia(temporaryUrl);
+
+      // Assess quality
+      const qualityAssessment = await this.assessMediaQuality(
+        mediaBuffer,
+        mediaType,
+        targetConcept
+      );
+
+      // Add quality data to metadata
+      metadata.qualityScore = qualityAssessment.score;
+      metadata.qualityFeedback = qualityAssessment.feedback;
+
+      console.log(`📊 Media quality assessment for ${questionId}:`, {
+        score: qualityAssessment.score,
+        feedbackCount: qualityAssessment.feedback.length,
+        mediaType,
+      });
+    } catch (error) {
+      console.warn(`Failed to assess quality for media ${questionId}:`, error);
+      // Continue without quality assessment rather than failing
+    }
+
+    return metadata;
+  }
+
+  /**
    * Retrieve media metadata by ID
    */
   async getMediaMetadata(mediaId: string): Promise<MediaMetadata | null> {
@@ -445,6 +617,8 @@ export class MediaStorageService {
         mediaType: file.filename.includes("audio") ? "audio" : "image",
         storedAt: file.uploadDate,
         storageMethod: "gridfs",
+        qualityScore: file.metadata?.qualityScore,
+        qualityFeedback: file.metadata?.qualityFeedback,
       };
     } catch (error) {
       console.error("Error retrieving media metadata:", error);

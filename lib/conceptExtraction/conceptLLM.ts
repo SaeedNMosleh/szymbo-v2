@@ -1,6 +1,8 @@
+import { LLMServiceFactory } from "@/lib/services/llm/llmServiceFactory";
 import { OpenAIService } from "@/lib/services/llm/openAIService";
 import { LLMServiceError } from "@/lib/utils/errors";
 import { logger } from "@/lib/utils/logger";
+import { parseJsonFromLLMResponse, attemptJsonRepair } from "@/lib/utils/jsonParser";
 import { ExtractedConcept, SimilarityMatch } from "./types";
 import { ConceptCategory, QuestionLevel } from "@/lib/enum";
 import { IConceptIndex } from "@/datamodels/conceptIndex.model";
@@ -21,18 +23,10 @@ export class ConceptLLMService {
   private llmService: OpenAIService;
 
   /**
-   * Initialize LLM service using the centralized abstraction
+   * Initialize LLM service using the centralized configuration
    */
   constructor() {
-    this.llmService = new OpenAIService({
-      apiKey: process.env.OPENAI_API_KEY!,
-      model: "gpt-4o",
-      temperature: 0.3,
-      maxTokens: 2000,
-      timeout: 30000,
-      maxRetries: 3,
-      retryDelay: 1000,
-    });
+    this.llmService = LLMServiceFactory.getOpenAIServiceForUseCase('conceptExtraction');
   }
 
   /**
@@ -99,6 +93,14 @@ export class ConceptLLMService {
           source?: string;
           confidence?: number;
         }>;
+        vocabularyData?: {
+          word?: string;
+          translation?: string;
+          partOfSpeech?: string;
+          gender?: string;
+          pluralForm?: string;
+          pronunciation?: string;
+        };
       }>).map(
         (concept) => ({
           name: concept.name || "",
@@ -110,13 +112,21 @@ export class ConceptLLMService {
           suggestedDifficulty: this.validateDifficulty(
             concept.suggestedDifficulty
           ),
-          suggestedTags: Array.isArray(concept.suggestedTags) 
+          suggestedTags: Array.isArray(concept.suggestedTags)
             ? concept.suggestedTags.map(tag => ({
                 tag: tag.tag || "",
                 source: (tag.source === 'existing' ? 'existing' : 'new') as 'existing' | 'new',
                 confidence: this.validateConfidence(tag.confidence)
               })).filter(tag => tag.tag.length > 0)
             : [],
+          vocabularyData: concept.vocabularyData ? {
+            word: concept.vocabularyData.word || concept.name || "",
+            translation: concept.vocabularyData.translation || "",
+            partOfSpeech: concept.vocabularyData.partOfSpeech || "",
+            gender: concept.vocabularyData.gender || undefined,
+            pluralForm: concept.vocabularyData.pluralForm || undefined,
+            pronunciation: concept.vocabularyData.pronunciation || undefined
+          } : undefined
         })
       );
 
@@ -369,27 +379,37 @@ export class ConceptLLMService {
   }
 
   /**
-   * Parse JSON response from LLM with error handling
+   * Parse JSON response using the robust existing parser utility
    * @param response Raw response from LLM
    * @returns Parsed JSON object
    */
   private parseJsonResponse(response: string): Record<string, unknown> {
-    try {
-      // Try to extract JSON from response if it's wrapped in markdown or other text
-      const jsonMatch = response.match(/```(?:json)?\s*(\{[\s\S]*\})\s*```/);
-      const jsonString = jsonMatch ? jsonMatch[1] : response.trim();
+    const parseResult = parseJsonFromLLMResponse(response);
 
-      return JSON.parse(jsonString);
-    } catch (error) {
-      logger.warn("Failed to parse JSON response", {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        response: response.substring(0, 200),
-      });
+    if (!parseResult.success) {
+      // Try repair for truncated responses
+      if (parseResult.error?.includes('incomplete') || parseResult.error?.includes('truncated')) {
+        logger.info("Attempting to repair truncated JSON response");
 
-      throw new LLMServiceError(
-        `Failed to parse LLM response as JSON: ${response.substring(0, 100)}...`
-      );
+        try {
+          const repairedResponse = attemptJsonRepair(response);
+          const repairResult = parseJsonFromLLMResponse(repairedResponse);
+
+          if (repairResult.success) {
+            logger.info("Successfully repaired truncated JSON response");
+            return repairResult.data as Record<string, unknown>;
+          }
+        } catch (repairError) {
+          logger.warn("JSON repair attempt failed", {
+            error: repairError instanceof Error ? repairError.message : 'Unknown error'
+          });
+        }
+      }
+
+      throw new LLMServiceError(`JSON parsing failed: ${parseResult.error}`);
     }
+
+    return parseResult.data as Record<string, unknown>;
   }
 
   /**

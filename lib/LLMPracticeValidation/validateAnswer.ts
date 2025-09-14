@@ -14,6 +14,88 @@ import {
   LEGACY_VALIDATION_SYSTEM_PROMPT
 } from "@/prompts/validation";
 
+/**
+ * Generate question type specific validation guidance
+ */
+function generateQuestionTypeGuidance(questionType?: QuestionType): string {
+  if (!questionType) return '';
+
+  const guidanceMap: Record<QuestionType, string> = {
+    [QuestionType.WORD_ARRANGEMENT]: `
+### WORD_ARRANGEMENT Validation:
+- Compare the user's arranged sentence with the correct sentence
+- Allow for minor punctuation differences but require correct word order
+- Consider semantic equivalence - different arrangements that convey the same meaning may be acceptable
+- Focus feedback on word order issues rather than vocabulary mistakes`,
+
+    [QuestionType.TRANSLATION_PL]: `
+### TRANSLATION_PL Validation:
+- Accept semantically equivalent translations to Polish
+- Allow for natural variations in word choice and phrasing
+- Consider cultural context and idiomatic expressions
+- Be flexible with word order differences between languages`,
+
+    [QuestionType.TRANSLATION_EN]: `
+### TRANSLATION_EN Validation:
+- Accept semantically equivalent translations to English
+- Allow for natural variations in word choice and phrasing
+- Consider cultural context and idiomatic expressions
+- Be flexible with word order differences between languages`,
+
+    [QuestionType.Q_A]: `
+### Q_A Validation:
+- Evaluate contextual appropriateness and natural language use
+- Accept multiple correct responses that fit the situation
+- Focus on communicative effectiveness rather than exact wording
+- Consider cultural norms and politeness levels`,
+
+    [QuestionType.SCENARIO_RESPONSE]: `
+### SCENARIO_RESPONSE Validation:
+- Evaluate contextual appropriateness and natural language use
+- Accept multiple correct responses that fit the situation
+- Focus on communicative effectiveness rather than exact wording
+- Consider cultural norms and politeness levels`,
+
+    [QuestionType.CULTURAL_CONTEXT]: `
+### CULTURAL_CONTEXT Validation:
+- Evaluate contextual appropriateness and natural language use
+- Accept multiple correct responses that fit the situation
+- Focus on communicative effectiveness rather than exact wording
+- Consider cultural norms and politeness levels`,
+
+    [QuestionType.SENTENCE_TRANSFORM]: `
+### SENTENCE_TRANSFORM Validation:
+- Require grammatical accuracy but allow stylistic variations
+- Check that the transformation maintains the original meaning
+- Provide specific feedback about the grammatical rule being tested`,
+
+    [QuestionType.CASE_TRANSFORM]: `
+### CASE_TRANSFORM Validation:
+- Require grammatical accuracy but allow stylistic variations
+- Check that the transformation maintains the original meaning
+- Provide specific feedback about the grammatical rule being tested`,
+
+    [QuestionType.DIALOGUE_COMPLETE]: `
+### DIALOGUE_COMPLETE Validation:
+- Accept natural, contextually appropriate dialogue completions
+- Consider multiple possible correct responses
+- Evaluate conversational flow and appropriateness`,
+
+    // Default guidance for other question types
+    [QuestionType.BASIC_CLOZE]: '',
+    [QuestionType.MULTI_CLOZE]: '',
+    [QuestionType.VOCAB_CHOICE]: '',
+    [QuestionType.MULTI_SELECT]: '',
+    [QuestionType.CONJUGATION_TABLE]: '',
+    [QuestionType.ASPECT_PAIRS]: '',
+    [QuestionType.DIMINUTIVE_FORMS]: '',
+    [QuestionType.AUDIO_COMPREHENSION]: '',
+    [QuestionType.VISUAL_VOCABULARY]: '',
+  };
+
+  return guidanceMap[questionType] || '';
+}
+
 const llmService = new OpenAIService({
   apiKey: process.env.OPENAI_API_KEY!,
   model: "gpt-4o",
@@ -31,12 +113,16 @@ export async function validateAnswerWithLLM(
   context: LLMValidationContext
 ): Promise<ValidationResult> {
   try {
+    // Generate question type specific guidance
+    const questionTypeGuidance = generateQuestionTypeGuidance(context.questionType);
+
     const prompt = LLM_ANSWER_VALIDATION_PROMPT
       .replace('{question}', context.question)
       .replace('{userAnswer}', context.userAnswer)
       .replace('{correctAnswer}', context.correctAnswer)
       .replace(/\{correctAnswer\}/g, context.correctAnswer)
-      .replace('{attemptNumber}', context.attemptNumber.toString());
+      .replace('{attemptNumber}', context.attemptNumber.toString())
+      .replace('{questionTypeSpecificGuidance}', questionTypeGuidance);
 
     const systemPrompt = LLM_VALIDATION_SYSTEM_PROMPT;
 

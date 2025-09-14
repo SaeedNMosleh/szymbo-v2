@@ -1,3 +1,4 @@
+import { LLMServiceFactory } from "./llm/llmServiceFactory";
 import { OpenAIService } from "./llm/openAIService";
 import { QuestionLevel } from "@/lib/enum";
 import {
@@ -15,12 +16,7 @@ export class ContentAnalysisService {
   private llmService: OpenAIService;
 
   constructor() {
-    this.llmService = new OpenAIService({
-      apiKey: process.env.OPENAI_API_KEY!,
-      model: "gpt-4o-mini",
-      temperature: 0.3,
-      maxTokens: 800,
-    });
+    this.llmService = LLMServiceFactory.getOpenAIServiceForUseCase('contentAnalysis');
   }
 
   /**

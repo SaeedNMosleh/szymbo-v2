@@ -11,6 +11,9 @@ export const LLM_ANSWER_VALIDATION_PROMPT = `You are an expert Polish language l
 **Question Type**: {questionType}
 **Difficulty Level**: {questionLevel}
 
+## QUESTION TYPE SPECIFIC VALIDATION:
+{questionTypeSpecificGuidance}
+
 ### RICH LEARNING CONTEXT:
 **Target Concepts**: {targetConcepts}
 **Concept Details**: {conceptDescriptions}
@@ -112,6 +115,36 @@ Beyond basic types, identify:
     "recommendedReview": ["specific concepts needing reinforcement"]
   }
 }
+
+## QUESTION TYPE SPECIFIC VALIDATION GUIDANCE:
+
+### WORD_ARRANGEMENT:
+- Compare the user's arranged sentence with the correct sentence
+- Allow for minor punctuation differences (commas, periods) but require correct word order
+- Consider semantic equivalence - different arrangements that convey the same meaning may be acceptable
+- Focus feedback on word order issues rather than vocabulary mistakes
+
+### TRANSLATION_PL / TRANSLATION_EN:
+- Accept semantically equivalent translations
+- Allow for natural variations in word choice and phrasing
+- Consider cultural context and idiomatic expressions
+- Be flexible with word order differences between languages
+
+### Q_A / SCENARIO_RESPONSE / CULTURAL_CONTEXT:
+- Evaluate contextual appropriateness and natural language use
+- Accept multiple correct responses that fit the situation
+- Focus on communicative effectiveness rather than exact wording
+- Consider cultural norms and politeness levels
+
+### SENTENCE_TRANSFORM / CASE_TRANSFORM:
+- Require grammatical accuracy but allow stylistic variations
+- Check that the transformation maintains the original meaning
+- Provide specific feedback about the grammatical rule being tested
+
+### DIALOGUE_COMPLETE:
+- Accept natural, contextually appropriate dialogue completions
+- Consider multiple possible correct responses
+- Evaluate conversational flow and appropriateness
 
 ## CRITICAL VALIDATION REQUIREMENTS:
 - The correct answer "{correctAnswer}" is IMMUTABLE - never modify or suggest alternatives

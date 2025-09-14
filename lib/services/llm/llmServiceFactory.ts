@@ -8,6 +8,7 @@ import { LLMServiceError } from "@/lib/utils/errors";
 import { logger } from "@/lib/utils/logger";
 import { type LLMProvider, type LLMServiceConfig } from "./types";
 import type { BaseLLMService } from "./baseLLMService";
+import { getServiceConfig, validateEnvironment } from "@/lib/config/llmConfig";
 
 export class LLMServiceFactory {
   private static instances: Map<string, BaseLLMService> = new Map();
@@ -29,6 +30,26 @@ export class LLMServiceFactory {
     this.instances.set(instanceKey, service);
 
     return service;
+  }
+
+  /**
+   * Get service instance configured for a specific service use case
+   */
+  static getServiceForUseCase(
+    serviceName: string,
+    provider: LLMProvider = "openai"
+  ): BaseLLMService {
+    // Validate environment before creating service
+    const envValidation = validateEnvironment();
+    if (!envValidation.isValid) {
+      throw new LLMServiceError(
+        `Environment validation failed: ${envValidation.error}`,
+        { provider }
+      );
+    }
+
+    const serviceConfig = getServiceConfig(serviceName);
+    return this.getService(provider, serviceConfig);
   }
 
   /**
@@ -89,6 +110,13 @@ export class LLMServiceFactory {
     }
 
     return baseConfig;
+  }
+
+  /**
+   * Get OpenAI service configured for a specific service use case
+   */
+  static getOpenAIServiceForUseCase(serviceName: string): OpenAIService {
+    return this.getServiceForUseCase(serviceName, "openai") as OpenAIService;
   }
 
   /**

@@ -21,6 +21,7 @@ export interface LLMValidationContext {
   userAnswer: string;
   correctAnswer: string; // Immutable - LLM cannot modify this
   attemptNumber: number;
+  questionType?: QuestionType; // Add question type for specialized processing
   courseContext?: ICourse;
 }
 
@@ -294,15 +295,23 @@ export async function validateQuestionAnswer(
   } else {
     // Use LLM validation with immutable correctAnswer
     const { validateAnswerWithLLM } = await import("@/lib/LLMPracticeValidation/validateAnswer");
-    
+
+    // Special handling for word arrangement questions - join with spaces to form sentence
+    const processedUserAnswer = input.questionType === QuestionType.WORD_ARRANGEMENT && Array.isArray(input.userAnswer)
+      ? input.userAnswer.join(" ")
+      : Array.isArray(input.userAnswer)
+        ? input.userAnswer.join(", ")
+        : input.userAnswer;
+
     const llmContext: LLMValidationContext = {
       question: input.question || "",
-      userAnswer: Array.isArray(input.userAnswer) ? input.userAnswer.join(", ") : input.userAnswer,
+      userAnswer: processedUserAnswer,
       correctAnswer: input.correctAnswer, // Immutable reference
       attemptNumber: input.attemptNumber || 1,
+      questionType: input.questionType,
       courseContext,
     };
-    
+
     return await validateAnswerWithLLM(llmContext);
   }
 }
@@ -326,3 +335,4 @@ export function getValidationMethodInfo(questionType: QuestionType): {
     };
   }
 }
+

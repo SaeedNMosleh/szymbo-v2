@@ -101,7 +101,7 @@ export default function QuestionEditor({
   const fetchConcepts = async () => {
     try {
       setIsLoading(true);
-      const response = await fetch("/api/concepts");
+      const response = await fetch("/api/concepts?limit=100");
       if (!response.ok) throw new Error("Failed to fetch concepts");
 
       const data = await response.json();

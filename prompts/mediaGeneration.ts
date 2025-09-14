@@ -66,100 +66,93 @@ Return ONLY a JSON object with this exact structure:
 }`;
 
 /**
- * Image generation prompt template with dynamic context integration
+ * Simplified and focused image generation prompt for educational quality
  */
-export const IMAGE_GENERATION_PROMPT = `Educational Polish language learning illustration:
+export const IMAGE_GENERATION_PROMPT = `Create a clear, educational illustration for Polish language learning.
 
-## OBJECTIVE: 
-Create a visual scene that allows learners to identify the target concept through contextual understanding and visual cues, without showing any text or revealing the answer directly.
+## LEARNING OBJECTIVE:
+Design a simple, colorful illustration that shows the target concept in its natural context, allowing learners to identify it through visual clues and situational understanding.
 
-## DYNAMIC CONTEXT ANALYSIS:
-**Target Concept**: {targetWord}
-**Semantic Category**: {primaryCategory}
-**Natural Settings**: {naturalSettings}
-**Key Visual Elements**: {keyVisualElements}
-**Cultural Context**: {culturalContext}
-**Additional Context**: {conceptContext}
+## TARGET CONCEPT:
+**Word/Concept**: {targetWord}
+**Difficulty Level**: {difficulty}
+**Learning Goal**: Help learners visually recognize and associate this concept with its usage
 
-## SCENE COMPOSITION:
-- **Primary Setting**: {primarySetting}
-- **Visual Elements**: {sceneElements}
-- **Cultural Integration**: {culturalElements}
-- **Contextual Cues**: {contextualCues}
+## VISUAL REQUIREMENTS:
+- **Style**: Clean, colorful cartoon illustration (not photorealistic)
+- **Composition**: Simple scene with 3-5 main elements maximum
+- **Colors**: Bright, engaging colors suitable for language learners
+- **Clarity**: High contrast, easy to see details
+- **NO TEXT**: Absolutely no letters, words, or labels anywhere
 
-## EDUCATIONAL REQUIREMENTS:
-- NO visible text, words, letters, or labels anywhere in the image
-- Show the concept through its natural context and usage
-- Include environmental cues that aid comprehension without revealing the answer
-- Use visual storytelling to convey meaning through context
-- Make the target concept identifiable through situation and environmental clues
-- Avoid elements that directly show or spell out the answer
+## EDUCATIONAL DESIGN:
+- **Contextual Learning**: Show the concept being used in a natural situation
+- **Visual Cues**: Include environmental clues that help identify the concept
+- **Cultural Elements**: Add subtle Polish cultural context when appropriate
+- **Focus**: Center the illustration on the target concept's usage or appearance
+- **Simplicity**: Avoid cluttered scenes - keep it clear and focused
 
-## VISUAL STYLE:
-- Clear, professional illustration style appropriate for language learning
-- Bright, engaging colors suitable for educational content
-- Clean composition with high contrast for clarity
-- Cartoon/illustration style rather than photorealistic
-- Culturally appropriate for international learners
-- Polish cultural elements where relevant to enhance context
+## SCENE IDEAS BY CONCEPT TYPE:
+- **Objects**: Show the object in its typical location or being used
+- **Actions**: Show people performing the action in context
+- **Places**: Show characteristic features and activities
+- **Food**: Show in a meal setting or preparation context
+- **Animals**: Show in natural habitat with key features visible
 
-## SCENE DETAILS:
-- Include realistic props and environmental elements that provide context
-- Show typical usage scenarios or natural environments
-- Add Polish cultural elements that enhance language learning context
-- Ensure visual clarity for educational assessment and comprehension
-- Create multiple visual cues that point to the target concept without revealing it directly
+## QUALITY CHECKLIST:
+- ✅ Concept is clearly identifiable through context
+- ✅ No text or labels visible anywhere
+- ✅ Appropriate for {difficulty} level learners
+- ✅ Culturally relevant Polish elements included
+- ✅ Clear, engaging educational illustration style
 
-## CONTEXTUAL INTEGRATION:
-{additionalContextualElements}
+## EXAMPLE PROMPTS:
+For "jabłko" (apple): "Colorful illustration of a Polish farmer's market stall with fresh red apples in baskets, Polish bread, and people shopping"
+For "szkoła" (school): "Bright classroom scene with children at desks, teacher at blackboard, books and pencils, Polish flag in corner"
 
-Remember: Students will see this image and need to identify the Polish concept through contextual understanding and environmental cues alone, without any text or direct visual revelation of the answer.`;
+Generate the image based on: {targetWord} in Polish cultural context`;
 
 /**
- * Audio generation prompt template with scenario-based approach
+ * Simplified and focused audio generation prompt for educational quality
  */
-export const AUDIO_GENERATION_PROMPT = `Create contextual Polish audio content for language learning comprehension.
+export const AUDIO_GENERATION_PROMPT = `Create clear, educational Polish audio content for language learning.
 
-## OBJECTIVE:
-Generate natural Polish speech that allows learners to identify the target concept through contextual understanding, without directly stating the answer.
+## LEARNING OBJECTIVE:
+Generate a short Polish audio script (15-30 seconds when spoken) that teaches the target concept through natural context, allowing learners to identify it through comprehension.
 
-## DYNAMIC CONTEXT ANALYSIS:
-**Target Concept**: {targetWord}
-**Semantic Category**: {primaryCategory}
-**Natural Scenarios**: {naturalScenarios}
-**Contextual Dialogues**: {contextualDialogues}
-**Cultural References**: {culturalReferences}
-**Learning Level**: {difficulty}
-
-## AUDIO CONTENT STRATEGY:
-Create a natural Polish dialogue or monologue that:
-- Uses the target concept in context without directly naming it
-- Provides sufficient contextual cues for comprehension
-- Incorporates appropriate vocabulary for the difficulty level
-- Includes cultural elements that enhance learning
-- Uses natural speech patterns and intonation
-
-## SCENARIO SELECTION:
-Based on the semantic analysis, select the most appropriate scenario:
-- **Daily Life Scenario**: {dailyLifeContext}
-- **Social Interaction**: {socialContext}
-- **Cultural Context**: {culturalContext}
-- **Educational Setting**: {educationalContext}
+## TARGET CONCEPT:
+**Word/Concept**: {targetWord}
+**Difficulty Level**: {difficulty}
+**Learning Goal**: Help learners recognize and understand this concept in spoken Polish
 
 ## CONTENT REQUIREMENTS:
-- Natural, conversational Polish appropriate for {difficulty} level
-- Context clues that lead to the target concept identification
-- Cultural authenticity in language use and references
-- Make it brief and consice 
-- Clear pronunciation for language learners
-- Engaging narrative that maintains listener attention
+- **Length**: 2-4 short sentences maximum
+- **Language**: Natural, clear Polish at {difficulty} level
+- **Context**: Place the concept in an everyday situation learners can relate to
+- **Clarity**: Use simple vocabulary around the target concept
+- **Pronunciation**: Choose words that are easy to pronounce clearly
+- **Cultural Authenticity**: Include appropriate Polish cultural elements when relevant
+
+## EDUCATIONAL DESIGN:
+- **Contextual Learning**: Show the concept being used naturally, not explained
+- **Comprehension Cues**: Provide environmental clues that help identify the concept
+- **Repetition**: Use the target concept 1-2 times naturally in the script
+- **Engagement**: Make the scenario interesting and relatable for learners
+
+## QUALITY CRITERIA:
+- ✅ Concept is identifiable through context (not direct definition)
+- ✅ Natural Polish speech patterns and intonation
+- ✅ Appropriate difficulty level vocabulary
+- ✅ Clear, unhurried pronunciation guidance
+- ✅ Educational value for language learners
 
 ## RESPONSE FORMAT:
-Generate Polish audio content as a natural dialogue or monologue that incorporates the target concept contextually.
+Return ONLY the Polish audio script content, ready for text-to-speech:
 
-Content: "{audioContent}"
+"{polishAudioScript}"
 
-The content should be ready for text-to-speech generation and provide adequate context for learners to identify the target concept through comprehension rather than direct statement.`;
+Example for "jabłko" (apple): "W kuchni mama myje świeże jabłka. Potem kroi je na kawałki dla dzieci. Jabłka są bardzo zdrowe!"
+Example for "szkoła" (school): "Rano dzieci idą do szkoły z plecakami. Nauczycielka wita wszystkich w klasie. Uczniowie otwierają książki."`;
 
 /**
  * System prompts for media generation services
@@ -236,49 +229,15 @@ export class MediaPromptBuilder {
     analysis: ContentAnalysis,
     conceptContext?: string
   ): string {
-    const primarySetting =
-      analysis.visualContext.naturalSettings[0] || "everyday environment";
-    const sceneElements = analysis.visualContext.keyVisualElements
-      .slice(0, 3)
-      .join(", "); // Limit to 3 elements
-    const culturalElements = analysis.visualContext.culturalVisualCues
-      .slice(0, 2)
-      .join(", "); // Limit to 2 elements
-    const contextualCues = analysis.audioContext.comprehensionCues
-      .slice(0, 3)
-      .join(", "); // Limit to 3 elements
+    // Create a focused, simple prompt for educational illustration
+    const contextHint = conceptContext && conceptContext.length > 100
+      ? conceptContext.substring(0, 100) + "..."
+      : conceptContext || "typical usage context";
 
-    // Truncate conceptContext if it's too long
-    const truncatedConceptContext =
-      conceptContext && conceptContext.length > 200
-        ? conceptContext.substring(0, 200) + "..."
-        : conceptContext || "";
-
-    return IMAGE_GENERATION_PROMPT.replace("{targetWord}", targetWord)
-      .replace("{primaryCategory}", analysis.semanticAnalysis.primaryCategory)
-      .replace(
-        "{naturalSettings}",
-        analysis.visualContext.naturalSettings.slice(0, 2).join(", ")
-      ) // Limit settings
-      .replace("{keyVisualElements}", sceneElements)
-      .replace(
-        "{culturalContext}",
-        analysis.semanticAnalysis.culturalSignificance.length > 150
-          ? analysis.semanticAnalysis.culturalSignificance.substring(0, 150) +
-              "..."
-          : analysis.semanticAnalysis.culturalSignificance
-      )
-      .replace("{conceptContext}", truncatedConceptContext)
-      .replace("{primarySetting}", primarySetting)
-      .replace("{sceneElements}", sceneElements)
-      .replace("{culturalElements}", culturalElements)
-      .replace("{contextualCues}", contextualCues)
-      .replace(
-        "{additionalContextualElements}",
-        truncatedConceptContext
-          ? `Additional Context: ${truncatedConceptContext}`
-          : ""
-      );
+    return IMAGE_GENERATION_PROMPT
+      .replace("{targetWord}", targetWord)
+      .replace("{difficulty}", "A1-B2") // Default educational range
+      .replace("{conceptContext}", contextHint);
   }
 
   static buildAudioPrompt(
@@ -287,38 +246,15 @@ export class MediaPromptBuilder {
     difficulty: QuestionLevel,
     conceptContext?: string
   ): string {
-    const dailyLifeContext =
-      analysis.audioContext.naturalScenarios[0] || "everyday situation";
-    const socialContext =
-      analysis.audioContext.naturalScenarios[1] || "social interaction";
-    const culturalContext = analysis.semanticAnalysis.culturalSignificance;
-    const educationalContext =
-      analysis.educationalMetadata.learningObjectives.join(", ");
-    const truncatedConceptContext =
-      conceptContext && conceptContext.length > 100
-        ? conceptContext.substring(0, 100) + "..."
-        : conceptContext || "";
+    // Use a simple, focused approach for audio generation
+    const contextHint = conceptContext && conceptContext.length > 50
+      ? conceptContext.substring(0, 50) + "..."
+      : conceptContext || "common everyday usage";
 
-    return AUDIO_GENERATION_PROMPT.replace("{targetWord}", targetWord)
-      .replace("{primaryCategory}", analysis.semanticAnalysis.primaryCategory)
-      .replace(
-        "{naturalScenarios}",
-        analysis.audioContext.naturalScenarios.join(", ")
-      )
-      .replace(
-        "{contextualDialogues}",
-        analysis.audioContext.contextualDialogues.join(", ")
-      )
-      .replace(
-        "{culturalReferences}",
-        analysis.audioContext.culturalReferences.join(", ")
-      )
+    return AUDIO_GENERATION_PROMPT
+      .replace("{targetWord}", targetWord)
       .replace("{difficulty}", difficulty)
-      .replace("{dailyLifeContext}", dailyLifeContext)
-      .replace("{socialContext}", socialContext)
-      .replace("{culturalContext}", culturalContext)
-      .replace("{educationalContext}", educationalContext)
-      .replace("{conceptContext}", truncatedConceptContext);
+      .replace("{conceptContext}", contextHint);
   }
 
   static buildContentAnalysisPrompt(

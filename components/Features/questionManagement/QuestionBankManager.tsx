@@ -133,7 +133,7 @@ export default function QuestionBankManager() {
   // Fetch concepts for potential future use but don't store them in state
   const fetchConcepts = useCallback(async () => {
     try {
-      const response = await fetch("/api/concepts");
+      const response = await fetch("/api/concepts?limit=100");
       if (response.ok) {
         // We just fetch to ensure the API is working
         // const data = await response.json();

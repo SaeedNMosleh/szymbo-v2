@@ -7,6 +7,7 @@ export interface LLMRequest {
   model?: string;
   temperature?: number;
   maxTokens?: number;
+  max_completion_tokens?: number;
   systemPrompt?: string;
 }
 
@@ -29,6 +30,7 @@ export interface LLMServiceConfig {
   model?: string;
   temperature?: number;
   maxTokens?: number;
+  max_completion_tokens?: number;
   timeout?: number;
   maxRetries?: number;
   retryDelay?: number;

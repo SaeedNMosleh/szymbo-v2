@@ -1,7 +1,6 @@
 import { Schema, model, models } from "mongoose";
 import { z } from "zod";
 import { ConceptCategory, QuestionLevel } from "@/lib/enum";
-import type { IConcept } from "./concept.model";
 
 /**
  * Duplicate detection result for session
@@ -18,26 +17,6 @@ export interface DuplicateDetectionResult {
     duplicateType: "exact" | "case_insensitive";
   }>;
   checkedAt: Date;
-}
-
-/**
- * Enhanced review decision interface - removed 'link' action, focus on merge for similarity
- */
-export interface ReviewDecision {
-  action: "approve" | "edit" | "reject" | "merge" | "manual_add";
-  extractedConcept: ExtractedConcept;
-  editedConcept?: Partial<ExtractedConcept>; // for edit action
-  mergeData?: {
-    primaryConceptId: string;
-    additionalData: {
-      description?: string;
-      examples?: string[];
-      tags?: string[];
-    };
-  };
-  courseId: number;
-  reviewedAt: Date;
-  reviewerId?: string; // for future multi-user support
 }
 
 /**
@@ -61,11 +40,39 @@ export interface ExtractedConcept {
   confidence: number;
   suggestedDifficulty: QuestionLevel;
   suggestedTags: SuggestedTag[];
+  vocabularyData?: {
+    word: string;
+    translation: string;
+    partOfSpeech: string;
+    gender?: string;
+    pluralForm?: string;
+    pronunciation?: string;
+  };
   extractionMetadata?: {
     model: string;
     timestamp: Date;
     processingTime: number;
   };
+}
+
+/**
+ * Enhanced review decision interface - removed 'link' action, focus on merge for similarity
+ */
+export interface ReviewDecision {
+  action: "approve" | "edit" | "reject" | "merge" | "manual_add";
+  extractedConcept: ExtractedConcept;
+  editedConcept?: Partial<ExtractedConcept>; // for edit action
+  mergeData?: {
+    primaryConceptId: string;
+    additionalData: {
+      description?: string;
+      examples?: string[];
+      tags?: string[];
+    };
+  };
+  courseId: number;
+  reviewedAt: Date;
+  reviewerId?: string; // for future multi-user support
 }
 
 /**
@@ -142,6 +149,16 @@ export const ExtractedConceptSchema = z.object({
   confidence: z.number().min(0).max(1),
   suggestedDifficulty: z.nativeEnum(QuestionLevel),
   suggestedTags: z.array(SuggestedTagSchema),
+  vocabularyData: z
+    .object({
+      word: z.string(),
+      translation: z.string(),
+      partOfSpeech: z.string(),
+      gender: z.string().optional(),
+      pluralForm: z.string().optional(),
+      pronunciation: z.string().optional(),
+    })
+    .optional(),
   extractionMetadata: z
     .object({
       model: z.string(),
@@ -212,15 +229,17 @@ export const ReviewProgressSchema = z.object({
 
 export const DuplicateDetectionResultSchema = z.object({
   hasDuplicates: z.boolean(),
-  duplicates: z.array(z.object({
-    extractedConceptName: z.string(),
-    existingConcept: z.object({
-      id: z.string(),
-      name: z.string(),
-      category: z.nativeEnum(ConceptCategory),
-    }),
-    duplicateType: z.enum(["exact", "case_insensitive"]),
-  })),
+  duplicates: z.array(
+    z.object({
+      extractedConceptName: z.string(),
+      existingConcept: z.object({
+        id: z.string(),
+        name: z.string(),
+        category: z.nativeEnum(ConceptCategory),
+      }),
+      duplicateType: z.enum(["exact", "case_insensitive"]),
+    })
+  ),
   checkedAt: z.date(),
 });
 
@@ -327,13 +346,7 @@ const ConceptExtractionSessionMongooseSchema =
           {
             action: {
               type: String,
-              enum: [
-                "approve",
-                "edit",
-                "reject",
-                "merge",
-                "manual_add",
-              ],
+              enum: ["approve", "edit", "reject", "merge", "manual_add"],
               required: true,
             },
             extractedConcept: {
@@ -379,21 +392,23 @@ const ConceptExtractionSessionMongooseSchema =
       },
       duplicateDetection: {
         hasDuplicates: { type: Boolean },
-        duplicates: [{
-          extractedConceptName: { type: String },
-          existingConcept: {
-            id: { type: String },
-            name: { type: String },
-            category: { 
+        duplicates: [
+          {
+            extractedConceptName: { type: String },
+            existingConcept: {
+              id: { type: String },
+              name: { type: String },
+              category: {
+                type: String,
+                enum: Object.values(ConceptCategory),
+              },
+            },
+            duplicateType: {
               type: String,
-              enum: Object.values(ConceptCategory),
+              enum: ["exact", "case_insensitive"],
             },
           },
-          duplicateType: {
-            type: String,
-            enum: ["exact", "case_insensitive"],
-          },
-        }],
+        ],
         checkedAt: { type: Date },
       },
       newTagsCreated: { type: [String], default: [] },

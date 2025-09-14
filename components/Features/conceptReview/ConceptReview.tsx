@@ -218,6 +218,43 @@ export function ConceptReview({
 
                         <p className="text-gray-700">{concept.description}</p>
 
+                        {/* Vocabulary Data Section - Only for vocabulary concepts */}
+                        {concept.category === "vocabulary" && concept.vocabularyData && (
+                          <div className="rounded-md bg-blue-50 p-3">
+                            <h5 className="mb-2 text-sm font-medium text-blue-800">
+                              Vocabulary Details
+                            </h5>
+                            <div className="grid grid-cols-2 gap-2 text-sm">
+                              <div>
+                                <span className="font-medium text-gray-600">Translation:</span>
+                                <span className="ml-2">{concept.vocabularyData.translation}</span>
+                              </div>
+                              <div>
+                                <span className="font-medium text-gray-600">Part of Speech:</span>
+                                <span className="ml-2 capitalize">{concept.vocabularyData.partOfSpeech}</span>
+                              </div>
+                              {concept.vocabularyData.gender && (
+                                <div>
+                                  <span className="font-medium text-gray-600">Gender:</span>
+                                  <span className="ml-2 capitalize">{concept.vocabularyData.gender}</span>
+                                </div>
+                              )}
+                              {concept.vocabularyData.pluralForm && (
+                                <div>
+                                  <span className="font-medium text-gray-600">Plural:</span>
+                                  <span className="ml-2">{concept.vocabularyData.pluralForm}</span>
+                                </div>
+                              )}
+                              {concept.vocabularyData.pronunciation && (
+                                <div className="col-span-2">
+                                  <span className="font-medium text-gray-600">Pronunciation:</span>
+                                  <span className="ml-2 font-mono text-xs">{concept.vocabularyData.pronunciation}</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
                         {concept.examples.length > 0 && (
                           <div>
                             <p className="text-sm font-medium text-gray-600">
