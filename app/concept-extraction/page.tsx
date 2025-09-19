@@ -6,7 +6,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Navigation } from "@/components/ui/navigation";
 import Link from "next/link";
-import { Brain, CheckCircle, Clock, AlertCircle } from "lucide-react";
+import {
+  Brain,
+  CheckCircle,
+  Clock,
+  AlertCircle,
+  Loader2,
+  BarChart3,
+  Search,
+} from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -24,16 +32,41 @@ interface Course {
   extractedConcepts?: string[];
 }
 
+interface ExtractionProgress {
+  extractionId: string;
+  courseId: number;
+  percentage: number;
+  phase: string;
+  currentOperation: string;
+  estimatedTimeRemaining?: number;
+  chunks?: { total: number; processed: number };
+  concepts?: { total: number; extracted: number; similarityChecked: number };
+}
+
 const ConceptExtraction = () => {
   const [courses, setCourses] = useState<Course[]>([]);
   const [filteredCourses, setFilteredCourses] = useState<Course[]>([]);
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [isLoading, setIsLoading] = useState(true);
   const [extractingCourse, setExtractingCourse] = useState<number | null>(null);
+  const [extractionProgress, setExtractionProgress] =
+    useState<ExtractionProgress | null>(null);
+  const [pollingInterval, setPollingInterval] = useState<ReturnType<
+    typeof setTimeout
+  > | null>(null);
 
   useEffect(() => {
     fetchCourses();
   }, []);
+
+  // Cleanup polling interval on unmount
+  useEffect(() => {
+    return () => {
+      if (pollingInterval) {
+        clearInterval(pollingInterval);
+      }
+    };
+  }, [pollingInterval]);
 
   // Apply filter whenever courses or status filter changes
   useEffect(() => {
@@ -56,6 +89,15 @@ const ConceptExtraction = () => {
           (course) =>
             course.conceptExtractionStatus === "extracted" ||
             course.conceptExtractionStatus === "in-review"
+        )
+      );
+    } else if (statusFilter === "processing") {
+      setFilteredCourses(
+        courses.filter(
+          (course) =>
+            course.conceptExtractionStatus === "analyzing" ||
+            course.conceptExtractionStatus === "extracting" ||
+            course.conceptExtractionStatus === "similarity_checking"
         )
       );
     } else if (statusFilter === "reviewed") {
@@ -91,32 +133,144 @@ const ConceptExtraction = () => {
 
   const handleExtractConcepts = async (courseId: number) => {
     setExtractingCourse(courseId);
+    setExtractionProgress(null);
+
     try {
-      const response = await fetch("/api/concepts/extract", {
+      // Start chunked extraction with automatic processing
+      const response = await fetch("/api/concepts/extract/chunked", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ courseId }),
+        body: JSON.stringify({
+          courseId,
+          autoProcess: true, // Enable automatic processing
+        }),
       });
 
       const result = await response.json();
 
       if (result.success) {
-        await fetchCourses();
+        const extractionId = result.data.extractionId;
+
+        // Start polling for progress
+        startProgressPolling(extractionId, courseId);
       } else {
-        alert(`Failed to extract concepts: ${result.error}`);
+        alert(`Failed to start concept extraction: ${result.error}`);
+        setExtractingCourse(null);
       }
     } catch (error) {
-      console.error("Error extracting concepts:", error);
-      alert("Failed to extract concepts");
-    } finally {
+      console.error("Error starting concept extraction:", error);
+      alert("Failed to start concept extraction");
       setExtractingCourse(null);
     }
   };
 
+  const startProgressPolling = (extractionId: string, courseId: number) => {
+    // Clear any existing polling
+    if (pollingInterval) {
+      clearInterval(pollingInterval);
+    }
+
+    // Set initial progress
+    setExtractionProgress({
+      extractionId,
+      courseId,
+      percentage: 5,
+      phase: "analyzing",
+      currentOperation: "Starting extraction...",
+    });
+
+    // Start polling every 2 seconds
+    const interval = setInterval(async () => {
+      try {
+        const statusResponse = await fetch(
+          `/api/concepts/extract/status/${extractionId}`
+        );
+
+        if (!statusResponse.ok) {
+          throw new Error("Failed to get extraction status");
+        }
+
+        const statusResult = await statusResponse.json();
+
+        if (statusResult.success) {
+          const progress = statusResult.data.progress;
+
+          setExtractionProgress({
+            extractionId,
+            courseId,
+            percentage: progress.percentage,
+            phase: progress.phase,
+            currentOperation: progress.currentOperation,
+            estimatedTimeRemaining: progress.estimatedTimeRemaining,
+            chunks: progress.chunks,
+            concepts: progress.concepts,
+          });
+
+          // Check if extraction is complete
+          if (statusResult.data.extractionMetadata?.isComplete) {
+            clearInterval(interval);
+            setPollingInterval(null);
+            setExtractingCourse(null);
+            setExtractionProgress(null);
+
+            // Refresh courses to show updated status
+            await fetchCourses();
+
+            // Show success message
+            alert(
+              `Extraction completed! ${progress.concepts?.extracted || 0} concepts extracted.`
+            );
+          } else if (progress.phase === "error") {
+            // Handle error state
+            clearInterval(interval);
+            setPollingInterval(null);
+            setExtractingCourse(null);
+            setExtractionProgress(null);
+            alert(
+              `Extraction failed: ${statusResult.data.error || "Unknown error"}`
+            );
+          }
+        }
+      } catch (error) {
+        console.error("Error polling extraction status:", error);
+        // Continue polling - temporary network issues shouldn't stop progress tracking
+      }
+    }, 2000); // Poll every 2 seconds
+
+    setPollingInterval(interval);
+  };
+
   const getStatusBadge = (status?: string) => {
     switch (status) {
+      case "analyzing":
+        return (
+          <Badge
+            variant="outline"
+            className="border-purple-600 text-purple-600"
+          >
+            Analyzing Content
+          </Badge>
+        );
+      case "extracting":
+        return (
+          <Badge
+            variant="outline"
+            className="border-yellow-600 text-yellow-600"
+          >
+            Extracting Concepts
+          </Badge>
+        );
+      case "similarity_checking":
+        return (
+          <Badge
+            variant="outline"
+            className="border-orange-600 text-orange-600"
+          >
+            Checking Similarities
+          </Badge>
+        );
       case "extracted":
         return (
           <Badge variant="outline" className="border-blue-600 text-blue-600">
@@ -135,6 +289,8 @@ const ConceptExtraction = () => {
             Concepts Added
           </Badge>
         );
+      case "error":
+        return <Badge variant="destructive">Extraction Error</Badge>;
       default:
         return <Badge variant="secondary">Pending</Badge>;
     }
@@ -142,15 +298,69 @@ const ConceptExtraction = () => {
 
   const getStatusIcon = (status?: string) => {
     switch (status) {
+      case "analyzing":
+        return <BarChart3 className="size-4 animate-pulse text-purple-600" />;
+      case "extracting":
+        return <Brain className="size-4 animate-pulse text-yellow-600" />;
+      case "similarity_checking":
+        return <Search className="size-4 animate-pulse text-orange-600" />;
       case "extracted":
         return <Clock className="size-4 text-blue-600" />;
       case "in-review":
         return <Brain className="size-4 text-amber-600" />;
       case "reviewed":
         return <CheckCircle className="size-4 text-green-600" />;
+      case "error":
+        return <AlertCircle className="size-4 text-red-600" />;
       default:
         return <AlertCircle className="size-4 text-gray-400" />;
     }
+  };
+
+  const renderProgressBar = (progress: ExtractionProgress) => {
+    return (
+      <div className="mt-4 space-y-2">
+        <div className="flex items-center justify-between text-sm">
+          <span className="font-medium">
+            Progress: {Math.round(progress.percentage)}%
+          </span>
+          {progress.estimatedTimeRemaining && (
+            <span className="text-gray-500">
+              ~{Math.round(progress.estimatedTimeRemaining / 60)}m remaining
+            </span>
+          )}
+        </div>
+
+        <div className="h-2 w-full rounded-full bg-gray-200">
+          <div
+            className="h-2 rounded-full bg-blue-600 transition-all duration-300 ease-in-out"
+            style={{
+              width: `${Math.min(100, Math.max(0, progress.percentage))}%`,
+            }}
+          />
+        </div>
+
+        <div className="text-xs text-gray-600">
+          <div className="flex items-center gap-2">
+            <Loader2 className="size-3 animate-spin" />
+            <span>{progress.currentOperation}</span>
+          </div>
+
+          {progress.chunks && (
+            <div className="mt-1">
+              Chunks: {progress.chunks.processed}/{progress.chunks.total}
+            </div>
+          )}
+
+          {progress.concepts && (
+            <div className="mt-1">
+              Concepts: {progress.concepts.extracted} extracted,{" "}
+              {progress.concepts.similarityChecked} similarity checked
+            </div>
+          )}
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -203,6 +413,7 @@ const ConceptExtraction = () => {
                         <SelectContent>
                           <SelectItem value="all">All Courses</SelectItem>
                           <SelectItem value="pending">Pending</SelectItem>
+                          <SelectItem value="processing">Processing</SelectItem>
                           <SelectItem value="in-review">In Review</SelectItem>
                           <SelectItem value="reviewed">Reviewed</SelectItem>
                         </SelectContent>
@@ -267,6 +478,12 @@ const ConceptExtraction = () => {
                                     </span>
                                   )}
                               </div>
+
+                              {/* Show progress bar for active extraction */}
+                              {extractionProgress &&
+                                extractionProgress.courseId ===
+                                  course.courseId &&
+                                renderProgressBar(extractionProgress)}
                             </div>
                           </div>
 
@@ -291,6 +508,25 @@ const ConceptExtraction = () => {
                                     Extract Concepts
                                   </>
                                 )}
+                              </Button>
+                            )}
+
+                            {/* Show review button for processing states that haven't reached extracted yet */}
+                            {[
+                              "analyzing",
+                              "extracting",
+                              "similarity_checking",
+                            ].includes(
+                              course.conceptExtractionStatus || ""
+                            ) && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled
+                                className="flex-1"
+                              >
+                                <Loader2 className="mr-1 size-3 animate-spin" />
+                                Processing...
                               </Button>
                             )}
 
@@ -323,6 +559,21 @@ const ConceptExtraction = () => {
                               >
                                 <CheckCircle className="mr-1 size-3" />
                                 Completed
+                              </Button>
+                            )}
+
+                            {course.conceptExtractionStatus === "error" && (
+                              <Button
+                                size="sm"
+                                onClick={() =>
+                                  handleExtractConcepts(course.courseId)
+                                }
+                                disabled={extractingCourse === course.courseId}
+                                variant="outline"
+                                className="flex-1 border-red-600 text-red-600 hover:bg-red-50"
+                              >
+                                <AlertCircle className="mr-1 size-3" />
+                                Retry Extraction
                               </Button>
                             )}
                           </div>

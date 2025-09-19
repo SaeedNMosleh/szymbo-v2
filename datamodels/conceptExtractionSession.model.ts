@@ -99,6 +99,37 @@ export interface SimilarityData {
 }
 
 /**
+ * Content chunk for processing
+ */
+export interface ContentChunk {
+  id: string;
+  type: 'keywords' | 'notes' | 'practice' | 'homework' | 'mixed';
+  content: string;
+  estimatedConcepts: number;
+  processed: boolean;
+  extractedConcepts?: ExtractedConcept[];
+  processedAt?: Date;
+  processingTime?: number;
+}
+
+/**
+ * Extraction progress tracking for chunked processing
+ */
+export interface ExtractionProgress {
+  phase: 'analyzing' | 'extracting' | 'similarity_checking' | 'finalizing' | 'completed' | 'error';
+  totalChunks: number;
+  processedChunks: number;
+  totalConcepts: number;
+  extractedConcepts: number;
+  similarityChecked: number;
+  estimatedTimeRemaining?: number;
+  currentOperation?: string;
+  chunks: ContentChunk[];
+  errorMessage?: string;
+  lastUpdated: Date;
+}
+
+/**
  * Review progress tracking
  */
 export interface ReviewProgress {
@@ -117,10 +148,11 @@ export interface IConceptExtractionSession {
   courseId: number;
   courseName: string;
   extractionDate: Date;
-  status: "extracted" | "in-review" | "reviewed";
+  status: "analyzing" | "extracting" | "similarity_checking" | "extracted" | "in-review" | "reviewed" | "error";
   extractedConcepts: ExtractedConcept[];
   similarityMatches: SimilarityData[];
   reviewProgress: ReviewProgress;
+  extractionProgress?: ExtractionProgress; // Progress tracking for chunked extraction
   duplicateDetection?: DuplicateDetectionResult; // Optional for backward compatibility
   newTagsCreated: string[]; // Session-level tracking of newly created tags
   extractionMetadata: {
@@ -138,6 +170,31 @@ export const SuggestedTagSchema = z.object({
   tag: z.string().min(1, "Tag cannot be empty"),
   source: z.enum(["existing", "new"]),
   confidence: z.number().min(0).max(1),
+});
+
+export const ContentChunkSchema = z.object({
+  id: z.string().min(1),
+  type: z.enum(['keywords', 'notes', 'practice', 'homework', 'mixed']),
+  content: z.string().min(1),
+  estimatedConcepts: z.number().min(0),
+  processed: z.boolean(),
+  extractedConcepts: z.array(z.lazy(() => ExtractedConceptSchema)).optional(),
+  processedAt: z.date().optional(),
+  processingTime: z.number().optional(),
+});
+
+export const ExtractionProgressSchema = z.object({
+  phase: z.enum(['analyzing', 'extracting', 'similarity_checking', 'finalizing', 'completed', 'error']),
+  totalChunks: z.number().min(0),
+  processedChunks: z.number().min(0),
+  totalConcepts: z.number().min(0),
+  extractedConcepts: z.number().min(0),
+  similarityChecked: z.number().min(0),
+  estimatedTimeRemaining: z.number().optional(),
+  currentOperation: z.string().optional(),
+  chunks: z.array(ContentChunkSchema),
+  errorMessage: z.string().optional(),
+  lastUpdated: z.date(),
 });
 
 export const ExtractedConceptSchema = z.object({
@@ -248,10 +305,11 @@ export const ConceptExtractionSessionSchema = z.object({
   courseId: z.number(),
   courseName: z.string().min(1),
   extractionDate: z.date(),
-  status: z.enum(["extracted", "in-review", "reviewed"]),
+  status: z.enum(["analyzing", "extracting", "similarity_checking", "extracted", "in-review", "reviewed", "error"]),
   extractedConcepts: z.array(ExtractedConceptSchema),
   similarityMatches: z.array(SimilarityDataSchema),
   reviewProgress: ReviewProgressSchema,
+  extractionProgress: ExtractionProgressSchema.optional(),
   duplicateDetection: DuplicateDetectionResultSchema.optional(),
   newTagsCreated: z.array(z.string()),
   extractionMetadata: z.object({
@@ -274,9 +332,9 @@ const ConceptExtractionSessionMongooseSchema =
       extractionDate: { type: Date, required: true },
       status: {
         type: String,
-        enum: ["extracted", "in-review", "reviewed"],
+        enum: ["analyzing", "extracting", "similarity_checking", "extracted", "in-review", "reviewed", "error"],
         required: true,
-        default: "extracted",
+        default: "analyzing",
         index: true,
       },
       extractedConcepts: [
@@ -389,6 +447,35 @@ const ConceptExtractionSessionMongooseSchema =
         ],
         lastReviewedAt: { type: Date },
         isDraft: { type: Boolean, default: true },
+      },
+      extractionProgress: {
+        phase: {
+          type: String,
+          enum: ['analyzing', 'extracting', 'similarity_checking', 'finalizing', 'completed', 'error'],
+        },
+        totalChunks: { type: Number, min: 0 },
+        processedChunks: { type: Number, min: 0 },
+        totalConcepts: { type: Number, min: 0 },
+        extractedConcepts: { type: Number, min: 0 },
+        similarityChecked: { type: Number, min: 0 },
+        estimatedTimeRemaining: { type: Number },
+        currentOperation: { type: String },
+        chunks: [{
+          id: { type: String, required: true },
+          type: {
+            type: String,
+            enum: ['keywords', 'notes', 'practice', 'homework', 'mixed'],
+            required: true,
+          },
+          content: { type: String, required: true },
+          estimatedConcepts: { type: Number, min: 0, required: true },
+          processed: { type: Boolean, required: true },
+          extractedConcepts: { type: Schema.Types.Mixed },
+          processedAt: { type: Date },
+          processingTime: { type: Number },
+        }],
+        errorMessage: { type: String },
+        lastUpdated: { type: Date, required: true },
       },
       duplicateDetection: {
         hasDuplicates: { type: Boolean },

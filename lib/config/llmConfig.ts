@@ -18,7 +18,7 @@ export const LLM_SERVICE_CONFIGS: Record<string, ServiceConfig> = {
   conceptExtraction: {
     description: 'AI-powered concept extraction from Polish course content',
     apiKey: '', // Will be set from environment
-    model: 'gpt-4o',
+    model: 'gpt-4.1-nano',
     temperature: 0.3, // Lower for consistent extractions
     maxTokens: 6000, // High limit for complex course content (legacy)
     max_completion_tokens: 6000, // New parameter for newer models
