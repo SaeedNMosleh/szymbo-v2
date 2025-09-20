@@ -36,11 +36,9 @@ const CourseSelector = ({
       const result = await response.json();
 
       if (result.success && result.data) {
-        // Filter to show courses with "extracted" or "in-review" status only
+        // Filter to show courses with "reviewing" status only
         const reviewableCourses = result.data.filter(
-          (course: Course) =>
-            course.conceptExtractionStatus === "extracted" ||
-            course.conceptExtractionStatus === "in-review"
+          (course: Course) => course.conceptExtractionStatus === "reviewing"
         );
         setCourses(reviewableCourses);
       } else {
@@ -60,16 +58,10 @@ const CourseSelector = ({
 
   const getStatusBadge = (status?: string) => {
     switch (status) {
-      case "extracted":
+      case "reviewing":
         return (
           <Badge variant="outline" className="border-blue-600 text-blue-600">
             Ready for Review
-          </Badge>
-        );
-      case "in-review":
-        return (
-          <Badge variant="outline" className="border-amber-600 text-amber-600">
-            In Progress
           </Badge>
         );
       default:
@@ -79,10 +71,8 @@ const CourseSelector = ({
 
   const getStatusIcon = (status?: string) => {
     switch (status) {
-      case "extracted":
+      case "reviewing":
         return <Clock className="size-4 text-blue-600" />;
-      case "in-review":
-        return <Brain className="size-4 text-amber-600" />;
       default:
         return <AlertCircle className="size-4 text-gray-400" />;
     }
@@ -185,9 +175,7 @@ const CourseSelector = ({
                     onClick={() => onCourseSelect(course.courseId)}
                     className="w-full"
                   >
-                    {course.conceptExtractionStatus === "in-review"
-                      ? "Continue Review"
-                      : "Review Concepts"}
+                    Review Concepts
                   </Button>
                 </div>
               </CardContent>

@@ -35,12 +35,26 @@ interface Course {
 interface ExtractionProgress {
   extractionId: string;
   courseId: number;
-  percentage: number;
-  phase: string;
   currentOperation: string;
+  status: "extracting" | "reviewing" | "completed" | "error";
+  percentage?: number;
   estimatedTimeRemaining?: number;
-  chunks?: { total: number; processed: number };
-  concepts?: { total: number; extracted: number; similarityChecked: number };
+  chunks?: {
+    total: number;
+    processed: number;
+  };
+  concepts?: {
+    total: number;
+    extracted: number;
+    similarityChecked: number;
+  };
+  statistics?: {
+    totalConcepts: number;
+    vocabularyConcepts: number;
+    grammarConcepts: number;
+    similarityMatches: number;
+    processingTime: number;
+  };
 }
 
 const ConceptExtraction = () => {
@@ -51,22 +65,10 @@ const ConceptExtraction = () => {
   const [extractingCourse, setExtractingCourse] = useState<number | null>(null);
   const [extractionProgress, setExtractionProgress] =
     useState<ExtractionProgress | null>(null);
-  const [pollingInterval, setPollingInterval] = useState<ReturnType<
-    typeof setTimeout
-  > | null>(null);
 
   useEffect(() => {
     fetchCourses();
   }, []);
-
-  // Cleanup polling interval on unmount
-  useEffect(() => {
-    return () => {
-      if (pollingInterval) {
-        clearInterval(pollingInterval);
-      }
-    };
-  }, [pollingInterval]);
 
   // Apply filter whenever courses or status filter changes
   useEffect(() => {
@@ -86,24 +88,19 @@ const ConceptExtraction = () => {
     } else if (statusFilter === "in-review") {
       setFilteredCourses(
         courses.filter(
-          (course) =>
-            course.conceptExtractionStatus === "extracted" ||
-            course.conceptExtractionStatus === "in-review"
+          (course) => course.conceptExtractionStatus === "reviewing"
         )
       );
     } else if (statusFilter === "processing") {
       setFilteredCourses(
         courses.filter(
-          (course) =>
-            course.conceptExtractionStatus === "analyzing" ||
-            course.conceptExtractionStatus === "extracting" ||
-            course.conceptExtractionStatus === "similarity_checking"
+          (course) => course.conceptExtractionStatus === "extracting"
         )
       );
     } else if (statusFilter === "reviewed") {
       setFilteredCourses(
         courses.filter(
-          (course) => course.conceptExtractionStatus === "reviewed"
+          (course) => course.conceptExtractionStatus === "completed"
         )
       );
     }
@@ -133,126 +130,63 @@ const ConceptExtraction = () => {
 
   const handleExtractConcepts = async (courseId: number) => {
     setExtractingCourse(courseId);
-    setExtractionProgress(null);
+    setExtractionProgress({
+      extractionId: "temp",
+      courseId,
+      currentOperation: "Starting extraction...",
+      status: "extracting",
+    });
 
     try {
-      // Start chunked extraction with automatic processing
-      const response = await fetch("/api/concepts/extract/chunked", {
+      // Start simplified extraction
+      const response = await fetch("/api/concepts/extract", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          courseId,
-          autoProcess: true, // Enable automatic processing
-        }),
+        body: JSON.stringify({ courseId }),
       });
 
       const result = await response.json();
 
       if (result.success) {
-        const extractionId = result.data.extractionId;
+        // Extraction completed successfully
+        setExtractionProgress({
+          extractionId: result.data.extractionId,
+          courseId,
+          currentOperation: "Extraction completed",
+          status: "reviewing",
+          statistics: result.data.statistics,
+        });
 
-        // Start polling for progress
-        startProgressPolling(extractionId, courseId);
+        // Refresh courses to show updated status
+        await fetchCourses();
+
+        // Show success message
+        alert(
+          `Extraction completed! ${result.data.statistics.totalConcepts} concepts extracted and ready for review.`
+        );
+
+        // Clear extraction state after a delay
+        setTimeout(() => {
+          setExtractingCourse(null);
+          setExtractionProgress(null);
+        }, 3000);
       } else {
         alert(`Failed to start concept extraction: ${result.error}`);
         setExtractingCourse(null);
+        setExtractionProgress(null);
       }
     } catch (error) {
       console.error("Error starting concept extraction:", error);
       alert("Failed to start concept extraction");
       setExtractingCourse(null);
+      setExtractionProgress(null);
     }
-  };
-
-  const startProgressPolling = (extractionId: string, courseId: number) => {
-    // Clear any existing polling
-    if (pollingInterval) {
-      clearInterval(pollingInterval);
-    }
-
-    // Set initial progress
-    setExtractionProgress({
-      extractionId,
-      courseId,
-      percentage: 5,
-      phase: "analyzing",
-      currentOperation: "Starting extraction...",
-    });
-
-    // Start polling every 2 seconds
-    const interval = setInterval(async () => {
-      try {
-        const statusResponse = await fetch(
-          `/api/concepts/extract/status/${extractionId}`
-        );
-
-        if (!statusResponse.ok) {
-          throw new Error("Failed to get extraction status");
-        }
-
-        const statusResult = await statusResponse.json();
-
-        if (statusResult.success) {
-          const progress = statusResult.data.progress;
-
-          setExtractionProgress({
-            extractionId,
-            courseId,
-            percentage: progress.percentage,
-            phase: progress.phase,
-            currentOperation: progress.currentOperation,
-            estimatedTimeRemaining: progress.estimatedTimeRemaining,
-            chunks: progress.chunks,
-            concepts: progress.concepts,
-          });
-
-          // Check if extraction is complete
-          if (statusResult.data.extractionMetadata?.isComplete) {
-            clearInterval(interval);
-            setPollingInterval(null);
-            setExtractingCourse(null);
-            setExtractionProgress(null);
-
-            // Refresh courses to show updated status
-            await fetchCourses();
-
-            // Show success message
-            alert(
-              `Extraction completed! ${progress.concepts?.extracted || 0} concepts extracted.`
-            );
-          } else if (progress.phase === "error") {
-            // Handle error state
-            clearInterval(interval);
-            setPollingInterval(null);
-            setExtractingCourse(null);
-            setExtractionProgress(null);
-            alert(
-              `Extraction failed: ${statusResult.data.error || "Unknown error"}`
-            );
-          }
-        }
-      } catch (error) {
-        console.error("Error polling extraction status:", error);
-        // Continue polling - temporary network issues shouldn't stop progress tracking
-      }
-    }, 2000); // Poll every 2 seconds
-
-    setPollingInterval(interval);
   };
 
   const getStatusBadge = (status?: string) => {
     switch (status) {
-      case "analyzing":
-        return (
-          <Badge
-            variant="outline"
-            className="border-purple-600 text-purple-600"
-          >
-            Analyzing Content
-          </Badge>
-        );
       case "extracting":
         return (
           <Badge
@@ -262,28 +196,13 @@ const ConceptExtraction = () => {
             Extracting Concepts
           </Badge>
         );
-      case "similarity_checking":
-        return (
-          <Badge
-            variant="outline"
-            className="border-orange-600 text-orange-600"
-          >
-            Checking Similarities
-          </Badge>
-        );
-      case "extracted":
+      case "reviewing":
         return (
           <Badge variant="outline" className="border-blue-600 text-blue-600">
             Ready for Review
           </Badge>
         );
-      case "in-review":
-        return (
-          <Badge variant="outline" className="border-amber-600 text-amber-600">
-            In Progress
-          </Badge>
-        );
-      case "reviewed":
+      case "completed":
         return (
           <Badge variant="default" className="bg-green-600">
             Concepts Added
@@ -322,7 +241,7 @@ const ConceptExtraction = () => {
       <div className="mt-4 space-y-2">
         <div className="flex items-center justify-between text-sm">
           <span className="font-medium">
-            Progress: {Math.round(progress.percentage)}%
+            Progress: {Math.round(progress.percentage || 0)}%
           </span>
           {progress.estimatedTimeRemaining && (
             <span className="text-gray-500">
@@ -335,7 +254,7 @@ const ConceptExtraction = () => {
           <div
             className="h-2 rounded-full bg-blue-600 transition-all duration-300 ease-in-out"
             style={{
-              width: `${Math.min(100, Math.max(0, progress.percentage))}%`,
+              width: `${Math.min(100, Math.max(0, progress.percentage || 0))}%`,
             }}
           />
         </div>
@@ -530,9 +449,7 @@ const ConceptExtraction = () => {
                               </Button>
                             )}
 
-                            {(course.conceptExtractionStatus === "extracted" ||
-                              course.conceptExtractionStatus ===
-                                "in-review") && (
+                            {course.conceptExtractionStatus === "reviewing" && (
                               <Link
                                 href={`/concept-review?courseId=${course.courseId}`}
                                 className="flex-1"
@@ -543,7 +460,7 @@ const ConceptExtraction = () => {
                                   className="w-full"
                                 >
                                   {course.conceptExtractionStatus ===
-                                  "in-review"
+                                  "reviewing"
                                     ? "Continue Review"
                                     : "Review Concepts"}
                                 </Button>

@@ -2,18 +2,19 @@ import { LLMServiceFactory } from "@/lib/services/llm/llmServiceFactory";
 import { OpenAIService } from "@/lib/services/llm/openAIService";
 import { LLMServiceError } from "@/lib/utils/errors";
 import { logger } from "@/lib/utils/logger";
-import { parseJsonFromLLMResponse, attemptJsonRepair } from "@/lib/utils/jsonParser";
+import { createLLMJsonParser } from "@/lib/utils/jsonParser";
 import { ExtractedConcept, SimilarityMatch } from "./types";
 import { ConceptCategory, QuestionLevel } from "@/lib/enum";
 import { IConceptIndex } from "@/datamodels/conceptIndex.model";
 import {
-  CONCEPT_EXTRACTION_BASE_PROMPT,
+  VOCABULARY_EXTRACTION_PROMPT,
+  GRAMMAR_EXTRACTION_PROMPT,
   TAG_SUGGESTION_PROMPT,
   MERGE_SIMILARITY_PROMPT,
   CONCEPT_EXTRACTION_SYSTEM_PROMPT,
   TAG_SUGGESTION_SYSTEM_PROMPT,
   MERGE_SIMILARITY_SYSTEM_PROMPT,
-  TEXT_ANALYSIS_SYSTEM_PROMPT
+  TEXT_ANALYSIS_SYSTEM_PROMPT,
 } from "@/prompts/conceptExtraction";
 
 /**
@@ -26,23 +27,182 @@ export class ConceptLLMService {
    * Initialize LLM service using the centralized configuration
    */
   constructor() {
-    this.llmService = LLMServiceFactory.getOpenAIServiceForUseCase('conceptExtraction');
+    this.llmService =
+      LLMServiceFactory.getOpenAIServiceForUseCase("conceptExtraction");
   }
 
   /**
-   * Extract concepts from course content using LLM with tag suggestions
+   * Extract vocabulary concepts from newWords array
+   * @param newWords Array of Polish words to extract as vocabulary concepts
+   * @param existingTags Array of existing tags in the system for consistency
+   * @returns Array of vocabulary concepts
+   */
+  async extractVocabularyConcepts(
+    newWords: string[],
+    existingTags: string[] = []
+  ): Promise<ExtractedConcept[]> {
+    if (!newWords || newWords.length === 0) {
+      return [];
+    }
+
+    const prompt = this.buildVocabularyExtractionPrompt(newWords, existingTags);
+    const systemPrompt = CONCEPT_EXTRACTION_SYSTEM_PROMPT;
+
+    try {
+      logger.info("Starting vocabulary concept extraction", {
+        operation: "vocabulary_extraction",
+        newWordsCount: newWords.length,
+        existingTagsCount: existingTags.length,
+      });
+
+      const response = await this.llmService.generateResponse(
+        {
+          prompt,
+          systemPrompt,
+        },
+        createLLMJsonParser<{ concepts: unknown[] }>(undefined, {
+          enableRepair: true,
+          logErrors: true,
+        })
+      );
+
+      if (!response.success || !response.data) {
+        throw new LLMServiceError(
+          `Vocabulary extraction failed: ${response.error || "Unknown error"}`
+        );
+      }
+
+      const result = response.data as { concepts: unknown[] };
+
+      if (!result || !Array.isArray(result.concepts)) {
+        throw new LLMServiceError(
+          "Invalid LLM response format for vocabulary extraction"
+        );
+      }
+
+      const concepts = this.parseExtractedConcepts(result.concepts);
+
+      logger.success("Vocabulary extraction completed successfully", {
+        operation: "vocabulary_extraction",
+        conceptCount: concepts.length,
+        duration: response.metadata?.duration,
+      });
+
+      return concepts;
+    } catch (error) {
+      logger.error("Vocabulary extraction failed", error as Error);
+
+      if (error instanceof LLMServiceError) {
+        throw error;
+      }
+      throw new LLMServiceError(
+        `Vocabulary extraction failed: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  }
+
+  /**
+   * Extract grammar concepts from combined text content
+   * @param textContent Combined notes, practice, and homework content
+   * @param existingTags Array of existing tags in the system for consistency
+   * @returns Array of grammar concepts
+   */
+  async extractGrammarConcepts(
+    textContent: {
+      notes: string;
+      practice: string;
+      homework?: string;
+    },
+    existingTags: string[] = []
+  ): Promise<ExtractedConcept[]> {
+    const combinedText = [
+      textContent.notes,
+      textContent.practice,
+      textContent.homework || "",
+    ]
+      .filter((text) => text.trim().length > 0)
+      .join("\n\n");
+
+    if (!combinedText.trim()) {
+      return [];
+    }
+
+    const prompt = this.buildGrammarExtractionPrompt(
+      combinedText,
+      existingTags
+    );
+    const systemPrompt = CONCEPT_EXTRACTION_SYSTEM_PROMPT;
+
+    try {
+      logger.info("Starting grammar concept extraction", {
+        operation: "grammar_extraction",
+        contentLength: combinedText.length,
+        existingTagsCount: existingTags.length,
+      });
+
+      const response = await this.llmService.generateResponse(
+        {
+          prompt,
+          systemPrompt,
+        },
+        createLLMJsonParser<{ concepts: unknown[] }>(undefined, {
+          enableRepair: true,
+          logErrors: true,
+        })
+      );
+
+      if (!response.success || !response.data) {
+        throw new LLMServiceError(
+          `Grammar extraction failed: ${response.error || "Unknown error"}`
+        );
+      }
+
+      const result = response.data as { concepts: unknown[] };
+
+      if (!result || !Array.isArray(result.concepts)) {
+        throw new LLMServiceError(
+          "Invalid LLM response format for grammar extraction"
+        );
+      }
+
+      const concepts = this.parseExtractedConcepts(result.concepts);
+
+      logger.success("Grammar extraction completed successfully", {
+        operation: "grammar_extraction",
+        conceptCount: concepts.length,
+        duration: response.metadata?.duration,
+      });
+
+      return concepts;
+    } catch (error) {
+      logger.error("Grammar extraction failed", error as Error);
+
+      if (error instanceof LLMServiceError) {
+        throw error;
+      }
+      throw new LLMServiceError(
+        `Grammar extraction failed: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  }
+
+  /**
+   * Extract concepts from course content using LLM with tag suggestions (legacy method)
    * @param courseContent The course content to extract concepts from
    * @param existingTags Array of existing tags in the system for consistency
    * @returns Array of extracted concepts with suggested tags
    */
-  async extractConceptsFromCourse(courseContent: {
-    keywords: string[];
-    notes: string;
-    practice: string;
-    newWords: string[];
-    homework?: string;
-  }, existingTags: string[] = []): Promise<ExtractedConcept[]> {
-    const prompt = this.buildExtractionPrompt(courseContent, existingTags);
+  async extractConceptsFromCourse(
+    courseContent: {
+      keywords: string[];
+      notes: string;
+      practice: string;
+      newWords: string[];
+      homework?: string;
+    },
+    existingTags: string[] = []
+  ): Promise<ExtractedConcept[]> {
+    const prompt = this.buildExtractionPrompt(courseContent);
     const systemPrompt = CONCEPT_EXTRACTION_SYSTEM_PROMPT;
 
     try {
@@ -61,7 +221,10 @@ export class ConceptLLMService {
           prompt,
           systemPrompt,
         },
-        (rawResponse: string) => this.parseJsonResponse(rawResponse)
+        createLLMJsonParser<{ concepts: unknown[] }>(undefined, {
+          enableRepair: true,
+          logErrors: true,
+        })
       );
 
       if (!response.success || !response.data) {
@@ -79,56 +242,7 @@ export class ConceptLLMService {
         );
       }
 
-      // Map the response to ExtractedConcept objects
-      const concepts = (result.concepts as Array<{
-        name?: string;
-        category?: string;
-        description?: string;
-        examples?: string[];
-        sourceContent?: string;
-        confidence?: number;
-        suggestedDifficulty?: string;
-        suggestedTags?: Array<{
-          tag?: string;
-          source?: string;
-          confidence?: number;
-        }>;
-        vocabularyData?: {
-          word?: string;
-          translation?: string;
-          partOfSpeech?: string;
-          gender?: string;
-          pluralForm?: string;
-          pronunciation?: string;
-        };
-      }>).map(
-        (concept) => ({
-          name: concept.name || "",
-          category: this.validateCategory(concept.category),
-          description: concept.description || "",
-          examples: Array.isArray(concept.examples) ? concept.examples : [],
-          sourceContent: concept.sourceContent || "",
-          confidence: this.validateConfidence(concept.confidence),
-          suggestedDifficulty: this.validateDifficulty(
-            concept.suggestedDifficulty
-          ),
-          suggestedTags: Array.isArray(concept.suggestedTags)
-            ? concept.suggestedTags.map(tag => ({
-                tag: tag.tag || "",
-                source: (tag.source === 'existing' ? 'existing' : 'new') as 'existing' | 'new',
-                confidence: this.validateConfidence(tag.confidence)
-              })).filter(tag => tag.tag.length > 0)
-            : [],
-          vocabularyData: concept.vocabularyData ? {
-            word: concept.vocabularyData.word || concept.name || "",
-            translation: concept.vocabularyData.translation || "",
-            partOfSpeech: concept.vocabularyData.partOfSpeech || "",
-            gender: concept.vocabularyData.gender || undefined,
-            pluralForm: concept.vocabularyData.pluralForm || undefined,
-            pronunciation: concept.vocabularyData.pronunciation || undefined
-          } : undefined
-        })
-      );
+      const concepts = this.parseExtractedConcepts(result.concepts);
 
       logger.success("Concept extraction completed successfully", {
         operation: "concept_extraction",
@@ -139,7 +253,7 @@ export class ConceptLLMService {
       return concepts;
     } catch (error) {
       logger.error("Concept extraction failed", error as Error);
-      
+
       if (error instanceof LLMServiceError) {
         throw error;
       }
@@ -158,7 +272,9 @@ export class ConceptLLMService {
   async suggestTagsForConcept(
     concept: ExtractedConcept,
     existingTags: string[] = []
-  ): Promise<Array<{ tag: string; source: 'existing' | 'new'; confidence: number }>> {
+  ): Promise<
+    Array<{ tag: string; source: "existing" | "new"; confidence: number }>
+  > {
     const prompt = this.buildTagSuggestionPrompt(concept, existingTags);
     const systemPrompt = TAG_SUGGESTION_SYSTEM_PROMPT;
 
@@ -175,7 +291,10 @@ export class ConceptLLMService {
           prompt,
           systemPrompt,
         },
-        (rawResponse: string) => this.parseJsonResponse(rawResponse)
+        createLLMJsonParser<{ tags: unknown[] }>(undefined, {
+          enableRepair: true,
+          logErrors: true,
+        })
       );
 
       if (!response.success || !response.data) {
@@ -194,18 +313,22 @@ export class ConceptLLMService {
       }
 
       // Map the response to tag objects
-      const suggestedTags = (result.tags as Array<{
-        tag?: string;
-        source?: string;
-        confidence?: number;
-        reason?: string;
-      }>).map(
-        (tagData) => ({
+      const suggestedTags = (
+        result.tags as Array<{
+          tag?: string;
+          source?: string;
+          confidence?: number;
+          reason?: string;
+        }>
+      )
+        .map((tagData) => ({
           tag: tagData.tag || "",
-          source: (tagData.source === 'existing' ? 'existing' : 'new') as 'existing' | 'new',
+          source: (tagData.source === "existing" ? "existing" : "new") as
+            | "existing"
+            | "new",
           confidence: this.validateConfidence(tagData.confidence),
-        })
-      ).filter(tag => tag.tag.length > 0);
+        }))
+        .filter((tag) => tag.tag.length > 0);
 
       logger.success("Tag suggestion completed successfully", {
         operation: "tag_suggestion",
@@ -217,7 +340,7 @@ export class ConceptLLMService {
       return suggestedTags;
     } catch (error) {
       logger.error("Tag suggestion failed", error as Error);
-      
+
       if (error instanceof LLMServiceError) {
         throw error;
       }
@@ -260,7 +383,7 @@ export class ConceptLLMService {
       return response.data as string;
     } catch (error) {
       logger.error("Text analysis failed", error as Error);
-      
+
       if (error instanceof LLMServiceError) {
         throw error;
       }
@@ -303,7 +426,10 @@ export class ConceptLLMService {
           prompt,
           systemPrompt,
         },
-        (rawResponse: string) => this.parseJsonResponse(rawResponse)
+        createLLMJsonParser<{ matches: unknown[] }>(undefined, {
+          enableRepair: true,
+          logErrors: true,
+        })
       );
 
       if (!response.success || !response.data) {
@@ -322,41 +448,46 @@ export class ConceptLLMService {
       }
 
       // Map the response to SimilarityMatch objects with merge data
-      const matches = (result.matches as Array<{
-        conceptId?: string;
-        name?: string;
-        similarity?: number;
-        category?: string;
-        description?: string;
-        examples?: string[];
-        mergeScore?: number;
-        mergeSuggestion?: {
-          reason?: string;
-          conflictingFields?: string[];
-          suggestedMergedDescription?: string;
-        };
-      }>).map(
-        (match) => ({
-          conceptId: match.conceptId || "",
-          name: match.name || "",
-          similarity: this.validateConfidence(match.similarity),
-          category: this.validateCategory(match.category),
-          description: match.description || "",
-          examples: Array.isArray(match.examples) ? match.examples : [],
-          mergeScore: this.validateConfidence(match.mergeScore),
-          mergeSuggestion: match.mergeSuggestion ? {
-            reason: match.mergeSuggestion.reason || "",
-            conflictingFields: Array.isArray(match.mergeSuggestion.conflictingFields) 
-              ? match.mergeSuggestion.conflictingFields 
-              : [],
-            suggestedMergedDescription: match.mergeSuggestion.suggestedMergedDescription,
-          } : undefined,
-        })
-      );
+      const matches = (
+        result.matches as Array<{
+          conceptId?: string;
+          name?: string;
+          similarity?: number;
+          category?: string;
+          description?: string;
+          examples?: string[];
+          mergeScore?: number;
+          mergeSuggestion?: {
+            reason?: string;
+            conflictingFields?: string[];
+            suggestedMergedDescription?: string;
+          };
+        }>
+      ).map((match) => ({
+        conceptId: match.conceptId || "",
+        name: match.name || "",
+        similarity: this.validateConfidence(match.similarity),
+        category: this.validateCategory(match.category),
+        description: match.description || "",
+        examples: Array.isArray(match.examples) ? match.examples : [],
+        mergeScore: this.validateConfidence(match.mergeScore),
+        mergeSuggestion: match.mergeSuggestion
+          ? {
+              reason: match.mergeSuggestion.reason || "",
+              conflictingFields: Array.isArray(
+                match.mergeSuggestion.conflictingFields
+              )
+                ? match.mergeSuggestion.conflictingFields
+                : [],
+              suggestedMergedDescription:
+                match.mergeSuggestion.suggestedMergedDescription,
+            }
+          : undefined,
+      }));
 
       // Filter for high merge potential and sort by merge score
       const mergeableMatches = matches
-        .filter(match => match.mergeScore >= 0.7) // Only high merge potential
+        .filter((match) => match.mergeScore >= 0.7) // Only high merge potential
         .sort((a, b) => b.mergeScore - a.mergeScore);
 
       logger.success("Concept merge similarity check completed", {
@@ -368,7 +499,7 @@ export class ConceptLLMService {
       return mergeableMatches;
     } catch (error) {
       logger.error("Concept merge similarity check failed", error as Error);
-      
+
       if (error instanceof LLMServiceError) {
         throw error;
       }
@@ -379,46 +510,55 @@ export class ConceptLLMService {
   }
 
   /**
-   * Parse JSON response using the robust existing parser utility
-   * @param response Raw response from LLM
-   * @returns Parsed JSON object
+   * Build the prompt for vocabulary extraction
+   * @param newWords Array of Polish words
+   * @param existingTags Array of existing tags for consistency
+   * @returns Formatted prompt string
    */
-  private parseJsonResponse(response: string): Record<string, unknown> {
-    const parseResult = parseJsonFromLLMResponse(response);
-
-    if (!parseResult.success) {
-      // Try repair for truncated responses
-      if (parseResult.error?.includes('incomplete') || parseResult.error?.includes('truncated')) {
-        logger.info("Attempting to repair truncated JSON response");
-
-        try {
-          const repairedResponse = attemptJsonRepair(response);
-          const repairResult = parseJsonFromLLMResponse(repairedResponse);
-
-          if (repairResult.success) {
-            logger.info("Successfully repaired truncated JSON response");
-            return repairResult.data as Record<string, unknown>;
-          }
-        } catch (repairError) {
-          logger.warn("JSON repair attempt failed", {
-            error: repairError instanceof Error ? repairError.message : 'Unknown error'
-          });
-        }
-      }
-
-      throw new LLMServiceError(`JSON parsing failed: ${parseResult.error}`);
-    }
-
-    return parseResult.data as Record<string, unknown>;
+  private buildVocabularyExtractionPrompt(
+    newWords: string[],
+    existingTags: string[] = []
+  ): string {
+    return VOCABULARY_EXTRACTION_PROMPT.replace(
+      "{newWords}",
+      JSON.stringify(newWords)
+    ).replace(
+      "{existingTags}",
+      existingTags.length > 0
+        ? JSON.stringify(existingTags.slice(0, 50))
+        : "No existing tags"
+    );
   }
 
   /**
-   * Build the prompt for concept extraction with tag suggestions
+   * Build the prompt for grammar extraction
+   * @param combinedText Combined notes, practice, and homework content
+   * @param existingTags Array of existing tags for consistency
+   * @returns Formatted prompt string
+   */
+  private buildGrammarExtractionPrompt(
+    combinedText: string,
+    existingTags: string[] = []
+  ): string {
+    return GRAMMAR_EXTRACTION_PROMPT.replace(
+      "{combinedText}",
+      combinedText
+    ).replace(
+      "{existingTags}",
+      existingTags.length > 0
+        ? JSON.stringify(existingTags.slice(0, 50))
+        : "No existing tags"
+    );
+  }
+
+  /**
+   * Build the prompt for concept extraction with tag suggestions (legacy method)
    * @param courseContent The course content
    * @param existingTags Array of existing tags for consistency
    * @returns Formatted prompt string
    */
-  private buildExtractionPrompt(courseContent: {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  private buildExtractionPrompt(_courseContent: {
     keywords?: string[];
     content?: string;
     title?: string;
@@ -426,14 +566,73 @@ export class ConceptLLMService {
     notes?: string;
     practice?: string;
     homework?: string;
-  }, existingTags: string[] = []): string {
-    return CONCEPT_EXTRACTION_BASE_PROMPT
-      .replace('{keywords}', JSON.stringify(courseContent.keywords))
-      .replace('{newWords}', JSON.stringify(courseContent.newWords))
-      .replace('{notes}', courseContent.notes || '')
-      .replace('{practice}', courseContent.practice || '')
-      .replace('{homework}', courseContent.homework ? `- Homework: ${courseContent.homework}` : '')
-      .replace('{existingTags}', existingTags.length > 0 ? JSON.stringify(existingTags.slice(0, 50)) : 'No existing tags');
+  }): string {
+    // Note: This legacy method is no longer functional after removing CONCEPT_EXTRACTION_BASE_PROMPT
+    // Use the new extractVocabularyConcepts() and extractGrammarConcepts() methods instead
+    throw new Error(
+      "Legacy extractConceptsFromCourse method is deprecated. Use extractVocabularyConcepts() and extractGrammarConcepts() instead."
+    );
+  }
+
+  /**
+   * Parse and validate extracted concepts from LLM response
+   * @param concepts Raw concept data from LLM
+   * @returns Array of validated ExtractedConcept objects
+   */
+  private parseExtractedConcepts(concepts: unknown[]): ExtractedConcept[] {
+    return (
+      concepts as Array<{
+        name?: string;
+        category?: string;
+        description?: string;
+        examples?: string[];
+        sourceContent?: string;
+        confidence?: number;
+        suggestedDifficulty?: string;
+        suggestedTags?: Array<{
+          tag?: string;
+          source?: string;
+          confidence?: number;
+        }>;
+        vocabularyData?: {
+          word?: string;
+          translation?: string;
+          partOfSpeech?: string;
+          gender?: string;
+          pluralForm?: string;
+          pronunciation?: string;
+        };
+      }>
+    ).map((concept) => ({
+      name: concept.name || "",
+      category: this.validateCategory(concept.category),
+      description: concept.description || "",
+      examples: Array.isArray(concept.examples) ? concept.examples : [],
+      sourceContent: concept.sourceContent || "",
+      confidence: this.validateConfidence(concept.confidence),
+      suggestedDifficulty: this.validateDifficulty(concept.suggestedDifficulty),
+      suggestedTags: Array.isArray(concept.suggestedTags)
+        ? concept.suggestedTags
+            .map((tag) => ({
+              tag: tag.tag || "",
+              source: (tag.source === "existing" ? "existing" : "new") as
+                | "existing"
+                | "new",
+              confidence: this.validateConfidence(tag.confidence),
+            }))
+            .filter((tag) => tag.tag.length > 0)
+        : [],
+      vocabularyData: concept.vocabularyData
+        ? {
+            word: concept.vocabularyData.word || concept.name || "",
+            translation: concept.vocabularyData.translation || "",
+            partOfSpeech: concept.vocabularyData.partOfSpeech || "",
+            gender: concept.vocabularyData.gender || undefined,
+            pluralForm: concept.vocabularyData.pluralForm || undefined,
+            pronunciation: concept.vocabularyData.pronunciation || undefined,
+          }
+        : undefined,
+    }));
   }
 
   /**
@@ -446,9 +645,15 @@ export class ConceptLLMService {
     concept: ExtractedConcept,
     existingTags: string[]
   ): string {
-    return TAG_SUGGESTION_PROMPT
-      .replace('{concept}', JSON.stringify(concept, null, 2))
-      .replace('{existingTags}', existingTags.length > 0 ? JSON.stringify(existingTags.slice(0, 50)) : 'No existing tags');
+    return TAG_SUGGESTION_PROMPT.replace(
+      "{concept}",
+      JSON.stringify(concept, null, 2)
+    ).replace(
+      "{existingTags}",
+      existingTags.length > 0
+        ? JSON.stringify(existingTags.slice(0, 50))
+        : "No existing tags"
+    );
   }
 
   /**
@@ -461,9 +666,13 @@ export class ConceptLLMService {
     concept: ExtractedConcept,
     existing: IConceptIndex[]
   ): string {
-    return MERGE_SIMILARITY_PROMPT
-      .replace('{extractedConcept}', JSON.stringify(concept, null, 2))
-      .replace('{existingConcepts}', JSON.stringify(existing.slice(0, 20), null, 2));
+    return MERGE_SIMILARITY_PROMPT.replace(
+      "{extractedConcept}",
+      JSON.stringify(concept, null, 2)
+    ).replace(
+      "{existingConcepts}",
+      JSON.stringify(existing.slice(0, 20), null, 2)
+    );
   }
 
   /**

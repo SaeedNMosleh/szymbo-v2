@@ -355,6 +355,102 @@ export class ConceptManager {
   }
 
   /**
+   * Get relevant concepts for similarity checking with smart filtering
+   * @param extractedConcept The concept to find similar concepts for
+   * @returns Array of relevant concepts limited to most relevant matches
+   */
+  async getRelevantConceptsForSimilarity(
+    extractedConcept: ExtractedConcept
+  ): Promise<IConceptIndex[]> {
+    try {
+      const tagFilters = extractedConcept.suggestedTags.map((t) => t.tag);
+
+      // Build aggregation pipeline for smart filtering
+      const pipeline = [
+        // Stage 1: Category + active filter
+        {
+          $match: {
+            isActive: true,
+            category: extractedConcept.category,
+          },
+        },
+
+        // Stage 2: Calculate tag overlap
+        {
+          $addFields: {
+            tagOverlap: {
+              $size: {
+                $setIntersection: ["$tags", tagFilters],
+              },
+            },
+          },
+        },
+
+        // Stage 3: Filter for relevance
+        {
+          $match: {
+            $or: [
+              { tagOverlap: { $gte: 1 } }, // Has overlapping tags
+              {
+                name: {
+                  $regex: extractedConcept.name
+                    .split(" ")
+                    .slice(0, 2)
+                    .join("|"),
+                  $options: "i",
+                },
+              },
+            ],
+          },
+        },
+
+        // Stage 4: Sort and limit
+        { $sort: { tagOverlap: -1 as const, updatedAt: -1 as const } },
+        { $limit: 30 }, // Max 30 concepts to check
+      ];
+
+      const relevantConcepts = await Concept.aggregate(pipeline);
+
+      // Convert to concept index format
+      const conceptIndexes = relevantConcepts.map((concept) =>
+        createConceptIndex(concept)
+      );
+
+      console.log(
+        `🔍 Smart similarity filtering: Found ${conceptIndexes.length} relevant concepts for "${extractedConcept.name}" (category: ${extractedConcept.category})`
+      );
+
+      return conceptIndexes;
+    } catch (error) {
+      console.error("Error in smart similarity filtering:", error);
+
+      // Fallback to category-only filtering if aggregation fails
+      const fallbackConcepts = await Concept.find({
+        isActive: true,
+        category: extractedConcept.category,
+      }).limit(20);
+
+      return fallbackConcepts.map((concept) =>
+        createConceptIndex(concept.toObject())
+      );
+    }
+  }
+
+  /**
+   * Get existing tags from all active concepts for consistency
+   * @returns Array of unique tag strings
+   */
+  async getExistingTags(): Promise<string[]> {
+    try {
+      const existingTags = await Concept.distinct("tags", { isActive: true });
+      return existingTags.filter((tag) => tag && tag.length > 0);
+    } catch (error) {
+      console.error("Error fetching existing tags:", error);
+      return [];
+    }
+  }
+
+  /**
    * Invalidate the concept index cache
    */
   private invalidateCache(): void {

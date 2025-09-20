@@ -26,7 +26,7 @@ export interface ICourse {
   homework?: string; // Assigned homework content
 
   // === CONCEPT EXTRACTION STATUS ===
-  conceptExtractionStatus?: "pending" | "extracted" | "in-review" | "reviewed";
+  conceptExtractionStatus?: "pending" | "extracting" | "reviewing" | "completed" | "error";
 }
 
 const CourseSchema = new Schema<ICourse>(
@@ -110,7 +110,7 @@ const CourseSchema = new Schema<ICourse>(
     },
     conceptExtractionStatus: {
       type: String,
-      enum: ["pending", "extracted", "in-review", "reviewed"],
+      enum: ["pending", "extracting", "reviewing", "completed", "error"],
       default: "pending",
       required: false,
       index: true,
