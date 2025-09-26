@@ -381,7 +381,7 @@ export default function EnhancedConceptSelector({
                     {group.concepts.map((concept) => (
                       <div
                         key={concept.id}
-                        className="flex cursor-pointer items-center space-x-2 rounded-md p-2 hover:bg-gray-50"
+                        className="flex cursor-pointer items-center space-x-2 rounded-md p-2 hover:bg-gray-50 w-full"
                         onClick={() => toggleConceptSelection(concept.id)}
                       >
                         <Checkbox
@@ -391,49 +391,46 @@ export default function EnhancedConceptSelector({
                           }
                         />
 
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center justify-between">
-                            <span className="truncate text-sm font-medium text-gray-900">
+                        <div className="min-w-0 flex-1 overflow-hidden">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="truncate text-sm font-medium text-gray-900 flex-1 min-w-0">
                               {concept.name}
                             </span>
                             {showQuestionCounts && (
                               <Badge
                                 variant="secondary"
-                                className="ml-2 text-xs"
+                                className="text-xs flex-shrink-0"
                               >
                                 {concept.questionCount}
                               </Badge>
                             )}
                           </div>
-                          <div className="mt-1 flex items-center space-x-2">
+                          <div className="mt-1 flex items-center space-x-2 overflow-hidden">
                             <Badge
                               variant="outline"
-                              className={`text-xs ${getCategoryColor(concept.category)}`}
+                              className={`text-xs flex-shrink-0 ${getCategoryColor(concept.category)}`}
                             >
                               {concept.difficulty}
                             </Badge>
                             {concept.tags && concept.tags.length > 0 && (
-                              <div className="flex items-center space-x-1">
-                                <span className="text-xs text-gray-400">•</span>
-                                {concept.tags.slice(0, 2).map((tag, index) => (
-                                  <Badge
-                                    key={index}
-                                    variant="secondary"
-                                    className="px-1 py-0 text-xs"
-                                  >
-                                    {tag}
-                                  </Badge>
-                                ))}
-                                {concept.tags.length > 2 && (
-                                  <span className="text-xs text-gray-500">
-                                    +{concept.tags.length - 2}
-                                  </span>
-                                )}
+                              <div className="flex items-center space-x-1 min-w-0 overflow-hidden">
+                                <span className="text-xs text-gray-400 flex-shrink-0">•</span>
+                                <div className="flex items-center space-x-1 min-w-0 overflow-hidden">
+                                  {concept.tags.map((tag, index) => (
+                                    <Badge
+                                      key={index}
+                                      variant="secondary"
+                                      className="px-1 py-0 text-xs whitespace-nowrap flex-shrink-0"
+                                    >
+                                      {tag}
+                                    </Badge>
+                                  ))}
+                                </div>
                               </div>
                             )}
                           </div>
                           {concept.description && (
-                            <div className="mt-1 truncate text-xs text-gray-500">
+                            <div className="mt-1 text-xs text-gray-500 line-clamp-2 max-w-full overflow-hidden">
                               {concept.description}
                             </div>
                           )}
