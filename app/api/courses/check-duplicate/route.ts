@@ -1,5 +1,5 @@
 import { connectToDatabase } from "@/lib/dbConnect";
-import Course from "@/datamodels/course.model";
+import Course, { type ICourse } from "@/datamodels/course.model";
 import { createSuccessResponse, createErrorResponse } from "@/lib/utils/apiResponse";
 import { logger } from "@/lib/utils/logger";
 import { NextRequest } from "next/server";
@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
 
     await connectToDatabase();
 
-    const existingCourse = await Course.findOne({ courseId }).lean();
+    const existingCourse = await Course.findOne({ courseId }).lean<ICourse & { createdAt?: Date }>();
 
     if (existingCourse) {
       logger.info("Duplicate courseId detected", {
