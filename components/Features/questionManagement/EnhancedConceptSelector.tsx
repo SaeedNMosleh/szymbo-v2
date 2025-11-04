@@ -381,7 +381,7 @@ export default function EnhancedConceptSelector({
                     {group.concepts.map((concept) => (
                       <div
                         key={concept.id}
-                        className="flex cursor-pointer items-center space-x-2 rounded-md p-2 hover:bg-gray-50 w-full"
+                        className="flex w-full cursor-pointer items-center space-x-2 rounded-md p-2 hover:bg-gray-50"
                         onClick={() => toggleConceptSelection(concept.id)}
                       >
                         <Checkbox
@@ -393,13 +393,13 @@ export default function EnhancedConceptSelector({
 
                         <div className="min-w-0 flex-1 overflow-hidden">
                           <div className="flex items-center justify-between gap-2">
-                            <span className="truncate text-sm font-medium text-gray-900 flex-1 min-w-0">
+                            <span className="min-w-0 flex-1 truncate text-sm font-medium text-gray-900">
                               {concept.name}
                             </span>
                             {showQuestionCounts && (
                               <Badge
                                 variant="secondary"
-                                className="text-xs flex-shrink-0"
+                                className="shrink-0 text-xs"
                               >
                                 {concept.questionCount}
                               </Badge>
@@ -408,19 +408,21 @@ export default function EnhancedConceptSelector({
                           <div className="mt-1 flex items-center space-x-2 overflow-hidden">
                             <Badge
                               variant="outline"
-                              className={`text-xs flex-shrink-0 ${getCategoryColor(concept.category)}`}
+                              className={`shrink-0 text-xs ${getCategoryColor(concept.category)}`}
                             >
                               {concept.difficulty}
                             </Badge>
                             {concept.tags && concept.tags.length > 0 && (
-                              <div className="flex items-center space-x-1 min-w-0 overflow-hidden">
-                                <span className="text-xs text-gray-400 flex-shrink-0">•</span>
-                                <div className="flex items-center space-x-1 min-w-0 overflow-hidden">
+                              <div className="flex min-w-0 items-center space-x-1 overflow-hidden">
+                                <span className="shrink-0 text-xs text-gray-400">
+                                  •
+                                </span>
+                                <div className="flex min-w-0 items-center space-x-1 overflow-hidden">
                                   {concept.tags.map((tag, index) => (
                                     <Badge
                                       key={index}
                                       variant="secondary"
-                                      className="px-1 py-0 text-xs whitespace-nowrap flex-shrink-0"
+                                      className="shrink-0 whitespace-nowrap px-1 py-0 text-xs"
                                     >
                                       {tag}
                                     </Badge>
@@ -430,7 +432,7 @@ export default function EnhancedConceptSelector({
                             )}
                           </div>
                           {concept.description && (
-                            <div className="mt-1 text-xs text-gray-500 line-clamp-2 max-w-full overflow-hidden">
+                            <div className="mt-1 line-clamp-2 max-w-full overflow-hidden text-xs text-gray-500">
                               {concept.description}
                             </div>
                           )}
