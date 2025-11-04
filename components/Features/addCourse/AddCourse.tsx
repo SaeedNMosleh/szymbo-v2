@@ -13,6 +13,8 @@ import { validateAndSaveCourse } from "@/lib/LLMCourseValidation/courseValidatio
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { CourseType } from "@/lib/enum"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { AlertCircle, CheckCircle2, Loader2 } from "lucide-react"
 
 const courseSchema = z.object({
   courseId: z.number().int().positive(),
@@ -36,6 +38,11 @@ export function AddCourse() {
   const [step, setStep] = useState(1)
   const [llmSuggestions, setLlmSuggestions] = useState<Partial<CourseData> | null>(null)
   const [acceptedSuggestions, setAcceptedSuggestions] = useState<Set<keyof CourseData>>(new Set())
+  const [isCheckingDuplicate, setIsCheckingDuplicate] = useState(false)
+  const [courseIdError, setCourseIdError] = useState<string | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
+  const [submitSuccess, setSubmitSuccess] = useState(false)
 
   const form = useForm<CourseData>({
     resolver: zodResolver(courseSchema),
@@ -56,31 +63,88 @@ export function AddCourse() {
     },
   })
 
+  const checkCourseIdDuplicate = async (courseId: number) => {
+    if (!courseId || courseId <= 0) {
+      return
+    }
+
+    setIsCheckingDuplicate(true)
+    setCourseIdError(null)
+
+    try {
+      const response = await fetch(`/api/courses/check-duplicate?courseId=${courseId}`)
+      const result = await response.json()
+
+      if (result.success && result.data.isDuplicate) {
+        const existingCourse = result.data.existingCourse
+        const errorMsg = `Course ID ${courseId} already exists (created on ${new Date(existingCourse.date).toLocaleDateString()}). Please use a different ID.`
+        setCourseIdError(errorMsg)
+        form.setError("courseId", {
+          type: "manual",
+          message: errorMsg,
+        })
+      } else {
+        setCourseIdError(null)
+        form.clearErrors("courseId")
+      }
+    } catch (error) {
+      console.error("Error checking duplicate:", error)
+      setCourseIdError("Unable to check for duplicates. Please try again.")
+    } finally {
+      setIsCheckingDuplicate(false)
+    }
+  }
+
   const onSubmit = async (data: CourseData) => {
     console.log("Submitting", data)
+    setSubmitError(null)
+    setSubmitSuccess(false)
+
     if (step < 3) {
       setStep(step + 1)
     } else if (step === 3 && !llmSuggestions) {
-      const result = await validateAndSaveCourse(data)
-      if (result.suggestions) {
-        setLlmSuggestions(result.suggestions)
-      } else if (result.success) {
-        form.reset()
-        setStep(1)
-        alert("Course added successfully!")
-      } else {
-        alert("Failed to add course. Please try again.")
+      setIsSubmitting(true)
+      try {
+        const result = await validateAndSaveCourse(data)
+        if (result.suggestions) {
+          setLlmSuggestions(result.suggestions)
+        } else if (result.success) {
+          setSubmitSuccess(true)
+          setTimeout(() => {
+            form.reset()
+            setStep(1)
+            setSubmitSuccess(false)
+          }, 2000)
+        } else {
+          setSubmitError(result.error || "Failed to add course. Please try again.")
+        }
+      } catch (error) {
+        setSubmitError("An unexpected error occurred. Please try again.")
+        console.error("Submit error:", error)
+      } finally {
+        setIsSubmitting(false)
       }
     } else {
-      const result = await validateAndSaveCourse(data, true)
-      if (result.success) {
-        form.reset()
-        setStep(1)
-        setLlmSuggestions(null)
-        setAcceptedSuggestions(new Set())
-        alert("Course added successfully!")
-      } else {
-        alert("Failed to add course. Please try again.")
+      setIsSubmitting(true)
+      try {
+        const result = await validateAndSaveCourse(data, true)
+        if (result.success) {
+          setSubmitSuccess(true)
+          setTimeout(() => {
+            form.reset()
+            setStep(1)
+            setLlmSuggestions(null)
+            setAcceptedSuggestions(new Set())
+            setSubmitSuccess(false)
+          }, 2000)
+        } else {
+          setSubmitError(result.error || "Failed to add course. Please try again.")
+        }
+      } catch (error) {
+        setSubmitError("An unexpected error occurred. Please try again.")
+        console.error("Submit error:", error)
+      } finally {
+        setIsSubmitting(false)
       }
     }
   }
@@ -153,10 +217,21 @@ export function AddCourse() {
                 value={field.value || ""}
                 onChange={(e) => {
                   if (name === "courseId") {
-                    field.onChange(Number.parseInt(e.target.value, 10))
+                    const value = Number.parseInt(e.target.value, 10)
+                    field.onChange(value)
+                    setCourseIdError(null)
                   } else {
                     field.onChange(e.target.value)
                   }
+                }}
+                onBlur={(e) => {
+                  if (name === "courseId") {
+                    const value = Number.parseInt(e.target.value, 10)
+                    if (value > 0) {
+                      checkCourseIdDuplicate(value)
+                    }
+                  }
+                  field.onBlur()
                 }}
               />
             )}
@@ -182,6 +257,15 @@ export function AddCourse() {
         "weaknesses",
         "strengths",
       ]
+
+      // Check for duplicate courseId before proceeding
+      const courseId = form.getValues("courseId")
+      if (courseId) {
+        await checkCourseIdDuplicate(courseId)
+        if (courseIdError) {
+          return // Don't proceed if there's a duplicate
+        }
+      }
     } else if (step === 2) {
       fieldsToValidate = ["notes", "practice", "homework", "newWords"]
     }
@@ -191,7 +275,8 @@ export function AddCourse() {
       console.log("isValid", isValid)
       console.log("Form values:", form.getValues())
       console.log("Form errors:", form.formState.errors)
-      if (isValid) {
+      if (isValid && !courseIdError) {
+        setSubmitError(null)
         setStep(step + 1)
       }
     } else {
@@ -205,12 +290,41 @@ export function AddCourse() {
         <CardTitle>Add New Course</CardTitle>
       </CardHeader>
       <CardContent>
+        {submitSuccess && (
+          <Alert className="mb-4 border-green-500 bg-green-50">
+            <CheckCircle2 className="size-4 text-green-600" />
+            <AlertTitle className="text-green-800">Success!</AlertTitle>
+            <AlertDescription className="text-green-700">
+              Course added successfully! Redirecting...
+            </AlertDescription>
+          </Alert>
+        )}
+        {submitError && (
+          <Alert variant="destructive" className="mb-4">
+            <AlertCircle className="size-4" />
+            <AlertTitle>Error</AlertTitle>
+            <AlertDescription>{submitError}</AlertDescription>
+          </Alert>
+        )}
         <Form {...form}>
           <form onSubmit={(e) => e.preventDefault()} className="space-y-4">
             <ScrollArea className="h-[60vh] pr-4">
               {step === 1 && (
                 <>
-                  {renderFormField("courseId", "Course ID", true, "number")}
+                  <div className="relative">
+                    {renderFormField("courseId", "Course ID", true, "number")}
+                    {isCheckingDuplicate && (
+                      <div className="absolute right-2 top-9">
+                        <Loader2 className="size-4 animate-spin text-blue-500" />
+                      </div>
+                    )}
+                    {courseIdError && (
+                      <Alert variant="destructive" className="mt-2">
+                        <AlertCircle className="size-4" />
+                        <AlertDescription>{courseIdError}</AlertDescription>
+                      </Alert>
+                    )}
+                  </div>
                   {renderFormField("date", "Date", true, "date")}
                   {renderFormField("keywords", "Keywords (comma-separated)", true)}
                   {renderFormField("mainSubjects", "Main Subjects (comma-separated)")}
@@ -280,12 +394,24 @@ export function AddCourse() {
 
             <div className="flex justify-between pt-4">
               {step > 1 && (
-                <Button type="button" onClick={goBack} variant="outline">
+                <Button type="button" onClick={goBack} variant="outline" disabled={isSubmitting}>
                   Previous
                 </Button>
               )}
-              <Button type="button" onClick={handleNextStep}>
-                {step < 3 ? "Next" : llmSuggestions ? "Apply and Finalize" : "Finalize"}
+              <Button
+                type="button"
+                onClick={handleNextStep}
+                disabled={isSubmitting || isCheckingDuplicate || !!courseIdError}
+              >
+                {isSubmitting && <Loader2 className="mr-2 size-4 animate-spin" />}
+                {isSubmitting
+                  ? "Saving..."
+                  : step < 3
+                    ? "Next"
+                    : llmSuggestions
+                      ? "Apply and Finalize"
+                      : "Finalize"
+                }
               </Button>
             </div>
           </form>

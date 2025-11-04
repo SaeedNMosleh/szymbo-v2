@@ -117,6 +117,20 @@ export async function validateAndSaveCourse(
     // Connect to MongoDB
     await connectToDatabase();
 
+    // Check for duplicate courseId before saving
+    const existingCourse = await Course.findOne({ courseId: data.courseId });
+    if (existingCourse) {
+      logger.warn("Duplicate courseId detected during save", {
+        operation: "save_course",
+        courseId: data.courseId,
+      });
+      return {
+        success: false,
+        error: `Course ID ${data.courseId} already exists. Please use a different Course ID.`,
+        errorType: "DUPLICATE_COURSE_ID",
+      };
+    }
+
     // Save to MongoDB
     const course = new Course(data);
     await course.save();
@@ -131,16 +145,57 @@ export async function validateAndSaveCourse(
     logger.error("Error in validateAndSaveCourse", error as Error);
 
     if (error instanceof z.ZodError) {
+      const formattedErrors = error.errors.map((err) => ({
+        field: err.path.join("."),
+        message: err.message,
+      }));
       return {
         success: false,
-        error: "Validation failed",
-        details: error.errors,
+        error: "Please check the following fields: " + formattedErrors.map(e => e.field).join(", "),
+        errorType: "VALIDATION_ERROR",
+        details: formattedErrors,
       };
     }
 
+    // Handle MongoDB duplicate key error
+    if (typeof error === "object" && error !== null && "code" in error && error.code === 11000) {
+      const mongoError = error as { keyPattern?: Record<string, unknown> };
+      const field = Object.keys(mongoError.keyPattern || {})[0];
+      return {
+        success: false,
+        error: `A course with this ${field} already exists. Please use a different value.`,
+        errorType: "DUPLICATE_KEY",
+      };
+    }
+
+    // Handle MongoDB validation errors
+    if (typeof error === "object" && error !== null && "name" in error && error.name === "ValidationError") {
+      const mongoError = error as { errors?: Record<string, { path: string; message: string }> };
+      const validationErrors = Object.values(mongoError.errors || {}).map(
+        (err) => `${err.path}: ${err.message}`
+      );
+      return {
+        success: false,
+        error: "Validation failed: " + validationErrors.join(", "),
+        errorType: "MONGOOSE_VALIDATION",
+        details: validationErrors,
+      };
+    }
+
+    // Handle database connection errors
+    if (error instanceof Error && (error.message.includes("connect") || error.message.includes("timeout"))) {
+      return {
+        success: false,
+        error: "Database connection error. Please check your internet connection and try again.",
+        errorType: "CONNECTION_ERROR",
+      };
+    }
+
+    // Generic error fallback
     return {
       success: false,
-      error: "Failed to validate and save course",
+      error: `Failed to save course: ${error instanceof Error ? error.message : "Unknown error occurred"}`,
+      errorType: "UNKNOWN_ERROR",
     };
   }
 }
