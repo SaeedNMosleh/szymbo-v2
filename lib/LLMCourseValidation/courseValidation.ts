@@ -158,8 +158,9 @@ export async function validateAndSaveCourse(
     }
 
     // Handle MongoDB duplicate key error
-    if ((error as any).code === 11000) {
-      const field = Object.keys((error as any).keyPattern || {})[0];
+    if (typeof error === "object" && error !== null && "code" in error && error.code === 11000) {
+      const mongoError = error as { keyPattern?: Record<string, unknown> };
+      const field = Object.keys(mongoError.keyPattern || {})[0];
       return {
         success: false,
         error: `A course with this ${field} already exists. Please use a different value.`,
@@ -168,9 +169,10 @@ export async function validateAndSaveCourse(
     }
 
     // Handle MongoDB validation errors
-    if ((error as any).name === "ValidationError") {
-      const validationErrors = Object.values((error as any).errors || {}).map(
-        (err: any) => `${err.path}: ${err.message}`
+    if (typeof error === "object" && error !== null && "name" in error && error.name === "ValidationError") {
+      const mongoError = error as { errors?: Record<string, { path: string; message: string }> };
+      const validationErrors = Object.values(mongoError.errors || {}).map(
+        (err) => `${err.path}: ${err.message}`
       );
       return {
         success: false,
@@ -181,7 +183,7 @@ export async function validateAndSaveCourse(
     }
 
     // Handle database connection errors
-    if ((error as Error).message.includes("connect") || (error as Error).message.includes("timeout")) {
+    if (error instanceof Error && (error.message.includes("connect") || error.message.includes("timeout"))) {
       return {
         success: false,
         error: "Database connection error. Please check your internet connection and try again.",
@@ -192,7 +194,7 @@ export async function validateAndSaveCourse(
     // Generic error fallback
     return {
       success: false,
-      error: `Failed to save course: ${(error as Error).message || "Unknown error occurred"}`,
+      error: `Failed to save course: ${error instanceof Error ? error.message : "Unknown error occurred"}`,
       errorType: "UNKNOWN_ERROR",
     };
   }

@@ -292,7 +292,7 @@ export function AddCourse() {
       <CardContent>
         {submitSuccess && (
           <Alert className="mb-4 border-green-500 bg-green-50">
-            <CheckCircle2 className="h-4 w-4 text-green-600" />
+            <CheckCircle2 className="size-4 text-green-600" />
             <AlertTitle className="text-green-800">Success!</AlertTitle>
             <AlertDescription className="text-green-700">
               Course added successfully! Redirecting...
@@ -301,7 +301,7 @@ export function AddCourse() {
         )}
         {submitError && (
           <Alert variant="destructive" className="mb-4">
-            <AlertCircle className="h-4 w-4" />
+            <AlertCircle className="size-4" />
             <AlertTitle>Error</AlertTitle>
             <AlertDescription>{submitError}</AlertDescription>
           </Alert>
@@ -315,12 +315,12 @@ export function AddCourse() {
                     {renderFormField("courseId", "Course ID", true, "number")}
                     {isCheckingDuplicate && (
                       <div className="absolute right-2 top-9">
-                        <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
+                        <Loader2 className="size-4 animate-spin text-blue-500" />
                       </div>
                     )}
                     {courseIdError && (
                       <Alert variant="destructive" className="mt-2">
-                        <AlertCircle className="h-4 w-4" />
+                        <AlertCircle className="size-4" />
                         <AlertDescription>{courseIdError}</AlertDescription>
                       </Alert>
                     )}
@@ -403,7 +403,7 @@ export function AddCourse() {
                 onClick={handleNextStep}
                 disabled={isSubmitting || isCheckingDuplicate || !!courseIdError}
               >
-                {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {isSubmitting && <Loader2 className="mr-2 size-4 animate-spin" />}
                 {isSubmitting
                   ? "Saving..."
                   : step < 3
