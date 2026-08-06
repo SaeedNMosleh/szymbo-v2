@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 // import { validateDate } from "@/lib/LLMCheckDate/validateDate";
 import { validateDate } from "@/lib/LLMCheckDate/validateDatesOpenAI";
 import importantDates from "@/data/importantDates.json"; // Import JSON file
+import { yearToPolishPhrase } from "@/data/polishDayMonth";
 
 
 interface DateQuestion {
@@ -42,7 +43,7 @@ export default function PolishDateQuiz() {
     setCurrentQuestion({
       question: "Który dzisiaj jest?",
       date: `${day}/${month}/${year}`,
-      year: "dwa tysiące dwudziestego piątego roku",
+      year: yearToPolishPhrase(year),
     });
     return `${day} ${month} ${year}`;
   };

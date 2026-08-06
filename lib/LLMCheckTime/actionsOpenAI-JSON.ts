@@ -69,11 +69,7 @@ Respond strictly in JSON.
         },
         { role: "user", content: prompt },
       ],
-      temperature: 0.3,
-      max_tokens: 1000,
-      top_p: 0.9,
-      frequency_penalty: 0,
-      presence_penalty: 0,
+      max_completion_tokens: 1000,
       response_format: {
         type: "json_schema",
         json_schema: {
