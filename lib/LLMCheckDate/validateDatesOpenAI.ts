@@ -40,7 +40,6 @@ export async function validateDate(
     Year correct: [true/false]
     Comment: [provide a brief comment about each part of the answer, mentioning any typos or grammatical issues or missing words, please be kind and helpful and give some hints]
   `;
-
   const chatCompletion = await openai.chat.completions.create({
     model: "gpt-5.6-luna",
     messages: [
