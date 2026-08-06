@@ -59,10 +59,8 @@ You are a Polish language expert validating time expressions. Your task is to ev
 ### RESPONSE FORMAT:
 Respond strictly in JSON.
 `;
-
   try {
     const completion = await openai.chat.completions.create({
-      // model: "gpt-4o-2024-08-06",
       model: "gpt-5.6-luna",
       messages: [
         {
