@@ -53,11 +53,7 @@ export async function validateDate(
         content: prompt,
       },
     ],
-    temperature: 0.3,
-    max_tokens: 1000,
-    top_p: 0.9,
-    frequency_penalty: 0,
-    presence_penalty: 0,
+    max_completion_tokens: 1000,
   });
 
   const result = chatCompletion.choices[0]?.message?.content || "";
